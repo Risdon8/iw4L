@@ -11,6 +11,7 @@ mod collision;
 mod correct_solid;
 mod crash;
 mod dmgtimer;
+mod doublejump;
 mod drop_timers;
 mod events;
 mod footstep;
@@ -50,6 +51,7 @@ pub use dmgtimer::{
     pm_damage_scale_walk, pm_damage_window_open, pm_update_damage_timer,
     pm_walk_move_drop_damage_timer,
 };
+pub use doublejump::{DoubleJumpContext, PMF_DOUBLE_JUMP_USED, double_jump_reset, pm_double_jump};
 pub use drop_timers::pm_drop_timers;
 pub use events::{
     SequencedPlayerEvent, add_predictable_event, consume_player_events, pm_add_event,

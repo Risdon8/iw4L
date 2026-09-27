@@ -128,6 +128,9 @@ pub fn pm_move<C: CollisionBackend, L: MantleXAnimLength, R: MantleRootDelta>(
 
     let surf = context.air.surf.is_some();
     complete_ground_trace(ps, &mut pml, bounds, collision, surf);
+    if pml.walking != 0 {
+        crate::double_jump_reset(ps);
+    }
 
     if (ps.pm_flags & PMF_MANTLE) == 0 {
         let mut mantle_tracer = CollisionMantleTrace { collision, bounds };

@@ -58,11 +58,15 @@ fn default_true() -> bool {
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Movement {
+    /// `None` inherits the global profile; `Some` overrides it.
     #[serde(default)]
-    pub surf: bool,
+    pub surf: Option<bool>,
     /// Titanfall-style wall-running.
     #[serde(default)]
-    pub wallrun: bool,
+    pub wallrun: Option<bool>,
+    /// One extra jump in the air.
+    #[serde(default)]
+    pub double_jump: Option<bool>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]

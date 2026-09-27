@@ -19,6 +19,25 @@ layout off                     stock map on the next load
 Or start with it: `IW4L_LAYOUT=highrise_playground iw4l.exe map mp_highrise`
 (`IW4L_LAYOUT` also works from `.env`).
 
+## Movement (global)
+
+The movement mod is on for **every** map, layout or not: a "fluid" profile with
+bhop and strafe air control (`surf`), wall-running, and one double jump. It is
+applied when a match starts, so a real map needs no layout.
+
+```
+movement                 show the profile
+movement fluid|retail    all features on, or stock MW2
+movement surf|wallrun|doublejump on|off
+surf accel <n> | cap <n>      tune the air physics
+wallrun time|cooldown|speed|up|out <n>
+```
+
+`IW4L_MOVEMENT=retail` starts a session with stock MW2 movement. A layout's
+`movement` block still overrides the profile for its map.
+
+Fall damage is not applied by this runtime, so there is nothing to switch off.
+
 ## highrise_playground
 
 A floating course in the street canyon south of the Highrise towers:
@@ -57,7 +76,7 @@ wallrun time|cooldown|speed|up|out <n>   tune it live
 {
   "name": "my_layout",
   "base_map": "mp_highrise",
-  "movement": { "surf": true, "wallrun": true },
+  "movement": { "surf": true, "wallrun": true, "double_jump": true },
   "spawns": [{ "origin": [x, y, z], "yaw": 0 }],
   "reset": {
     "below_z": 1500,

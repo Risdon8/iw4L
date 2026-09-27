@@ -21,6 +21,7 @@ pub mod editor;
 mod feature_dispatch;
 pub mod input;
 mod layout;
+mod movement;
 pub mod plugin;
 pub mod registry;
 pub mod suggest;

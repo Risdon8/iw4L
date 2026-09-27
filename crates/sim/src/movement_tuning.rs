@@ -4,7 +4,7 @@
 //! predicting client and a replay all step with the same values. It changes
 //! only through `ClientAction::SetMovementTuning`.
 
-use movement_iw4::{SurfAirContext, WallRunContext};
+use movement_iw4::{DoubleJumpContext, SurfAirContext, WallRunContext};
 
 /// CS surf servers run `sv_airaccelerate` 100–150 with Source's fixed 30u cap.
 pub const SURF_DEFAULT_AIR_ACCEL: f32 = 100.0;
@@ -17,6 +17,9 @@ pub const WALLRUN_DEFAULT_COOLDOWN_MS: i32 = 600;
 pub const WALLRUN_DEFAULT_MIN_SPEED: f32 = 120.0;
 pub const WALLRUN_DEFAULT_JUMP_UP: f32 = 250.0;
 pub const WALLRUN_DEFAULT_JUMP_OUT: f32 = 260.0;
+
+/// The air jump launches like a normal ground jump.
+pub const DOUBLE_JUMP_DEFAULT_HEIGHT: f32 = 39.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MovementTuning {
@@ -37,6 +40,8 @@ pub struct MovementTuning {
     pub wallrun_jump_up: f32,
 
     pub wallrun_jump_out: f32,
+
+    pub double_jump: bool,
 }
 
 impl Default for MovementTuning {
@@ -51,6 +56,7 @@ impl Default for MovementTuning {
             wallrun_min_speed: WALLRUN_DEFAULT_MIN_SPEED,
             wallrun_jump_up: WALLRUN_DEFAULT_JUMP_UP,
             wallrun_jump_out: WALLRUN_DEFAULT_JUMP_OUT,
+            double_jump: false,
         }
     }
 }
@@ -76,6 +82,24 @@ impl MovementTuning {
         })
     }
 
+    pub fn double_jump(&self, old_buttons: u32) -> Option<DoubleJumpContext> {
+        self.double_jump.then_some(DoubleJumpContext {
+            jump_height: DOUBLE_JUMP_DEFAULT_HEIGHT,
+            old_buttons,
+        })
+    }
+
+    /// The "fluid" profile applied on every map by default: bhop and strafe air
+    /// control (surf), wall-running, and one air jump.
+    pub fn fluid() -> Self {
+        Self {
+            surf: true,
+            wallrun: true,
+            double_jump: true,
+            ..Self::default()
+        }
+    }
+
     /// Clamp values arriving from the wire or the console into a range that
     /// cannot produce NaN velocities or a frozen player.
     pub fn sanitized(self) -> Self {
@@ -98,6 +122,7 @@ impl MovementTuning {
                 .clamp(0.0, 10_000.0),
             wallrun_jump_out: finite(self.wallrun_jump_out, WALLRUN_DEFAULT_JUMP_OUT)
                 .clamp(0.0, 10_000.0),
+            double_jump: self.double_jump,
         }
     }
 }

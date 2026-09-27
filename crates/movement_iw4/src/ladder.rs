@@ -222,6 +222,7 @@ pub fn pm_ladder_move<C: crate::CollisionBackend>(
                 shellshock_gravity_bias: 0.0,
                 surf: None,
                 wallrun: None,
+                double_jump: None,
             },
             bounds,
             collision,

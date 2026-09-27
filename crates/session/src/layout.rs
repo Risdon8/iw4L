@@ -99,13 +99,16 @@ pub(crate) fn spawn_points(layout: &Layout) -> Option<Vec<SpawnPoint>> {
 }
 
 pub(crate) fn movement_tuning(layout: &Layout) -> Option<sim::MovementTuning> {
-    if !layout.movement.surf && !layout.movement.wallrun {
+    let movement = &layout.movement;
+    if movement.surf.is_none() && movement.wallrun.is_none() && movement.double_jump.is_none() {
         return None;
     }
+    let base = sim::MovementTuning::fluid();
     Some(sim::MovementTuning {
-        surf: layout.movement.surf,
-        wallrun: layout.movement.wallrun,
-        ..sim::MovementTuning::default()
+        surf: movement.surf.unwrap_or(base.surf),
+        wallrun: movement.wallrun.unwrap_or(base.wallrun),
+        double_jump: movement.double_jump.unwrap_or(base.double_jump),
+        ..base
     })
 }
 

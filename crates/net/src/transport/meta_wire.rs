@@ -535,6 +535,7 @@ fn encode_movement_tuning(out: &mut WireWriter, tuning: &sim::MovementTuning) {
     out.put_f32(tuning.wallrun_min_speed);
     out.put_f32(tuning.wallrun_jump_up);
     out.put_f32(tuning.wallrun_jump_out);
+    out.put_u8(u8::from(tuning.double_jump));
 }
 
 fn decode_movement_tuning(input: &mut WireReader<'_>) -> Result<sim::MovementTuning, WireError> {
@@ -555,6 +556,11 @@ fn decode_movement_tuning(input: &mut WireReader<'_>) -> Result<sim::MovementTun
     let wallrun_min_speed = input.get_f32()?;
     let wallrun_jump_up = input.get_f32()?;
     let wallrun_jump_out = input.get_f32()?;
+    let double_jump = match input.get_u8()? {
+        0 => false,
+        1 => true,
+        _ => return Err(WireError::Malformed("bad MovementTuning double_jump flag")),
+    };
     Ok(sim::MovementTuning {
         surf,
         surf_air_accel,
@@ -565,6 +571,7 @@ fn decode_movement_tuning(input: &mut WireReader<'_>) -> Result<sim::MovementTun
         wallrun_min_speed,
         wallrun_jump_up,
         wallrun_jump_out,
+        double_jump,
     }
     .sanitized())
 }
@@ -3116,6 +3123,7 @@ mod movement_tuning_wire_tests {
                 wallrun_min_speed: 220.0,
                 wallrun_jump_up: 260.0,
                 wallrun_jump_out: 240.0,
+                double_jump: true,
             },
         };
         let mut out = WireWriter::new();
@@ -3141,6 +3149,7 @@ mod movement_tuning_wire_tests {
         out.put_f32(f32::NAN);
         out.put_f32(-1.0);
         out.put_f32(f32::INFINITY);
+        out.put_u8(1);
         let bytes = out.finish();
         let tuning = decode_movement_tuning(&mut WireReader::new(&bytes)).unwrap();
         assert!(tuning.surf);
@@ -3161,5 +3170,6 @@ mod movement_tuning_wire_tests {
             tuning.wallrun_jump_out,
             sim::movement_tuning::WALLRUN_DEFAULT_JUMP_OUT
         );
+        assert!(tuning.double_jump);
     }
 }

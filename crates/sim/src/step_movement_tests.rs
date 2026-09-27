@@ -740,3 +740,65 @@ fn wallrun_grips_soon_after_a_jump() {
         end.origin
     );
 }
+
+fn double_jump_on() -> MovementTuning {
+    MovementTuning {
+        double_jump: true,
+        ..MovementTuning::default()
+    }
+}
+
+/// One extra jump in the air: the first press launches, a second does nothing.
+#[test]
+fn double_jump_fires_once_in_the_air() {
+    let brushes = map_layout_brushes("");
+    let backend = layout_backend(&brushes);
+    let mut ps = spawn_player_state([0.0, 0.0, 1000.0], [0.0, 0.0, 0.0]);
+    ps.command_time = 1_000;
+    ps.jump_time = -100_000;
+    ps.ground_entity_num = trace_iw4::ENTITYNUM_NONE as i32;
+    ps.velocity = [0.0, 0.0, -200.0];
+
+    let (_, frames) = run_policy(&backend, ps, double_jump_on(), 10, |tick, _| {
+        if tick == 0 || tick == 5 {
+            Intent {
+                jump: true,
+                ..Intent::default()
+            }
+        } else {
+            Intent::default()
+        }
+    });
+    assert!(
+        frames[0].1[2] > 200.0,
+        "the air jump should launch upward: {:?}",
+        frames[0].1
+    );
+    assert!(
+        frames[5].1[2] < 200.0,
+        "a second air jump must not fire: {:?}",
+        frames[5].1
+    );
+}
+
+/// The latch clears when the player is grounded, so the next hop has its jump.
+#[test]
+fn double_jump_latch_resets() {
+    let mut ps = spawn_player_state([0.0, 0.0, 100.0], [0.0, 0.0, 0.0]);
+    ps.gravity = 800;
+    ps.ground_entity_num = trace_iw4::ENTITYNUM_NONE as i32;
+    let mut cmd = UserCmd {
+        buttons: 0x400,
+        ..UserCmd::default()
+    };
+    let context = movement_iw4::DoubleJumpContext {
+        jump_height: 39.0,
+        old_buttons: 0,
+    };
+    assert!(movement_iw4::pm_double_jump(&mut ps, &cmd, context));
+    assert!(ps.velocity[2] > 200.0, "launched: {:?}", ps.velocity);
+    assert!(!movement_iw4::pm_double_jump(&mut ps, &cmd, context));
+    movement_iw4::double_jump_reset(&mut ps);
+    cmd.buttons = 0x400;
+    assert!(movement_iw4::pm_double_jump(&mut ps, &cmd, context));
+}

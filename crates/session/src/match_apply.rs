@@ -689,9 +689,14 @@ pub fn apply_prepared_match(
             &map_use_triggers,
             &flag_descriptors,
         )?;
-        if let Some(tuning) = layout.as_deref().and_then(crate::layout::movement_tuning) {
-            sim.set_movement_tuning(tuning);
+        let mut tuning = sim::MovementTuning::fluid();
+        if std::env::var("IW4L_MOVEMENT").is_ok_and(|value| value.eq_ignore_ascii_case("retail")) {
+            tuning = sim::MovementTuning::default();
         }
+        if let Some(layout_tuning) = layout.as_deref().and_then(crate::layout::movement_tuning) {
+            tuning = layout_tuning;
+        }
+        sim.set_movement_tuning(tuning);
         sim.objectives.flag_models = objective_flags;
         sim.objectives.attackers = objective_attackers;
         let defenders = sim.objectives.defenders();
