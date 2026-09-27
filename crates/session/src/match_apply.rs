@@ -553,6 +553,7 @@ pub fn apply_prepared_match(
             objective_attackers,
         } = plan;
         let spawn_count = prepared_map.spawns.len();
+        crate::layout::log_spawn_extent(&zone, &prepared_map.spawns);
 
         let facts = std::mem::take(&mut prepared_map.facts);
         stage_resource(
@@ -583,6 +584,11 @@ pub fn apply_prepared_match(
         let mut input_gate = *input_gate;
         let mut content = sim::SimContentBuilder::default();
         let mut sim = sim::SimWorld::new();
+        let layout = map_layout::active_for_zone(&zone);
+        if let Some(layout) = &layout {
+            crate::layout::install_sim(&mut content, layout);
+        }
+        let layout_spawns = layout.as_deref().and_then(crate::layout::spawn_points);
         content.set_weapon_def_scales(weapons.0.scales_table());
         let combat = combat_table::from_registry(&weapons.0, lochit_table);
         content.set_weapon_combat_table(combat.clone());
@@ -672,7 +678,7 @@ pub fn apply_prepared_match(
                 script_linkto: String::new(),
                 script_destructable_area: String::new(),
             }),
-            &prepared_map.spawns,
+            layout_spawns.as_deref().unwrap_or(&prepared_map.spawns),
             &weapons.0,
             &combat,
             &equipment,
@@ -683,6 +689,9 @@ pub fn apply_prepared_match(
             &map_use_triggers,
             &flag_descriptors,
         )?;
+        if let Some(tuning) = layout.as_deref().and_then(crate::layout::movement_tuning) {
+            sim.set_movement_tuning(tuning);
+        }
         sim.objectives.flag_models = objective_flags;
         sim.objectives.attackers = objective_attackers;
         let defenders = sim.objectives.defenders();
@@ -1018,6 +1027,9 @@ fn preflight_match_install(
         }
     };
     apply_gameobjects_main(&mut prepared.world, kind);
+    if let Some(layout) = map_layout::active_for_zone(zone) {
+        crate::layout::install_props(&mut prepared.world, &layout);
+    }
     let flag_descriptors = std::mem::take(&mut prepared.world.flag_descriptors);
     let map_use_triggers = std::mem::take(&mut prepared.world.map_use_triggers);
     let map_doors = crate::map_doors::prepare(zone, &prepared.world, &map_use_triggers)

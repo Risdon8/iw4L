@@ -20,6 +20,7 @@ mod diagnostics;
 pub mod editor;
 mod feature_dispatch;
 pub mod input;
+mod layout;
 pub mod plugin;
 pub mod registry;
 pub mod suggest;

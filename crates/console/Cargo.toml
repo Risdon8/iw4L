@@ -27,6 +27,8 @@ bots = { path = "../bots" }
 hud = { path = "../hud" }
 entity_iw4.workspace = true
 perf.workspace = true
+map_layout.workspace = true
+trace_iw4.workspace = true
 
 [lints]
 workspace = true

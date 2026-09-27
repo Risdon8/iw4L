@@ -24,5 +24,8 @@ sound_iw4.workspace = true
 glam.workspace = true
 perf.workspace = true
 
+[dev-dependencies]
+map_layout.workspace = true
+
 [lints]
 workspace = true

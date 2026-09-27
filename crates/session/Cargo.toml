@@ -19,6 +19,7 @@ sim.workspace = true
 gamemode_iw4.workspace = true
 bots.workspace = true
 perf.workspace = true
+map_layout.workspace = true
 
 [lints]
 workspace = true

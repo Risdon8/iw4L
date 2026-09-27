@@ -2170,6 +2170,7 @@ dependencies = [
  "frame",
  "hud",
  "input_iw4",
+ "map_layout",
  "math_iw4",
  "net",
  "perf",
@@ -2180,6 +2181,7 @@ dependencies = [
  "replay",
  "session",
  "sim",
+ "trace_iw4",
  "ui",
 ]
 
@@ -3731,6 +3733,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a1b95cd5421ec55b445b5ae102f5ea0e768de1f82bd3001e11f426c269c3aea"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "map_layout"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -5501,6 +5511,7 @@ dependencies = [
  "diag",
  "frame",
  "gamemode_iw4",
+ "map_layout",
  "net",
  "perf",
  "render",
@@ -5548,6 +5559,7 @@ dependencies = [
  "gamemode_iw4",
  "glam",
  "hud_iw4",
+ "map_layout",
  "math_iw4",
  "movement_iw4",
  "perf",

@@ -46,6 +46,7 @@ members = [
     "crates/lighting_iw4",
     "crates/marks_iw4",
     "crates/master_protocol",
+    "crates/map_layout",
     "crates/math_iw4",
     "crates/movement_iw4",
     "crates/net",
@@ -146,6 +147,7 @@ input_iw4 = { path = "crates/input_iw4" }
 launcher = { path = "crates/launcher" }
 lighting_iw4 = { path = "crates/lighting_iw4" }
 marks_iw4 = { path = "crates/marks_iw4" }
+map_layout = { path = "crates/map_layout" }
 math_iw4 = { path = "crates/math_iw4" }
 master_protocol = { path = "crates/master_protocol" }
 movement_iw4 = { path = "crates/movement_iw4" }

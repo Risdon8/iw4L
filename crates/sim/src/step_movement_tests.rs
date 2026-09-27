@@ -283,3 +283,241 @@ fn surf_rides_steep_ramp() {
         "surf should keep its speed: {surf:?}"
     );
 }
+
+fn layout_backend(layout: &[crate::world::SimBrush]) -> super::ClipBackend<'_> {
+    static EMPTY_BSP: std::sync::LazyLock<crate::world::SimClipBsp> =
+        std::sync::LazyLock::new(crate::world::SimClipBsp::default);
+    static EMPTY_MESH: std::sync::LazyLock<crate::world::SimClipMesh> =
+        std::sync::LazyLock::new(crate::world::SimClipMesh::default);
+    super::ClipBackend {
+        brushes: &[],
+        bsp: &EMPTY_BSP,
+        mesh: &EMPTY_MESH,
+        glass_damage: &[],
+        bodies: &[],
+        self_entnum: 0,
+        cmodels: &[],
+        linked_brushes: &[],
+        layout,
+    }
+}
+
+fn solid(planes: Vec<[f32; 4]>) -> crate::world::SimBrush {
+    let n = planes.len();
+    crate::world::SimBrush {
+        planes,
+        contents: 1,
+        plane_surface_flags: vec![0; n],
+        glass_encoded: 0,
+    }
+}
+
+/// A 60° wedge along +x through the real capsule brush trace: base on z=0,
+/// 256 wide, ridge on the x axis.
+fn layout_wedge() -> crate::world::SimBrush {
+    let (sin, cos) = (60f32.to_radians().sin(), 60f32.to_radians().cos());
+    solid(vec![
+        [0.0, 0.0, -1.0, 0.0],
+        [1.0, 0.0, 0.0, 4096.0],
+        [-1.0, 0.0, 0.0, 4096.0],
+        [0.0, sin, cos, sin * 128.0],
+        [0.0, -sin, cos, sin * 128.0],
+    ])
+}
+
+fn run_backend(
+    backend: &super::ClipBackend<'_>,
+    mut ps: PlayerState,
+    tuning: MovementTuning,
+    ticks: usize,
+    want: Intent,
+) -> PlayerState {
+    for _ in 0..ticks {
+        let mut cmd = UserCmd {
+            server_time: ps.command_time + TICK_MS,
+            angles: [0, (want.yaw * ANGLE2SHORT) as i32, 0],
+            forwardmove: want.forward,
+            rightmove: want.right,
+            ..UserCmd::default()
+        };
+        let context = pmove_context(
+            0,
+            (1.0, 1.0, 1.0),
+            false,
+            false,
+            1.0 / 200.0,
+            1.0 / 200.0,
+            true,
+            false,
+            0,
+            0,
+            0,
+            false,
+            tuning,
+        );
+        pm_move(
+            &mut ps,
+            &mut cmd,
+            context,
+            backend,
+            &FlatMantleAnimLength::default(),
+            &ZeroMantleRootDelta,
+        );
+    }
+    ps
+}
+
+#[test]
+fn layout_box_is_standable() {
+    let floor = [solid(vec![
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, -1.0, 64.0],
+        [1.0, 0.0, 0.0, 512.0],
+        [-1.0, 0.0, 0.0, 512.0],
+        [0.0, 1.0, 0.0, 512.0],
+        [0.0, -1.0, 0.0, 512.0],
+    ])];
+    let backend = layout_backend(&floor);
+    let mut ps = spawn_player_state([0.0, 0.0, 40.0], [0.0, 0.0, 0.0]);
+    ps.command_time = 1_000;
+    ps.ground_entity_num = trace_iw4::ENTITYNUM_NONE as i32;
+    let ps = run_backend(
+        &backend,
+        ps,
+        MovementTuning::default(),
+        60,
+        Intent::default(),
+    );
+    assert!(
+        ps.origin[2].abs() < 1.0,
+        "should rest on top: {:?}",
+        ps.origin
+    );
+    assert_ne!(ps.ground_entity_num, trace_iw4::ENTITYNUM_NONE as i32);
+}
+
+#[test]
+fn layout_ramp_is_surfable_through_brush_trace() {
+    let ramp = [layout_wedge()];
+    let backend = layout_backend(&ramp);
+    let start = || {
+        // On the -y face, about half way up.
+        let mut ps = spawn_player_state([0.0, -110.0, 80.0], [0.0, 0.0, 0.0]);
+        ps.command_time = 1_000;
+        ps.jump_time = -10_000;
+        ps.ground_entity_num = trace_iw4::ENTITYNUM_NONE as i32;
+        ps.velocity = [600.0, 0.0, 0.0];
+        ps
+    };
+    let into_ramp = Intent {
+        right: -127,
+        ..Intent::default()
+    };
+    let retail = run_backend(&backend, start(), MovementTuning::default(), 90, into_ramp);
+    let surf = run_backend(&backend, start(), surf_on(), 90, into_ramp);
+    assert!(
+        retail.origin[2] < -200.0,
+        "retail should slide off: {:?}",
+        retail.origin
+    );
+    assert!(
+        surf.origin[2] > 20.0,
+        "surf should stay on the ramp: {:?}",
+        surf.origin
+    );
+    assert!(
+        horizontal_speed(&surf) > 590.0,
+        "surf lost speed: {:?}",
+        surf.velocity
+    );
+}
+
+fn dropped_at(origin: [f32; 3]) -> PlayerState {
+    let mut ps = spawn_player_state(origin, [0.0, 0.0, 0.0]);
+    ps.command_time = 1_000;
+    ps.jump_time = -10_000;
+    ps.ground_entity_num = trace_iw4::ENTITYNUM_NONE as i32;
+    ps
+}
+
+/// Surf technique: only the strafe key into the ramp. Adding forward pulls
+/// the capped air acceleration off the ramp and the player slides away.
+#[test]
+fn landing_on_a_ramp_holds_with_strafe_only() {
+    let ramp = [layout_wedge()];
+    let backend = layout_backend(&ramp);
+    let into = Intent {
+        right: -127,
+        ..Intent::default()
+    };
+    let forward_and_into = Intent {
+        forward: 127,
+        ..into
+    };
+    let held = run_backend(
+        &backend,
+        dropped_at([0.0, -100.0, 250.0]),
+        surf_on(),
+        120,
+        into,
+    );
+    let slid = run_backend(
+        &backend,
+        dropped_at([0.0, -100.0, 250.0]),
+        surf_on(),
+        120,
+        forward_and_into,
+    );
+    assert!(
+        held.origin[2] > 40.0,
+        "strafe-only should hold: {:?}",
+        held.origin
+    );
+    assert!(
+        slid.origin[2] < -100.0,
+        "forward+strafe should slide off: {:?}",
+        slid.origin
+    );
+}
+
+fn map_layout_brushes(json_shapes: &str) -> Vec<crate::world::SimBrush> {
+    map_layout::Layout::parse(&format!(
+        r#"{{ "name": "t", "base_map": "m", "shapes": [{json_shapes}] }}"#
+    ))
+    .expect("test layout parses")
+    .brushes()
+    .into_iter()
+    .map(|brush| solid(brush.planes))
+    .collect()
+}
+
+/// A ramp tilted by `drop` turns gravity into speed along its length.
+#[test]
+fn descending_layout_ramp_builds_speed() {
+    let ramp = map_layout_brushes(
+        r#"{ "type": "ramp", "center": [0, 0, 0], "length": 4000, "width": 256, "drop": 600 }"#,
+    );
+    let backend = layout_backend(&ramp);
+    let into = Intent {
+        right: -127,
+        ..Intent::default()
+    };
+    let end = run_backend(
+        &backend,
+        dropped_at([-1700.0, -90.0, 500.0]),
+        surf_on(),
+        120,
+        into,
+    );
+    let base_z = -600.0 * end.origin[0] / 4000.0;
+    assert!(
+        end.velocity[0] > 200.0,
+        "no speed gained along the ramp: {:?}",
+        end.velocity
+    );
+    assert!(
+        end.origin[2] > base_z,
+        "fell off the ramp: {:?}",
+        end.origin
+    );
+}

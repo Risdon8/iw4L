@@ -645,7 +645,7 @@ fn run_players_system(ecs: &mut World) {
             let (melee_delay_ms, melee_charge_delay_ms) = facts
                 .map(|f| (f.melee_delay_ms, f.melee_charge_delay_ms))
                 .unwrap_or((0, 0));
-            let context = pmove_context(
+            let mut context = pmove_context(
                 old_buttons,
                 scales,
                 ads_allowed,
@@ -660,6 +660,9 @@ fn run_players_system(ecs: &mut World) {
                 crate::damage::shellshock_dump_affects_movement(ps.shellshock_index),
                 world.movement_tuning(),
             );
+            if let Some(rules) = content.layout_rules() {
+                context.bounds.tracemask &= !rules.ignore_contents;
+            }
             let mut cmd = *cmd;
             if world
                 .client_meta(*id)
@@ -688,6 +691,7 @@ fn run_players_system(ecs: &mut World) {
                 self_entnum: id.0 as u16,
                 cmodels: &cmodel_models,
                 linked_brushes: &linked_brushes,
+                layout: content.layout_brushes(),
             };
             let script = world.player_anim_script();
             let mantle = world.mantle_xanims();
@@ -755,6 +759,7 @@ fn run_players_system(ecs: &mut World) {
             }
             world.set_pmove_walking(*id, walking);
             world.link_player_area(*id, linked_bounds);
+            crate::layout::apply_reset(&mut world, *id);
 
             crate::weapon_lock::update(&mut world, *id, level_time);
             let shots = advance_weapon_command(&mut world, tick, *id, cmd, delta.min(200));
@@ -2609,6 +2614,7 @@ struct ClipBackend<'a> {
     self_entnum: u16,
     cmodels: &'a [clipmap_iw4::ClipCmodel],
     linked_brushes: &'a [LinkedBrushCollisionBrush],
+    layout: &'a [SimBrush],
 }
 
 impl CollisionBackend for ClipBackend<'_> {
@@ -2639,7 +2645,8 @@ impl CollisionBackend for ClipBackend<'_> {
             self.linked_brushes,
             input,
         );
-        clip_move_to_players(with_bmodels, self.bodies, self.self_entnum, input)
+        let with_layout = crate::layout::merge_layout_hit(with_bmodels, self.layout, input);
+        clip_move_to_players(with_layout, self.bodies, self.self_entnum, input)
     }
 }
 

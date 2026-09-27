@@ -259,6 +259,12 @@ impl SimContent {
     pub fn clip_cmodels(&self) -> &SimClipCmodels {
         &self.data.clip_cmodels
     }
+    pub fn layout_brushes(&self) -> &[SimBrush] {
+        &self.data.layout_brushes
+    }
+    pub fn layout_rules(&self) -> Option<&crate::LayoutRules> {
+        self.data.layout_rules.as_ref()
+    }
 }
 
 /// Installation work. Consuming this builder closes all definition writers.
@@ -284,9 +290,16 @@ pub struct SimContentBuilder {
     team_voice_prefix_allies: Option<String>,
     team_voice_prefix_axis: Option<String>,
     player_anim_script: Option<Arc<PlayerAnimScript>>,
+    layout_brushes: Vec<SimBrush>,
+    layout_rules: Option<crate::LayoutRules>,
 }
 
 impl SimContentBuilder {
+    pub fn set_layout(&mut self, brushes: Vec<SimBrush>, rules: crate::LayoutRules) {
+        self.layout_brushes = brushes;
+        self.layout_rules = Some(rules);
+    }
+
     pub fn finish(mut self) -> Arc<SimContent> {
         self.clip_mesh.rebuild_smodel_grid();
         Arc::new(SimContent { data: self })
@@ -788,7 +801,7 @@ impl SimState {
         self.movement_tuning
     }
 
-    pub(crate) fn set_movement_tuning(&mut self, tuning: crate::MovementTuning) {
+    pub fn set_movement_tuning(&mut self, tuning: crate::MovementTuning) {
         self.movement_tuning = tuning.sanitized();
     }
 

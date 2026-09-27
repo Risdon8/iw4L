@@ -41,4 +41,5 @@ mod map_doors;
 mod map_lights;
 mod map_moving_diggers;
 
+mod layout;
 mod objectives;
