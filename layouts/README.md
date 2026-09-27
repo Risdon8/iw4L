@@ -29,8 +29,9 @@ A floating course in the street canyon south of the Highrise towers:
 3. **Hop line** — hold space (autobhop is on) or just run: the platforms step
    down in shallow steps, so a fast player clears several and a slow one still
    lands on each.
-4. **Wall-run corridor** — two long walls with a floor for now; the floor goes
-   when wall-running exists.
+4. **Wall-run corridor** — two long walls (with a floor for now). Fly
+   alongside a wall at speed and it grips, holds your height, and a jump
+   launches you off. Turn `wallrun` on/off with the `wallrun` command.
 5. **Portal** on the end deck sends you back to the start.
 
 Falling below z 1500 (or into a reset volume) returns you to the last
@@ -46,6 +47,8 @@ sends you to the start and forgets the checkpoints.
 ```
 checkpoint               list the sections and which one you hold
 checkpoint <index|name>  jump straight to a section (for testing a piece)
+wallrun on|off|reset     wall-running on or off
+wallrun time|cooldown|speed|up|out <n>   tune it live
 ```
 
 ## Writing one
@@ -54,7 +57,7 @@ checkpoint <index|name>  jump straight to a section (for testing a piece)
 {
   "name": "my_layout",
   "base_map": "mp_highrise",
-  "movement": { "surf": true },
+  "movement": { "surf": true, "wallrun": true },
   "spawns": [{ "origin": [x, y, z], "yaw": 0 }],
   "reset": {
     "below_z": 1500,

@@ -637,3 +637,90 @@ fn descending_layout_ramp_builds_speed() {
         end.origin
     );
 }
+
+fn wallrun_on() -> MovementTuning {
+    MovementTuning {
+        wallrun: true,
+        ..MovementTuning::default()
+    }
+}
+
+/// A tall wall along +x at y 92..108; the player flies alongside it at y 60.
+fn wallrun_world() -> Vec<crate::world::SimBrush> {
+    map_layout_brushes(r#"{ "type": "box", "center": [0, 100, 500], "size": [4000, 16, 1000] }"#)
+}
+
+fn wallrun_start() -> PlayerState {
+    let mut ps = spawn_player_state([0.0, 60.0, 500.0], [0.0, 0.0, 0.0]);
+    ps.command_time = 1_000;
+    ps.jump_time = -100_000;
+    ps.ground_entity_num = trace_iw4::ENTITYNUM_NONE as i32;
+    ps.velocity = [400.0, 0.0, 0.0];
+    ps
+}
+
+/// Wall-running grips the wall beside the player and holds their height.
+#[test]
+fn wallrun_holds_height_along_a_wall() {
+    let brushes = wallrun_world();
+    let backend = layout_backend(&brushes);
+    let (end, frames) = run_policy(&backend, wallrun_start(), wallrun_on(), 60, |_, _| {
+        Intent::default()
+    });
+    assert!(
+        frames
+            .iter()
+            .skip(5)
+            .all(|(origin, _)| (origin[2] - 500.0).abs() < 5.0),
+        "wall-run should hold height: {:?}",
+        frames.last()
+    );
+    assert!(
+        end.origin[0] > 300.0,
+        "wall-run should travel along the wall: {:?}",
+        end.origin
+    );
+}
+
+/// Without the tuning the same run falls; a wall alone does not carry you.
+#[test]
+fn retail_along_a_wall_still_falls() {
+    let brushes = wallrun_world();
+    let backend = layout_backend(&brushes);
+    let (end, _) = run_policy(
+        &backend,
+        wallrun_start(),
+        MovementTuning::default(),
+        60,
+        |_, _| Intent::default(),
+    );
+    assert!(
+        end.origin[2] < 300.0,
+        "retail should fall: {:?}",
+        end.origin
+    );
+}
+
+/// A jump edge while on the wall launches away from it and ends the run.
+#[test]
+fn wall_jump_pushes_away_from_the_wall() {
+    let brushes = wallrun_world();
+    let backend = layout_backend(&brushes);
+    let (end, frames) = run_policy(&backend, wallrun_start(), wallrun_on(), 40, |tick, ps| {
+        if tick >= 5 && (ps.pm_flags & movement_iw4::PMF_WALLRUN) != 0 {
+            Intent {
+                jump: true,
+                ..Intent::default()
+            }
+        } else {
+            Intent::default()
+        }
+    });
+    assert!(
+        frames[5].1[1] < -200.0,
+        "wall jump should push away from the wall: {:?}",
+        frames[5].1
+    );
+    assert_eq!(end.pm_flags & movement_iw4::PMF_WALLRUN, 0);
+    assert!(end.origin[1] < 60.0, "left the wall: {:?}", end.origin);
+}

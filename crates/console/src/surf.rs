@@ -120,11 +120,8 @@ fn parse_surf(args: &[String], base: MovementTuning) -> Result<Option<MovementTu
         ["on" | "1"] => next.surf = true,
         ["off" | "0"] => next.surf = false,
         ["reset"] => {
-            next = MovementTuning {
-                surf: base.surf,
-                surf_air_accel: SURF_DEFAULT_AIR_ACCEL,
-                surf_air_wishspeed_cap: SURF_DEFAULT_AIR_WISHSPEED_CAP,
-            };
+            next.surf_air_accel = SURF_DEFAULT_AIR_ACCEL;
+            next.surf_air_wishspeed_cap = SURF_DEFAULT_AIR_WISHSPEED_CAP;
         }
         ["accel", value] => next.surf_air_accel = parse_non_negative("accel", value)?,
         ["cap", value] => next.surf_air_wishspeed_cap = parse_non_negative("cap", value)?,

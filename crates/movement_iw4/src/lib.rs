@@ -31,6 +31,7 @@ mod sprint;
 mod stance;
 mod viewangles;
 mod walk;
+mod wallrun;
 
 pub use accelerate::{pm_accelerate, pm_surf_air_accelerate};
 pub use ads_frac::{AdsFracContext, pm_update_ads_frac};
@@ -115,3 +116,4 @@ pub use stance::{
 };
 pub use viewangles::{ANGLE2SHORT, SHORT2ANGLE, ViewAngleClamp, pm_update_view_angles};
 pub use walk::{WalkMoveContext, pm_walk_move};
+pub use wallrun::{PMF_WALLRUN, WallRunContext, pm_wallrun};

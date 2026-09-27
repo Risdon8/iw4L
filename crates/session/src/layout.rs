@@ -99,8 +99,12 @@ pub(crate) fn spawn_points(layout: &Layout) -> Option<Vec<SpawnPoint>> {
 }
 
 pub(crate) fn movement_tuning(layout: &Layout) -> Option<sim::MovementTuning> {
-    layout.movement.surf.then(|| sim::MovementTuning {
-        surf: true,
+    if !layout.movement.surf && !layout.movement.wallrun {
+        return None;
+    }
+    Some(sim::MovementTuning {
+        surf: layout.movement.surf,
+        wallrun: layout.movement.wallrun,
         ..sim::MovementTuning::default()
     })
 }

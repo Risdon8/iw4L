@@ -2713,6 +2713,7 @@ fn pmove_context(
         shellshock_gravity_scale: 1.0,
         shellshock_gravity_bias: 0.0,
         surf: movement_tuning.surf_air(),
+        wallrun: movement_tuning.wallrun(old_buttons),
     };
     PmoveSingleContext {
         walk: WalkMoveContext {

@@ -26,6 +26,7 @@ pub mod registry;
 pub mod suggest;
 mod surf;
 mod user_settings;
+mod wallrun;
 mod weapon_dispatch;
 
 pub use binds::{

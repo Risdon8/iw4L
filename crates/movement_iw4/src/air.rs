@@ -1,8 +1,8 @@
 use playerstate_iw4::{PlayerState, UserCmd};
 
 use crate::{
-    CollisionBackend, MoveBounds, Pml, pm_accelerate, pm_friction, pm_step_slide_move,
-    pm_surf_air_accelerate,
+    CollisionBackend, MoveBounds, Pml, WallRunContext, pm_accelerate, pm_friction,
+    pm_step_slide_move, pm_surf_air_accelerate, pm_wallrun,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -15,6 +15,9 @@ pub struct AirMoveContext {
 
     /// Mod: Source-style air acceleration. `None` is retail IW4.
     pub surf: Option<SurfAirContext>,
+
+    /// Mod: Titanfall-style wall-running. `None` is retail IW4.
+    pub wallrun: Option<WallRunContext>,
 }
 
 /// Mod: CS/Source `AirAccelerate` parameters. The small `wishspeed_cap` is
@@ -34,6 +37,12 @@ pub fn pm_air_move<C: CollisionBackend>(
     bounds: MoveBounds,
     collision: &C,
 ) {
+    if let Some(wallrun) = context.wallrun
+        && pm_wallrun(ps, pml, cmd, wallrun, bounds, collision)
+    {
+        return;
+    }
+
     pm_friction(ps, pml);
 
     let command_scale = pm_cmd_scale(ps, cmd, context.player_spectate_speed_scale);

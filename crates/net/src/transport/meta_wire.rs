@@ -529,6 +529,12 @@ fn encode_movement_tuning(out: &mut WireWriter, tuning: &sim::MovementTuning) {
     out.put_u8(u8::from(tuning.surf));
     out.put_f32(tuning.surf_air_accel);
     out.put_f32(tuning.surf_air_wishspeed_cap);
+    out.put_u8(u8::from(tuning.wallrun));
+    out.put_i32(tuning.wallrun_time_ms);
+    out.put_i32(tuning.wallrun_cooldown_ms);
+    out.put_f32(tuning.wallrun_min_speed);
+    out.put_f32(tuning.wallrun_jump_up);
+    out.put_f32(tuning.wallrun_jump_out);
 }
 
 fn decode_movement_tuning(input: &mut WireReader<'_>) -> Result<sim::MovementTuning, WireError> {
@@ -537,10 +543,28 @@ fn decode_movement_tuning(input: &mut WireReader<'_>) -> Result<sim::MovementTun
         1 => true,
         _ => return Err(WireError::Malformed("bad MovementTuning surf flag")),
     };
+    let surf_air_accel = input.get_f32()?;
+    let surf_air_wishspeed_cap = input.get_f32()?;
+    let wallrun = match input.get_u8()? {
+        0 => false,
+        1 => true,
+        _ => return Err(WireError::Malformed("bad MovementTuning wallrun flag")),
+    };
+    let wallrun_time_ms = input.get_i32()?;
+    let wallrun_cooldown_ms = input.get_i32()?;
+    let wallrun_min_speed = input.get_f32()?;
+    let wallrun_jump_up = input.get_f32()?;
+    let wallrun_jump_out = input.get_f32()?;
     Ok(sim::MovementTuning {
         surf,
-        surf_air_accel: input.get_f32()?,
-        surf_air_wishspeed_cap: input.get_f32()?,
+        surf_air_accel,
+        surf_air_wishspeed_cap,
+        wallrun,
+        wallrun_time_ms,
+        wallrun_cooldown_ms,
+        wallrun_min_speed,
+        wallrun_jump_up,
+        wallrun_jump_out,
     }
     .sanitized())
 }
@@ -3086,6 +3110,12 @@ mod movement_tuning_wire_tests {
                 surf: true,
                 surf_air_accel: 150.0,
                 surf_air_wishspeed_cap: 25.0,
+                wallrun: true,
+                wallrun_time_ms: 3000,
+                wallrun_cooldown_ms: 700,
+                wallrun_min_speed: 220.0,
+                wallrun_jump_up: 260.0,
+                wallrun_jump_out: 240.0,
             },
         };
         let mut out = WireWriter::new();
@@ -3105,6 +3135,12 @@ mod movement_tuning_wire_tests {
         out.put_u8(1);
         out.put_f32(f32::NAN);
         out.put_f32(-5.0);
+        out.put_u8(1);
+        out.put_i32(-1);
+        out.put_i32(999_999);
+        out.put_f32(f32::NAN);
+        out.put_f32(-1.0);
+        out.put_f32(f32::INFINITY);
         let bytes = out.finish();
         let tuning = decode_movement_tuning(&mut WireReader::new(&bytes)).unwrap();
         assert!(tuning.surf);
@@ -3113,5 +3149,17 @@ mod movement_tuning_wire_tests {
             sim::movement_tuning::SURF_DEFAULT_AIR_ACCEL
         );
         assert_eq!(tuning.surf_air_wishspeed_cap, 0.0);
+        assert!(tuning.wallrun);
+        assert_eq!(tuning.wallrun_time_ms, 0);
+        assert_eq!(tuning.wallrun_cooldown_ms, 60_000);
+        assert_eq!(
+            tuning.wallrun_min_speed,
+            sim::movement_tuning::WALLRUN_DEFAULT_MIN_SPEED
+        );
+        assert_eq!(tuning.wallrun_jump_up, 0.0);
+        assert_eq!(
+            tuning.wallrun_jump_out,
+            sim::movement_tuning::WALLRUN_DEFAULT_JUMP_OUT
+        );
     }
 }

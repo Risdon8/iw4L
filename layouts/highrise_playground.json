@@ -2,7 +2,7 @@
   "name": "highrise_playground",
   "base_map": "mp_highrise",
   "description": "A floating movement course in the street canyon south of the Highrise towers. Walk off the start deck onto the first ramp and hold D (strafe into the ramp, no W) to surf; fly off the end onto the second ramp, land on the mid deck, bunny-hop the platform line, run the wall-run corridor and step into the portal on the end deck to go again. Fall and you return to the last checkpoint you stood in.",
-  "movement": { "surf": true },
+  "movement": { "surf": true, "wallrun": true },
   "spawns": [
     { "origin": [-3000, 4500, 3312], "yaw": 0 },
     { "origin": [-3100, 4440, 3312], "yaw": 0 },

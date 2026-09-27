@@ -60,6 +60,9 @@ fn default_true() -> bool {
 pub struct Movement {
     #[serde(default)]
     pub surf: bool,
+    /// Titanfall-style wall-running.
+    #[serde(default)]
+    pub wallrun: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
