@@ -2,8 +2,9 @@ use playerstate_iw4::{PlayerState, UserCmd};
 
 use crate::{
     AirMoveContext, CmdScaleWalkContext, CollisionBackend, JumpCheckContext, JumpCheckResult,
-    JumpLaunchContext, MoveBounds, Pml, StanceSurface, jump_check, pm_accelerate, pm_air_move,
-    pm_cmd_scale_walk, pm_friction, pm_step_slide_move, stance_surface_type,
+    JumpLaunchContext, MoveBounds, Pml, SlideContext, StanceSurface, jump_check, pm_accelerate,
+    pm_air_move, pm_cmd_scale_walk, pm_crouch_slide, pm_friction, pm_step_slide_move,
+    stance_surface_type,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -17,6 +18,9 @@ pub struct WalkMoveContext {
     pub jump: JumpLaunchContext,
 
     pub air: AirMoveContext,
+
+    /// Mod: a crouch/power slide. `None` is retail IW4.
+    pub slide: Option<SlideContext>,
 }
 
 #[allow(clippy::assign_op_pattern)]
@@ -38,6 +42,12 @@ pub fn pm_walk_move<C: CollisionBackend>(
         } else {
             prone_velocity_scale(ps);
         }
+    }
+
+    if let Some(slide) = context.slide
+        && pm_crouch_slide(ps, pml, cmd, slide, bounds, collision)
+    {
+        return;
     }
 
     let gate = JumpCheckContext {

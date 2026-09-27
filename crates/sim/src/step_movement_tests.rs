@@ -90,6 +90,7 @@ struct Intent {
     forward: i8,
     right: i8,
     jump: bool,
+    crouch: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -114,7 +115,10 @@ fn run(
     let mut samples = Vec::with_capacity(ticks);
     for tick in 0..ticks {
         let want = intent(tick, &ps);
-        let buttons = if want.jump { buttons::JUMP } else { 0 };
+        let mut buttons = if want.jump { buttons::JUMP } else { 0 };
+        if want.crouch {
+            buttons |= buttons::CROUCH;
+        }
         let mut cmd = UserCmd {
             server_time: ps.command_time + TICK_MS,
             buttons,
@@ -378,7 +382,10 @@ fn run_policy(
     let mut old_buttons = 0;
     for tick in 0..ticks {
         let want = policy(tick, &ps);
-        let held = if want.jump { buttons::JUMP } else { 0 };
+        let mut held = if want.jump { buttons::JUMP } else { 0 };
+        if want.crouch {
+            held |= buttons::CROUCH;
+        }
         let mut cmd = UserCmd {
             server_time: ps.command_time + TICK_MS,
             angles: [0, (want.yaw * ANGLE2SHORT) as i32, 0],
@@ -909,4 +916,89 @@ fn hop_along_a_wall_is_not_hijacked() {
         end.velocity
     );
     assert_eq!(end.pm_flags & movement_iw4::PMF_WALLRUN, 0);
+}
+
+/// Tap crouch at speed to slide: momentum is kept, then it ends.
+#[test]
+fn slide_preserves_speed() {
+    let (end, frames) = run(
+        &flat_floor(),
+        standing_with_speed(320.0),
+        MovementTuning::fluid(),
+        50,
+        |tick, _| Intent {
+            crouch: tick < 5,
+            ..Intent::default()
+        },
+    );
+    let slowest = frames
+        .iter()
+        .take(30)
+        .map(|s| s.speed)
+        .fold(f32::MAX, f32::min);
+    assert!(slowest > 150.0, "slide lost speed: {slowest:.0}");
+    assert_eq!(
+        end.pm_flags & movement_iw4::PMF_SLIDING,
+        0,
+        "the slide should have ended"
+    );
+}
+
+/// Crouching slowly does not slide; it needs a running start.
+#[test]
+fn crouch_without_speed_does_not_slide() {
+    let (end, _) = run(
+        &flat_floor(),
+        standing_with_speed(100.0),
+        MovementTuning::fluid(),
+        20,
+        |tick, _| Intent {
+            crouch: tick < 3,
+            ..Intent::default()
+        },
+    );
+    assert_eq!(end.pm_flags & movement_iw4::PMF_SLIDING, 0);
+}
+
+/// Jumping out of a slide launches and keeps the horizontal speed.
+#[test]
+fn slide_jump_launches() {
+    let (end, _) = run(
+        &flat_floor(),
+        standing_with_speed(320.0),
+        MovementTuning::fluid(),
+        12,
+        |tick, _| Intent {
+            crouch: tick == 0,
+            jump: tick == 8,
+            ..Intent::default()
+        },
+    );
+    assert!(
+        end.origin[2] > 5.0,
+        "slide jump should lift off: {:?}",
+        end.origin
+    );
+    assert!(
+        horizontal_speed(&end) > 150.0,
+        "slide jump should keep momentum: {:?}",
+        end.velocity
+    );
+    assert_eq!(end.pm_flags & movement_iw4::PMF_SLIDING, 0);
+}
+
+/// Without the tuning, crouch is just crouch.
+#[test]
+fn retail_crouch_does_not_slide() {
+    let (end, _) = run(
+        &flat_floor(),
+        standing_with_speed(320.0),
+        MovementTuning::default(),
+        30,
+        |tick, _| Intent {
+            crouch: tick < 5,
+            ..Intent::default()
+        },
+    );
+    assert_eq!(end.pm_flags & movement_iw4::PMF_SLIDING, 0);
 }

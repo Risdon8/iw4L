@@ -10,6 +10,7 @@ mod cmdscale;
 mod collision;
 mod correct_solid;
 mod crash;
+mod crouch_slide;
 mod dmgtimer;
 mod doublejump;
 mod drop_timers;
@@ -45,6 +46,7 @@ pub use cmdscale::{CmdScaleWalkContext, pm_cmd_scale_walk};
 pub use collision::CollisionBackend;
 pub use correct_solid::{BG_CORRECT_SOLID_DELTAS, CorrectSolidOutcome, pm_correct_solid};
 pub use crash::{crash_land_fall_height, pm_crash_land};
+pub use crouch_slide::{PMF_SLIDE_COOLDOWN, PMF_SLIDING, SlideContext, pm_crouch_slide};
 pub use dmgtimer::{
     ANIM_MT_FLINCH_FORWARD, PLAYER_DMGTIMER_FLINCH_TIME_MS, PLAYER_DMGTIMER_MAX_TIME,
     PLAYER_DMGTIMER_MIN_SCALE, PLAYER_DMGTIMER_STUMBLE_TIME_MS, PLAYER_DMGTIMER_TIME_PER_POINT,

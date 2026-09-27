@@ -2737,6 +2737,7 @@ fn pmove_context(
                 jump_ladder_push_vel: 128.0,
             },
             air,
+            slide: movement_tuning.slide(old_buttons),
         },
         air,
         bounds: MoveBounds {

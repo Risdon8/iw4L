@@ -4,7 +4,7 @@
 //! predicting client and a replay all step with the same values. It changes
 //! only through `ClientAction::SetMovementTuning`.
 
-use movement_iw4::{DoubleJumpContext, PMF_WALLRUN, SurfAirContext, WallRunContext};
+use movement_iw4::{DoubleJumpContext, PMF_WALLRUN, SlideContext, SurfAirContext, WallRunContext};
 
 /// CS surf servers run `sv_airaccelerate` 100–150 with Source's fixed 30u cap.
 pub const SURF_DEFAULT_AIR_ACCEL: f32 = 100.0;
@@ -20,6 +20,18 @@ pub const WALLRUN_DEFAULT_JUMP_OUT: f32 = 260.0;
 
 /// The air jump launches a little higher than a ground jump, so it is obvious.
 pub const DOUBLE_JUMP_DEFAULT_HEIGHT: f32 = 50.0;
+
+/// A crouch slide holds for about 0.7 s; it needs a running start and ends when
+/// it slows down.
+pub const SLIDE_DEFAULT_TIME_MS: i32 = 700;
+pub const SLIDE_DEFAULT_COOLDOWN_MS: i32 = 300;
+pub const SLIDE_DEFAULT_MIN_SPEED: f32 = 220.0;
+pub const SLIDE_DEFAULT_END_SPEED: f32 = 140.0;
+pub const SLIDE_DEFAULT_FRICTION: f32 = 1.2;
+pub const SLIDE_DEFAULT_JUMP_UP: f32 = 250.0;
+
+/// How hard a slide can be steered. Small; a slide mostly holds its line.
+const SLIDE_STEER_ACCEL: f32 = 40.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MovementTuning {
@@ -42,6 +54,20 @@ pub struct MovementTuning {
     pub wallrun_jump_out: f32,
 
     pub double_jump: bool,
+
+    pub slide: bool,
+
+    pub slide_time_ms: i32,
+
+    pub slide_cooldown_ms: i32,
+
+    pub slide_min_speed: f32,
+
+    pub slide_end_speed: f32,
+
+    pub slide_friction: f32,
+
+    pub slide_jump_up: f32,
 }
 
 impl Default for MovementTuning {
@@ -57,6 +83,13 @@ impl Default for MovementTuning {
             wallrun_jump_up: WALLRUN_DEFAULT_JUMP_UP,
             wallrun_jump_out: WALLRUN_DEFAULT_JUMP_OUT,
             double_jump: false,
+            slide: false,
+            slide_time_ms: SLIDE_DEFAULT_TIME_MS,
+            slide_cooldown_ms: SLIDE_DEFAULT_COOLDOWN_MS,
+            slide_min_speed: SLIDE_DEFAULT_MIN_SPEED,
+            slide_end_speed: SLIDE_DEFAULT_END_SPEED,
+            slide_friction: SLIDE_DEFAULT_FRICTION,
+            slide_jump_up: SLIDE_DEFAULT_JUMP_UP,
         }
     }
 }
@@ -90,14 +123,28 @@ impl MovementTuning {
     }
 
     /// The "fluid" profile applied on every map by default: bhop and strafe air
-    /// control (surf), wall-running, and one air jump.
+    /// control (surf), wall-running, one air jump, and a crouch slide.
     pub fn fluid() -> Self {
         Self {
             surf: true,
             wallrun: true,
             double_jump: true,
+            slide: true,
             ..Self::default()
         }
+    }
+
+    pub fn slide(&self, old_buttons: u32) -> Option<SlideContext> {
+        self.slide.then_some(SlideContext {
+            max_time_ms: self.slide_time_ms,
+            cooldown_ms: self.slide_cooldown_ms,
+            min_speed: self.slide_min_speed,
+            end_speed: self.slide_end_speed,
+            friction: self.slide_friction,
+            steer_accel: SLIDE_STEER_ACCEL,
+            jump_up: self.slide_jump_up,
+            old_buttons,
+        })
     }
 
     /// Clamp values arriving from the wire or the console into a range that
@@ -123,6 +170,15 @@ impl MovementTuning {
             wallrun_jump_out: finite(self.wallrun_jump_out, WALLRUN_DEFAULT_JUMP_OUT)
                 .clamp(0.0, 10_000.0),
             double_jump: self.double_jump,
+            slide: self.slide,
+            slide_time_ms: self.slide_time_ms.clamp(0, 60_000),
+            slide_cooldown_ms: self.slide_cooldown_ms.clamp(0, 60_000),
+            slide_min_speed: finite(self.slide_min_speed, SLIDE_DEFAULT_MIN_SPEED)
+                .clamp(0.0, 10_000.0),
+            slide_end_speed: finite(self.slide_end_speed, SLIDE_DEFAULT_END_SPEED)
+                .clamp(0.0, 10_000.0),
+            slide_friction: finite(self.slide_friction, SLIDE_DEFAULT_FRICTION).clamp(0.0, 1_000.0),
+            slide_jump_up: finite(self.slide_jump_up, SLIDE_DEFAULT_JUMP_UP).clamp(0.0, 10_000.0),
         }
     }
 }

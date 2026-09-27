@@ -10,18 +10,32 @@ use sim::{ClientAction, MovementTuning};
 
 use crate::{ConsoleCommand, ConsoleLine, ConsoleRegistry, ConsoleSettings, ConsoleState};
 
-const USAGE: &str = "movement | movement fluid|retail | movement surf|wallrun|doublejump on|off — global movement profile (needs cheats; mod)";
+const USAGE: &str = "movement | movement fluid|retail | movement surf|wallrun|doublejump|slide on|off — global movement profile (needs cheats; mod)";
 
 pub(crate) fn register_movement_commands(registry: &mut ConsoleRegistry) {
     if registry.resolve("movement").is_none() {
         registry.register(crate::CommandSpec::new("movement").usage(USAGE).arg(
-            crate::StaticCompleter::new(["fluid", "retail", "surf", "wallrun", "doublejump"]),
+            crate::StaticCompleter::new([
+                "fluid",
+                "retail",
+                "surf",
+                "wallrun",
+                "doublejump",
+                "slide",
+            ]),
         ));
     }
     if registry.resolve("doublejump").is_none() {
         registry.register(
             crate::CommandSpec::new("doublejump")
                 .usage("doublejump [on|off] — one extra jump in the air (mod)")
+                .arg(crate::StaticCompleter::new(["on", "off"])),
+        );
+    }
+    if registry.resolve("slide").is_none() {
+        registry.register(
+            crate::CommandSpec::new("slide")
+                .usage("slide [on|off] — crouch/power slide (mod)")
                 .arg(crate::StaticCompleter::new(["on", "off"])),
         );
     }
@@ -53,7 +67,7 @@ pub(crate) fn route_movement_commands(
 
     for cmd in events.read() {
         let name = cmd.name.clone();
-        if name != "movement" && name != "doublejump" {
+        if name != "movement" && name != "doublejump" && name != "slide" {
             continue;
         }
         let Some(applied) = applied else {
@@ -65,10 +79,10 @@ pub(crate) fn route_movement_commands(
             continue;
         };
         let base = pending.unwrap_or(applied);
-        let parsed = if name == "doublejump" {
-            parse_double_jump(&cmd.args, base)
-        } else {
-            parse_movement(&cmd.args, base)
+        let parsed = match name.as_str() {
+            "doublejump" => parse_double_jump(&cmd.args, base),
+            "slide" => parse_slide(&cmd.args, base),
+            _ => parse_movement(&cmd.args, base),
         };
         let next = match parsed {
             Ok(None) => {
@@ -130,15 +144,18 @@ fn parse_movement(args: &[String], base: MovementTuning) -> Result<Option<Moveme
             next.surf = true;
             next.wallrun = true;
             next.double_jump = true;
+            next.slide = true;
         }
         ["retail" | "off"] => {
             next.surf = false;
             next.wallrun = false;
             next.double_jump = false;
+            next.slide = false;
         }
         ["surf", value] => next.surf = parse_bool("surf", value)?,
         ["wallrun", value] => next.wallrun = parse_bool("wallrun", value)?,
         ["doublejump" | "dj", value] => next.double_jump = parse_bool("doublejump", value)?,
+        ["slide", value] => next.slide = parse_bool("slide", value)?,
         _ => return Err(format!("usage: {USAGE}")),
     }
     Ok(Some(next))
@@ -163,6 +180,22 @@ fn parse_double_jump(
     Ok(Some(next))
 }
 
+/// The `slide` shorthand: bare is a status query, `on`/`off` toggles it.
+fn parse_slide(args: &[String], base: MovementTuning) -> Result<Option<MovementTuning>, String> {
+    let mut next = base;
+    match args
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
+        [] => return Ok(None),
+        [value] => next.slide = parse_bool("slide", value)?,
+        _ => return Err("usage: slide [on|off]".into()),
+    }
+    Ok(Some(next))
+}
+
 fn parse_bool(name: &str, raw: &str) -> Result<bool, String> {
     match raw {
         "on" | "1" | "true" => Ok(true),
@@ -173,10 +206,11 @@ fn parse_bool(name: &str, raw: &str) -> Result<bool, String> {
 
 fn format_profile(prefix: &str, tuning: &MovementTuning) -> String {
     format!(
-        "{prefix} surf={} wallrun={} doublejump={}",
+        "{prefix} surf={} wallrun={} doublejump={} slide={}",
         on_off(tuning.surf),
         on_off(tuning.wallrun),
         on_off(tuning.double_jump),
+        on_off(tuning.slide),
     )
 }
 
@@ -202,7 +236,7 @@ mod tests {
         let next = parse_movement(&args(&["fluid"]), MovementTuning::default())
             .unwrap()
             .unwrap();
-        assert!(next.surf && next.wallrun && next.double_jump);
+        assert!(next.surf && next.wallrun && next.double_jump && next.slide);
     }
 
     #[test]
@@ -210,7 +244,7 @@ mod tests {
         let next = parse_movement(&args(&["retail"]), MovementTuning::fluid())
             .unwrap()
             .unwrap();
-        assert!(!next.surf && !next.wallrun && !next.double_jump);
+        assert!(!next.surf && !next.wallrun && !next.double_jump && !next.slide);
     }
 
     #[test]
@@ -241,5 +275,20 @@ mod tests {
         assert!(!off.double_jump);
         assert!(parse_double_jump(&args(&["maybe"]), MovementTuning::default()).is_err());
         assert!(parse_double_jump(&args(&["on", "off"]), MovementTuning::default()).is_err());
+    }
+
+    #[test]
+    fn slide_shorthand() {
+        assert_eq!(parse_slide(&[], MovementTuning::default()), Ok(None));
+        let on = parse_slide(&args(&["on"]), MovementTuning::default())
+            .unwrap()
+            .unwrap();
+        assert!(on.slide);
+        let off = parse_slide(&args(&["off"]), MovementTuning::fluid())
+            .unwrap()
+            .unwrap();
+        assert!(!off.slide);
+        assert!(parse_slide(&args(&["maybe"]), MovementTuning::default()).is_err());
+        assert!(parse_slide(&args(&["on", "off"]), MovementTuning::default()).is_err());
     }
 }

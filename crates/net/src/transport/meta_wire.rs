@@ -536,6 +536,13 @@ fn encode_movement_tuning(out: &mut WireWriter, tuning: &sim::MovementTuning) {
     out.put_f32(tuning.wallrun_jump_up);
     out.put_f32(tuning.wallrun_jump_out);
     out.put_u8(u8::from(tuning.double_jump));
+    out.put_u8(u8::from(tuning.slide));
+    out.put_i32(tuning.slide_time_ms);
+    out.put_i32(tuning.slide_cooldown_ms);
+    out.put_f32(tuning.slide_min_speed);
+    out.put_f32(tuning.slide_end_speed);
+    out.put_f32(tuning.slide_friction);
+    out.put_f32(tuning.slide_jump_up);
 }
 
 fn decode_movement_tuning(input: &mut WireReader<'_>) -> Result<sim::MovementTuning, WireError> {
@@ -561,6 +568,17 @@ fn decode_movement_tuning(input: &mut WireReader<'_>) -> Result<sim::MovementTun
         1 => true,
         _ => return Err(WireError::Malformed("bad MovementTuning double_jump flag")),
     };
+    let slide = match input.get_u8()? {
+        0 => false,
+        1 => true,
+        _ => return Err(WireError::Malformed("bad MovementTuning slide flag")),
+    };
+    let slide_time_ms = input.get_i32()?;
+    let slide_cooldown_ms = input.get_i32()?;
+    let slide_min_speed = input.get_f32()?;
+    let slide_end_speed = input.get_f32()?;
+    let slide_friction = input.get_f32()?;
+    let slide_jump_up = input.get_f32()?;
     Ok(sim::MovementTuning {
         surf,
         surf_air_accel,
@@ -572,6 +590,13 @@ fn decode_movement_tuning(input: &mut WireReader<'_>) -> Result<sim::MovementTun
         wallrun_jump_up,
         wallrun_jump_out,
         double_jump,
+        slide,
+        slide_time_ms,
+        slide_cooldown_ms,
+        slide_min_speed,
+        slide_end_speed,
+        slide_friction,
+        slide_jump_up,
     }
     .sanitized())
 }
@@ -3124,6 +3149,13 @@ mod movement_tuning_wire_tests {
                 wallrun_jump_up: 260.0,
                 wallrun_jump_out: 240.0,
                 double_jump: true,
+                slide: true,
+                slide_time_ms: 800,
+                slide_cooldown_ms: 350,
+                slide_min_speed: 240.0,
+                slide_end_speed: 150.0,
+                slide_friction: 1.0,
+                slide_jump_up: 260.0,
             },
         };
         let mut out = WireWriter::new();
@@ -3150,6 +3182,13 @@ mod movement_tuning_wire_tests {
         out.put_f32(-1.0);
         out.put_f32(f32::INFINITY);
         out.put_u8(1);
+        out.put_u8(1);
+        out.put_i32(-5);
+        out.put_i32(999_999);
+        out.put_f32(f32::NAN);
+        out.put_f32(-1.0);
+        out.put_f32(f32::INFINITY);
+        out.put_f32(-2.0);
         let bytes = out.finish();
         let tuning = decode_movement_tuning(&mut WireReader::new(&bytes)).unwrap();
         assert!(tuning.surf);
@@ -3171,5 +3210,18 @@ mod movement_tuning_wire_tests {
             sim::movement_tuning::WALLRUN_DEFAULT_JUMP_OUT
         );
         assert!(tuning.double_jump);
+        assert!(tuning.slide);
+        assert_eq!(tuning.slide_time_ms, 0);
+        assert_eq!(tuning.slide_cooldown_ms, 60_000);
+        assert_eq!(
+            tuning.slide_min_speed,
+            sim::movement_tuning::SLIDE_DEFAULT_MIN_SPEED
+        );
+        assert_eq!(tuning.slide_end_speed, 0.0);
+        assert_eq!(
+            tuning.slide_friction,
+            sim::movement_tuning::SLIDE_DEFAULT_FRICTION
+        );
+        assert_eq!(tuning.slide_jump_up, 0.0);
     }
 }
