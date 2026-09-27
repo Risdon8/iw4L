@@ -38,8 +38,10 @@ wallrun time|cooldown|speed|up|out <n>
 
 **Crouch slide**: tap crouch at a run (>200 u/s) to slide — it keeps your
 momentum with very little friction for up to 1.2 s, steers a little, accelerates
-downhill, and jumping out of it launches while keeping the horizontal speed. It
-ends when it slows below ~90 u/s; holding crouch does not chain slides.
+downhill, and jumping out of it launches while keeping the horizontal speed.
+Pressing crouch in the air buffers the slide and starts it on the landing, so a
+jump leads straight into one. It ends when it slows below ~90 u/s; holding
+crouch does not chain slides, and the viewmodel is held steady while sliding.
 
 **Wall-running is deliberate**: in the air next to a wall, press jump to
 grip it (hold your height), then press jump again to launch off. Merely hopping
