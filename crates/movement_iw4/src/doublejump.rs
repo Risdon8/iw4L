@@ -35,8 +35,8 @@ pub fn pm_double_jump(ps: &mut PlayerState, cmd: &UserCmd, context: DoubleJumpCo
     } else {
         0.0
     };
-    ps.jump_origin_z = ps.origin[2];
-    ps.jump_time = cmd.server_time;
+    // Deliberately does not touch `jump_time`: that would lock the next ground
+    // jump out for the jump gate's 500 ms after any air jump.
     true
 }
 

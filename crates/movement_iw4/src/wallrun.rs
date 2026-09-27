@@ -28,6 +28,10 @@ const WALL_MAX_NORMAL_Z: f32 = 0.3;
 const PROBE_HEIGHT: f32 = 35.0;
 const PROBE_HALF: f32 = 2.0;
 
+/// Invisible player-clip must not start a run: a real map is full of it, so a
+/// "wall" would appear where the player sees nothing.
+const CONTENTS_PLAYER_CLIPS: u32 = 0x0081_0000;
+
 /// How much of the tangential speed survives a wall jump.
 const WALL_JUMP_KEEP: f32 = 0.5;
 
@@ -247,7 +251,7 @@ fn probe<C: CollisionBackend>(
         end,
         mins: [-PROBE_HALF; 3],
         maxs: [PROBE_HALF; 3],
-        tracemask: bounds.tracemask,
+        tracemask: bounds.tracemask & !CONTENTS_PLAYER_CLIPS,
     });
     if hit.fraction >= 1.0 {
         return None;

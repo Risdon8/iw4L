@@ -760,6 +760,35 @@ fn wallrun_grips_soon_after_a_jump() {
     );
 }
 
+/// A run of invisible player-clip must not count as a wall: a real map is full
+/// of it, so the grab would fire where the player sees nothing.
+#[test]
+fn wallrun_ignores_invisible_player_clip() {
+    let mut brush = map_layout_brushes(
+        r#"{ "type": "box", "center": [0, 100, 500], "size": [4000, 16, 1000] }"#,
+    )
+    .remove(0);
+    brush.contents = 0x0081_0000;
+    let brushes = [brush];
+    let backend = layout_backend(&brushes);
+    let (end, _) = run_policy(&backend, wallrun_start(), wallrun_on(), 30, |tick, _| {
+        if tick == 0 {
+            Intent {
+                jump: true,
+                ..Intent::default()
+            }
+        } else {
+            Intent::default()
+        }
+    });
+    assert!(
+        end.origin[2] < 490.0,
+        "clip should not hold the player up: {:?}",
+        end.origin
+    );
+    assert_eq!(end.pm_flags & movement_iw4::PMF_WALLRUN, 0);
+}
+
 fn double_jump_on() -> MovementTuning {
     MovementTuning {
         double_jump: true,

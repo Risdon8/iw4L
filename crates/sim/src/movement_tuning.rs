@@ -128,7 +128,7 @@ impl MovementTuning {
 }
 
 /// How far to the side a wall is looked for. Constant for now.
-const WALLRUN_TRACE_DIST: f32 = 60.0;
+const WALLRUN_TRACE_DIST: f32 = 40.0;
 
 /// Whether the player is on a wall right now (HUD feedback).
 pub fn player_wallrunning(ps: &playerstate_iw4::PlayerState) -> bool {
