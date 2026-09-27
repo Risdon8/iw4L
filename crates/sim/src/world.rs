@@ -75,6 +75,13 @@ pub struct PendingPrint {
     pub arg: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PendingLocalSound {
+    pub recipient: ClientId,
+    pub stop: bool,
+    pub alias_index: u8,
+}
+
 pub(crate) const CONTENTS_BODY: u32 = 0x0200_0000;
 
 #[derive(Clone, Debug)]
@@ -523,6 +530,7 @@ pub struct SimState {
     pending_player_cards: Vec<PendingPlayerCardEvent>,
 
     pending_prints: Vec<PendingPrint>,
+    pending_local_sounds: Vec<PendingLocalSound>,
 
     pending_final_kill: Option<(ClientId, ClientId)>,
 
@@ -619,6 +627,7 @@ impl Default for SimState {
             weapon_notes: Vec::new(),
             pending_player_cards: Vec::new(),
             pending_prints: Vec::new(),
+            pending_local_sounds: Vec::new(),
             pending_final_kill: None,
             last_pmove_walking: HashMap::new(),
             stuck_holdrand: 0,
@@ -707,6 +716,7 @@ impl SimState {
         self.recent_kills.clear();
         self.pending_player_cards.clear();
         self.pending_prints.clear();
+        self.pending_local_sounds.clear();
         self.script_gaps = ScriptGaps::default();
         self.recompute_content_digest();
         Ok(())
@@ -792,6 +802,14 @@ impl SimState {
 
     pub fn take_pending_prints(&mut self) -> Vec<PendingPrint> {
         core::mem::take(&mut self.pending_prints)
+    }
+
+    pub(crate) fn push_local_sound(&mut self, sound: PendingLocalSound) {
+        self.pending_local_sounds.push(sound);
+    }
+
+    pub fn take_pending_local_sounds(&mut self) -> Vec<PendingLocalSound> {
+        core::mem::take(&mut self.pending_local_sounds)
     }
 
     pub fn bind_required_hud_materials(&mut self) {

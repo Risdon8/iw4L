@@ -8,6 +8,7 @@ pub struct ObjectiveMatch {
     pub game_end_time: i32,
     pub scripted_effects: bool,
     pub effects: Vec<ScriptEffect>,
+    pub naked_vision: Option<crate::VisionChange>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]

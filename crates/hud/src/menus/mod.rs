@@ -839,7 +839,6 @@ pub(crate) fn update_script_menus(
                 }
             }
             sim::MenuCommandKind::CloseInGame => runner.close_all(),
-            sim::MenuCommandKind::Client { .. } => {}
         }
     }
 

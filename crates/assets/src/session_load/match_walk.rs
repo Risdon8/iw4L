@@ -168,8 +168,8 @@ pub(super) async fn walk_prepared_match(
         mut report,
         gaps,
     } = loaded;
-    let mut scripts = match map_namespace {
-        Some(crate::AssetNamespace::T5) => t5_scripts,
+    let mut scripts = match crate::rules_namespace(map_namespace) {
+        crate::AssetNamespace::T5 => t5_scripts,
         _ => iw4_scripts,
     };
     scripts.overlay(map_scripts);

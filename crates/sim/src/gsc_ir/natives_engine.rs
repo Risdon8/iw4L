@@ -1,7 +1,7 @@
-use super::entities::{EntityKind, Motion, MotionPath, ScriptEntity};
+use super::entities::{EntityKind, ScriptEntity};
 use super::iw4_natives::{precache, string};
+use super::mechanics::{Mechanics, Motion, MotionPath};
 use super::natives_math::{arg, distance_sq, float, int, kind, new_array, optional, vector};
-use super::runtime::raise;
 use super::*;
 use crate::bullet_collision::{
     MASK_PLAYER_SOLID, MASK_SHOT, PLAYER_MAXS, PLAYER_MINS, TraceOutcome,
@@ -103,7 +103,7 @@ pub(super) fn trace(
     maxs: [f32; 3],
     mask: u32,
 ) -> trace_iw4::Trace {
-    crate::frame::FrameWorld::from_world(world).trace_world(start, end, mins, maxs, mask)
+    super::presence::settled(world).trace_world(start, end, mins, maxs, mask)
 }
 
 const SIGHT_CONE_MASK: u32 = 0x0801;
@@ -156,16 +156,14 @@ pub(super) fn entity_trace(
     mask: u32,
     ignore: TraceIgnore,
 ) -> TraceOutcome {
-    crate::frame::FrameWorld::from_world(world).sensor_trace(
-        crate::bullet_collision::BulletTraceQuery {
-            start,
-            end,
-            mask,
-            ignore: ignore.client,
-            ignore_hit: ignore.other_client,
-            ignore_model: ignore.model,
-        },
-    )
+    super::presence::settled(world).sensor_trace(crate::bullet_collision::BulletTraceQuery {
+        start,
+        end,
+        mask,
+        ignore: ignore.client,
+        ignore_hit: ignore.other_client,
+        ignore_model: ignore.model,
+    })
 }
 
 fn surface_name(collider: crate::bullet_collision::ColliderId) -> &'static str {
@@ -348,16 +346,18 @@ fn start_motion(
     done: &'static str,
 ) -> Result<Value, String> {
     let start_ms = now_ms(world);
-    with_entity(world, receiver, |e| {
-        e.motion.retain(|m| m.field != field);
-        e.motion.push(Motion {
+    let object = entity_id(world, receiver)?;
+    world.resource_mut::<Mechanics>().start(
+        object,
+        Motion {
             field,
             path,
             start_ms,
             duration_ms,
             done,
-        });
-    })
+        },
+    );
+    Ok(Value::Undefined)
 }
 
 fn ramp(args: &[Value], time: f32, from: [f32; 3], to: [f32; 3]) -> Result<MotionPath, String> {
@@ -412,67 +412,6 @@ fn add_angle(
     angles[axis] += delta;
     runtime(world).set_object_field(id, "angles", Value::Vector(angles));
     Ok(Value::Undefined)
-}
-
-pub(super) fn advance_motions(world: &mut World, now: i64) {
-    let mut finished = Vec::new();
-    let mut runtime = runtime(world);
-    let moving: Vec<u64> = runtime
-        .entities
-        .iter()
-        .filter(|(_, e)| !e.motion.is_empty())
-        .map(|(id, _)| *id)
-        .collect();
-    for id in moving {
-        let motions = std::mem::take(&mut runtime.entities.get_mut(&id).unwrap().motion);
-        let mut remaining = Vec::new();
-        for motion in motions {
-            let (value, _) = motion.sample(now);
-            runtime.set_object_field(id, motion.field, Value::Vector(value));
-            if now - motion.start_ms >= motion.duration_ms {
-                finished.push((id, motion.done));
-            } else {
-                remaining.push(motion);
-            }
-        }
-        runtime.entities.get_mut(&id).unwrap().motion = remaining;
-    }
-    let linked: Vec<(u64, entities::Link)> = runtime
-        .entities
-        .iter()
-        .filter_map(|(id, e)| Some((*id, e.linked_to.clone()?)))
-        .collect();
-    for (id, link) in linked {
-        if !runtime.objects.contains_key(&link.parent) {
-            runtime.entities.get_mut(&id).unwrap().linked_to = None;
-            continue;
-        }
-        let field = |runtime: &mut Runtime, name| match runtime.object_field(link.parent, name) {
-            Value::Vector(v) => v,
-            _ => ZERO,
-        };
-        let (base, base_angles) = (field(&mut runtime, "origin"), field(&mut runtime, "angles"));
-        let axis = math_iw4::angles_to_axis(base_angles);
-        let local = add(link.tag_offset.unwrap_or(ZERO), link.origin);
-        let (child_axis, origin) =
-            math_iw4::matrix_multiply43(math_iw4::angles_to_axis(link.angles), local, axis, base);
-        runtime.set_object_field(id, "origin", Value::Vector(origin));
-        runtime.set_object_field(
-            id,
-            "angles",
-            Value::Vector(math_iw4::axis_to_angles(child_axis)),
-        );
-    }
-    let timers = std::mem::take(&mut runtime.timers);
-    let (due, pending): (Vec<_>, Vec<_>) = timers.into_iter().partition(|(at, _, _)| *at <= now);
-    runtime.timers = pending;
-    drop(runtime);
-    for (id, name) in finished {
-        raise(world, Value::Object(id), name, Vec::new());
-    }
-    for (_, receiver, name) in due {
-        raise(world, receiver, &name, Vec::new());
-    }
 }
 
 fn name(world: &World, id: i32) -> Result<String, String> {
@@ -815,17 +754,6 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         if !args.is_empty() {
             return Err("delete expects no arguments".into());
         }
-        if let Value::Entity(entity) = receiver {
-            let mut frame = crate::frame::FrameWorld::from_world(world);
-            frame
-                .entity_kernel()
-                .resolve(*entity)
-                .map_err(|e| format!("invalid entity receiver: {e:?}"))?;
-            if !frame.remove_script_mover_by_number(entity.number()) {
-                return Err("delete receiver is not a script mover".into());
-            }
-            return Ok(Value::Undefined);
-        }
         let id = entity_id(world, receiver)?;
         let item = match runtime(world).entities.get(&id).map(|e| &e.kind) {
             Some(entities::EntityKind::Item(number)) => Some(*number),
@@ -839,30 +767,13 @@ pub(super) fn register(registry: &mut NativeRegistry) {
     });
     registry.register(Method, "setorigin", |world, receiver, args| {
         let origin = vector(args, 0)?;
-        if let Value::Entity(entity) = receiver {
-            let mut frame = crate::frame::FrameWorld::from_world(world);
-            frame
-                .entity_kernel()
-                .resolve(*entity)
-                .map_err(|e| format!("invalid entity receiver: {e:?}"))?;
-            if !frame.set_script_mover_origin(entity.number(), origin) {
-                return Err("setorigin receiver is not a script mover".into());
-            }
-            return Ok(Value::Undefined);
-        }
         let id = entity_id(world, receiver)?;
         if let Some(client) = runtime(world).player_client(id) {
             crate::frame::FrameWorld::from_world(world).set_origin(crate::ClientId(client), origin);
             return Ok(Value::Undefined);
         }
-        let mut runtime = runtime(world);
-        runtime
-            .entities
-            .get_mut(&id)
-            .unwrap()
-            .motion
-            .retain(|m| m.field != "origin");
-        runtime.set_object_field(id, "origin", Value::Vector(origin));
+        world.resource_mut::<Mechanics>().stop(id, "origin");
+        runtime(world).set_object_field(id, "origin", Value::Vector(origin));
         Ok(Value::Undefined)
     });
     registry.register(Method, "getorigin", |world, receiver, _| {
@@ -921,11 +832,7 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         }
         let now = now_ms(world);
         Ok(Value::Vector(
-            runtime(world).entities[&id]
-                .motion
-                .iter()
-                .find(|m| m.field == "origin")
-                .map_or(ZERO, |m| m.sample(now).1),
+            world.resource::<Mechanics>().velocity(id, now),
         ))
     });
     registry.register(Method, "getentitynumber", |world, receiver, _| {
@@ -1284,7 +1191,7 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         let tag = string(args, 2)?;
         let presence = runtime(world).presence_of(&entity);
         let fallback = (origin_of(world, &entity)?, [0.0, 0.0, 1.0]);
-        let mut frame = crate::frame::FrameWorld::from_world(world);
+        let mut frame = super::presence::settled(world);
         let (origin, forward) = presence
             .and_then(|id| {
                 frame
@@ -1378,9 +1285,7 @@ pub(super) fn register(registry: &mut NativeRegistry) {
     macro_rules! entity_accepts {
         ($($name:literal),* $(,)?) => {$(
             registry.register(Method, $name, |world, receiver, _| {
-                if !matches!(receiver, Value::Entity(_)) {
-                    entity_id(world, receiver)?;
-                }
+                entity_id(world, receiver)?;
                 Ok(Value::Undefined)
             });
         )*};
@@ -1419,7 +1324,6 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         "laseron",
         "laseroff",
         "playsoundasmaster",
-        "playrumbleonentity",
         "logstring",
     ];
 
@@ -1726,7 +1630,6 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         "earthquake",
         "playfxontagforclients",
         "stopfxontag",
-        "playrumbleonposition",
         "setslowmotion",
         "setac130ambience",
         "physicsexplosionsphere",

@@ -199,41 +199,11 @@ pub fn presented_film_vision_with_lerp(
     presented_film_vision_with_glow_tweaks(true, Some(mixed), use_tweaks, tweaks)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum IntroStage {
-    Waiting,
-    Starting,
-    Returning,
-    Playing,
-}
-
-fn intro_stage(phase: sim::MatchPhase, prematch: gamemode_iw4::PrematchStep) -> (IntroStage, i32) {
-    if phase != sim::MatchPhase::Warmup {
-        return (IntroStage::Playing, 0);
-    }
-    match prematch {
-        gamemode_iw4::PrematchStep::Starting { elapsed_ms } => {
-            let return_at = gamemode_iw4::MATCH_START_MS.saturating_sub(2000) + 100;
-            if elapsed_ms >= return_at {
-                (
-                    IntroStage::Returning,
-                    elapsed_ms.saturating_sub(return_at) as i32,
-                )
-            } else {
-                (IntroStage::Starting, 0)
-            }
-        }
-        _ => (IntroStage::Waiting, 0),
-    }
-}
-
 #[derive(Resource, Default)]
-struct MatchIntroVision {
-    stage: Option<IntroStage>,
-}
+struct AppliedNakedVision(Option<Option<sim::VisionChange>>);
 
 pub fn register(app: &mut App) {
-    app.init_resource::<MatchIntroVision>();
+    app.init_resource::<AppliedNakedVision>();
     app.init_resource::<FilmVisionView>().add_systems(
         Update,
         update_film_vision_view
@@ -242,6 +212,7 @@ pub fn register(app: &mut App) {
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn update_film_vision_view(
     view: Res<crate::prepare::scene::view_parms::PreparedSceneView>,
     scene: Res<crate::prepare::scene::world::WorldScene>,
@@ -249,72 +220,47 @@ fn update_film_vision_view(
     clock: Res<net::FrameClock>,
     mut film: ResMut<FilmVisionView>,
     presented: Res<net::PresentedSnapshot>,
-    mut intro: ResMut<MatchIntroVision>,
+    local: Res<net::LocalPresentClient>,
+    mut applied: ResMut<AppliedNakedVision>,
 ) {
     if !view.ready {
-        intro.stage = None;
+        applied.0 = None;
     } else {
-        let (stage, age_ms) = presented
-            .snapshot()
-            .map_or((IntroStage::Waiting, 0), |snapshot| {
-                intro_stage(snapshot.meta.phase, snapshot.meta.prematch)
+        let wanted = presented.snapshot().and_then(|snapshot| {
+            snapshot
+                .meta
+                .for_client(local.0)
+                .and_then(|meta| meta.view_effects.naked_vision.clone())
+                .or_else(|| snapshot.meta.objectives.naked_vision.clone())
+        });
+        if applied.0.as_ref() != Some(&wanted) {
+            let preset = wanted.as_ref().and_then(|vision| {
+                let key = format!("vision/{}.vision", vision.name.to_ascii_lowercase());
+                match scene.film_visions.get(&key) {
+                    Some(Ok(preset)) => Some(*preset),
+                    Some(Err(error)) => {
+                        diag::warn!(World, "naked vision {key}: {error:?}");
+                        None
+                    }
+                    None => {
+                        diag::warn!(World, "naked vision {key} is not loaded");
+                        None
+                    }
+                }
             });
-        if intro.stage != Some(stage) {
-            match stage {
-                IntroStage::Waiting | IntroStage::Starting => {
-                    match scene.film_visions.get("vision/mpintro.vision") {
-                        Some(Ok(preset)) => film.select(
-                            scene.film_vision,
-                            Some(*preset),
-                            clock.time(),
-                            0,
-                            glow.allowed,
-                            glow.allowed_script_forced,
-                        ),
-                        Some(Err(error)) => diag::warn!(World, "match intro vision: {error:?}"),
-                        None => {}
-                    }
-                }
-                IntroStage::Returning => {
-                    if intro.stage.is_none()
-                        && let Some(Ok(preset)) = scene.film_visions.get("vision/mpintro.vision")
-                    {
-                        film.select(
-                            scene.film_vision,
-                            Some(*preset),
-                            clock.time() - age_ms,
-                            0,
-                            glow.allowed,
-                            glow.allowed_script_forced,
-                        );
-                    }
-                    film.select(
-                        scene.film_vision,
-                        None,
-                        clock.time() - age_ms,
-                        3000,
-                        glow.allowed,
-                        glow.allowed_script_forced,
-                    );
-                }
-                IntroStage::Playing if intro.stage.is_some() => {
-                    let duration = if intro.stage == Some(IntroStage::Returning) {
-                        3000
-                    } else {
-                        0
-                    };
-                    film.select(
-                        scene.film_vision,
-                        None,
-                        clock.time(),
-                        duration,
-                        glow.allowed,
-                        glow.allowed_script_forced,
-                    );
-                }
-                IntroStage::Playing => {}
-            }
-            intro.stage = Some(stage);
+            let duration_ms = match (&applied.0, &wanted) {
+                (Some(_), Some(vision)) => vision.duration_ms,
+                _ => 0,
+            };
+            film.select(
+                scene.film_vision,
+                preset,
+                clock.time(),
+                duration_ms,
+                glow.allowed,
+                glow.allowed_script_forced,
+            );
+            applied.0 = Some(wanted);
         }
     }
     let mixed = presented_film_vision_with_lerp(

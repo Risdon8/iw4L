@@ -289,7 +289,7 @@ fn eye(world: &mut World, client: u32) -> Option<[f32; 3]> {
 }
 
 fn sight(world: &mut World, start: [f32; 3], end: [f32; 3]) -> bool {
-    let t = FrameWorld::from_world(world).trace_world(
+    let t = super::presence::settled(world).trace_world(
         start,
         end,
         [0.0; 3],

@@ -962,8 +962,8 @@ fn preflight_match_install(
     };
     let startup = sim::gsc_ir::Iw4Startup::new(&sources, gametype, zone);
     let roots: Vec<&str> = startup.roots.iter().map(String::as_str).collect();
-    let builtins = match prepared_map.namespace {
-        Some(assets::AssetNamespace::T5) => sim::gsc_ir::Catalog::t5(),
+    let builtins = match assets::rules_namespace(prepared_map.namespace) {
+        assets::AssetNamespace::T5 => sim::gsc_ir::Catalog::t5(),
         _ => sim::gsc_ir::Catalog::iw4(),
     };
     let scripts = sim::gsc_ir::Program::load(&sources, &roots, &builtins)

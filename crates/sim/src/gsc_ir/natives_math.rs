@@ -61,7 +61,6 @@ pub(super) fn kind(value: &Value) -> &'static str {
         Value::String(_) => "a string",
         Value::LocalizedString(_) => "a localized string",
         Value::Vector(_) => "a vector",
-        Value::Entity(_) => "an entity",
         Value::Object(_) => "an object",
         Value::Array(_) => "an array",
         Value::Function(_) | Value::Builtin(_) => "a function",

@@ -1329,6 +1329,7 @@ pub(super) fn compile(
         symbols: tables.symbols,
         symbol_ids: tables.symbol_ids,
         natives,
+        rules: catalog.realm(),
     })
 }
 

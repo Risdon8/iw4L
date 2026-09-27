@@ -1,6 +1,6 @@
 use super::iw4_natives::string;
 use super::natives_math::{float, int, optional, vector};
-use super::natives_player::{player, send_menu_command, text};
+use super::natives_player::player;
 use super::*;
 use crate::frame::FrameWorld;
 use crate::world::ClientId;
@@ -64,31 +64,6 @@ fn other_flag(world: &mut World, receiver: &Value, flag: u32, on: bool) -> Resul
 
 fn truthy(args: &[Value], at: usize) -> Result<bool, String> {
     Ok(optional(args, at, int)?.unwrap_or(1) != 0)
-}
-
-fn client_command(
-    world: &mut World,
-    receiver: &Value,
-    name: &str,
-    args: &[Value],
-) -> Result<Value, String> {
-    let client = player(world, receiver)?;
-    let args = args
-        .iter()
-        .map(|arg| match arg {
-            Value::Vector(v) => Ok(format!("{} {} {}", v[0], v[1], v[2])),
-            other => text(other).map(|t| t.to_string()),
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    send_menu_command(
-        world,
-        client,
-        crate::MenuCommandKind::Client {
-            name: name.to_owned(),
-            args,
-        },
-    );
-    Ok(Value::Undefined)
 }
 
 fn edit_lock(
@@ -219,23 +194,6 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         }
         Ok(Value::Undefined)
     });
-
-    macro_rules! client_commands {
-        ($($name:literal),* $(,)?) => {$(
-            registry.register(Method, $name, |world, receiver, args| {
-                client_command(world, receiver, $name, args)
-            });
-        )*};
-    }
-    client_commands!(
-        "stoplocalsound",
-        "setblurforplayer",
-        "setdepthoffield",
-        "visionsetnakedforplayer",
-        "visionsetthermalforplayer",
-        "visionsetmissilecamforplayer",
-        "stoprumble",
-    );
 
     registry.register(Method, "weaponlockstart", |world, receiver, args| {
         let target = lock_target(world, args)?;

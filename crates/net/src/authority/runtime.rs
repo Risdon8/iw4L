@@ -860,6 +860,7 @@ fn fanout_loopback(
     queues
         .pending_gamenotify
         .adopt_from_world(&mut queues.world.0);
+    queues.pending_svc.adopt_from_world(&mut queues.world.0);
     crate::policy::killcam::play_script_seats(
         &mut seats,
         &archive,

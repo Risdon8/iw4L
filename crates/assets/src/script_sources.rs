@@ -1,4 +1,16 @@
+use crate::AssetNamespace;
 use std::collections::BTreeMap;
+
+/// Which game's gametype scripts own a match on a map from `map`'s game. The
+/// chosen strategy: a game that ships its own gametype package (T5) owns the
+/// match on its maps; IW5 ships none here, so its maps are guest content under
+/// IW4 rules. Nothing else may infer the rules from where a map came from.
+pub fn rules_namespace(map: Option<AssetNamespace>) -> AssetNamespace {
+    match map {
+        Some(AssetNamespace::T5) => AssetNamespace::T5,
+        _ => AssetNamespace::Iw4,
+    }
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct ScriptSources {

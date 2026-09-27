@@ -255,7 +255,7 @@ pub(crate) fn choose_default_class(world: &mut World, client: u32, index: u8) {
         .resource::<Runtime>()
         .program
         .as_ref()
-        .map(|p| p.realm());
+        .map(|p| p.rules());
     let response = match realm {
         Some(super::Realm::T5) => {
             T5_DEFAULT_CLASSES[index as usize % T5_DEFAULT_CLASSES.len()].to_owned()
@@ -281,7 +281,7 @@ pub(super) fn stand_in_for(world: &mut World, slot: usize, weapon: u32) -> Optio
         .resource::<Runtime>()
         .program
         .as_ref()
-        .map_or(super::Realm::Iw4, |p| p.realm());
+        .map_or(super::Realm::Iw4, |p| p.rules());
     let frame = FrameWorld::from_world(world);
     let setup = frame.weapon_setup(weapon).filter(|_| weapon != 0)?;
     if setup.realm == realm {
@@ -329,7 +329,7 @@ pub(crate) fn choose_class(world: &mut World, client: u32, class: &crate::ClassD
         .resource::<Runtime>()
         .program
         .as_ref()
-        .map(|p| p.realm());
+        .map(|p| p.rules());
     world
         .resource_mut::<Runtime>()
         .weapon_bridge

@@ -468,6 +468,8 @@ pub struct ClientSnapshotMeta {
 
     pub shellshock: Option<hud_iw4::ShockParams>,
 
+    pub view_effects: ViewEffects,
+
     pub menu_commands: Vec<MenuCommand>,
 
     pub location_selection: Option<LocationSelection>,
@@ -491,7 +493,38 @@ pub enum MenuCommandKind {
     Open(String),
     ClosePopup,
     CloseInGame,
-    Client { name: String, args: Vec<String> },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VisionChange {
+    pub name: String,
+    pub duration_ms: i32,
+    pub set_ms: i32,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ViewEffects {
+    pub naked_vision: Option<VisionChange>,
+    pub depth_of_field: ScriptDepthOfField,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ScriptDepthOfField {
+    pub near_start: f32,
+    pub near_end: f32,
+    pub far_start: f32,
+    pub far_end: f32,
+    pub near_blur: f32,
+    pub far_blur: f32,
+}
+
+impl ScriptDepthOfField {
+    pub fn overrides_scene(&self) -> bool {
+        self.near_start != 0.0
+            || self.near_end != 0.0
+            || self.far_start != 0.0
+            || self.far_end != 0.0
+    }
 }
 
 pub const MENU_COMMAND_TAIL: usize = 8;
@@ -753,6 +786,7 @@ pub struct ClientMatchState {
     pub(crate) player_card_nameplate: u32,
     pub(crate) client_dvars: Vec<(String, String)>,
     pub(crate) shellshock: Option<hud_iw4::ShockParams>,
+    pub(crate) view_effects: ViewEffects,
     pub(crate) menu_commands: Vec<MenuCommand>,
     pub(crate) location_selection: Option<LocationSelection>,
 
@@ -857,6 +891,7 @@ impl ClientMatchState {
             player_card_nameplate: self.player_card_nameplate,
             client_dvars: self.client_dvars.clone(),
             shellshock: self.shellshock.clone(),
+            view_effects: self.view_effects.clone(),
             menu_commands: self.menu_commands.clone(),
             location_selection: self.location_selection.clone(),
         }
@@ -904,6 +939,7 @@ impl ClientMatchState {
         self.player_card_nameplate = meta.player_card_nameplate;
         self.client_dvars = meta.client_dvars.clone();
         self.shellshock = meta.shellshock.clone();
+        self.view_effects = meta.view_effects.clone();
         self.menu_commands = meta.menu_commands.clone();
         self.location_selection = meta.location_selection.clone();
     }

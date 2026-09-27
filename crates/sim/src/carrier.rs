@@ -27,6 +27,7 @@ impl Default for SimWorld {
         ecs.entity_mut(state_entity).insert(PayloadIndex::default());
         install_state_entity(&mut ecs, state_entity);
         ecs.insert_resource(crate::gsc_ir::Runtime::default());
+        ecs.insert_resource(crate::gsc_ir::Mechanics::default());
         ecs.insert_resource(crate::gsc_ir::NativeRegistry::default());
         Self {
             ecs,

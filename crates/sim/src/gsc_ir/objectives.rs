@@ -166,6 +166,7 @@ pub(super) fn publish(world: &mut World) {
         .collect();
     let game_end_time = runtime.engine.game_end_time;
     let scripted_effects = runtime.program.is_some();
+    let naked_vision = runtime.engine.naked_vision.clone();
     let rows: Vec<(u64, super::entities::PersistentFx)> = runtime
         .engine
         .effects
@@ -199,5 +200,6 @@ pub(super) fn publish(world: &mut World) {
         game_end_time,
         scripted_effects,
         effects,
+        naked_vision,
     };
 }

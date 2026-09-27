@@ -1,3 +1,4 @@
+mod client_effects;
 mod compiler;
 mod controls;
 mod entities;
@@ -5,7 +6,9 @@ mod entity_damage;
 mod guidance;
 mod hud;
 mod iw4_builtins;
+pub(crate) mod iw4_gametype;
 mod iw4_natives;
+mod mechanics;
 mod natives;
 mod natives_engine;
 mod natives_math;
@@ -33,6 +36,8 @@ pub(crate) use entity_damage::{
     EntityHit, HitTarget, ScriptBlast, ScriptHit, damage_entity, radius_targets,
 };
 pub(crate) use iw4_natives::set_dvar;
+pub(crate) use mechanics::Mechanics;
+pub(crate) use mechanics::advance_mechanics;
 pub use natives::{Builtin, Catalog, Namespace, Owner};
 pub use natives_engine::{EXIT_LEVEL, MAP_RESTART};
 pub(crate) use players::{
@@ -43,8 +48,7 @@ pub(crate) use presence::sync_presence;
 pub(crate) use restart::restart_level;
 pub use runtime::{Native, NativeRegistry};
 pub(crate) use runtime::{
-    advance_scheduler, copy_state, healthy, install, preflight, reset, skip_prematch, start,
-    take_signals,
+    advance_scheduler, copy_state, healthy, install, preflight, reset, start, take_signals,
 };
 pub(crate) use weapons::sync_engine_events;
 
@@ -57,7 +61,6 @@ pub enum Value {
     Float(f32),
     String(Arc<str>),
     Vector([f32; 3]),
-    Entity(crate::EntityRef),
     Object(u64),
     Array(u64),
     Function(u32),
@@ -221,6 +224,7 @@ pub struct Program {
     symbols: Vec<Arc<str>>,
     symbol_ids: BTreeMap<Arc<str>, u32>,
     natives: Vec<Builtin>,
+    rules: Realm,
 }
 impl Program {
     pub fn load(
@@ -233,8 +237,10 @@ impl Program {
     pub fn modules(&self) -> &[ModuleIdentity] {
         &self.modules
     }
-    pub fn realm(&self) -> Realm {
-        self.modules.first().map_or(Realm::Iw4, |m| m.realm)
+    /// The game whose gametype scripts own the match; the catalog it was
+    /// compiled against, not where any one module came from.
+    pub fn rules(&self) -> Realm {
+        self.rules
     }
     pub fn function_count(&self) -> usize {
         self.functions.len()
@@ -402,6 +408,7 @@ pub(crate) struct Runtime {
     loading: bool,
     precached: BTreeMap<(&'static str, String), i32>,
     presented: BTreeMap<&'static str, Vec<Value>>,
+    unsupported: BTreeMap<&'static str, u64>,
     budget: usize,
     suspended: Vec<u64>,
     suspended_frames: usize,

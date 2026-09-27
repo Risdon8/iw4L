@@ -84,6 +84,7 @@ pub(crate) struct EngineState {
     pub guides: BTreeMap<u64, super::guidance::Guide>,
     pub turrets: BTreeMap<u64, super::turrets::Turret>,
     pub effects: BTreeMap<u64, PersistentFx>,
+    pub naked_vision: Option<crate::VisionChange>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -144,7 +145,6 @@ pub(crate) struct ScriptEntity {
     pub shown_to: u64,
     pub solid: bool,
     pub linked_to: Option<Link>,
-    pub motion: Vec<Motion>,
     pub light: f32,
     pub attachments: Vec<(Arc<str>, Arc<str>)>,
     pub contents: i32,
@@ -165,83 +165,6 @@ pub(crate) enum HudAudience {
     All,
     Team(Arc<str>),
     Client(u32),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Motion {
-    pub field: &'static str,
-    pub path: MotionPath,
-    pub start_ms: i64,
-    pub duration_ms: i64,
-    pub done: &'static str,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum MotionPath {
-    Linear {
-        from: [f32; 3],
-        to: [f32; 3],
-        accel: f32,
-        decel: f32,
-    },
-    Ballistic {
-        from: [f32; 3],
-        velocity: [f32; 3],
-    },
-}
-
-pub(crate) const GRAVITY: f32 = 800.0;
-
-impl Motion {
-    pub(crate) fn sample(&self, now: i64) -> ([f32; 3], [f32; 3]) {
-        let elapsed = (now - self.start_ms).clamp(0, self.duration_ms);
-        let t = elapsed as f32 / 1000.0;
-        match self.path {
-            MotionPath::Linear {
-                from,
-                to,
-                accel,
-                decel,
-            } => {
-                let total = self.duration_ms as f32 / 1000.0;
-                let peak = 2.0 / (2.0 * total - accel - decel);
-                let cruise_end = total - decel;
-                let (fraction, rate) = if t < accel {
-                    (0.5 * peak * t * t / accel, peak * t / accel)
-                } else if t <= cruise_end {
-                    (0.5 * peak * accel + peak * (t - accel), peak)
-                } else {
-                    let u = t - cruise_end;
-                    (
-                        0.5 * peak * accel + peak * (cruise_end - accel) + peak * u
-                            - 0.5 * peak * u * u / decel,
-                        peak * (1.0 - u / decel),
-                    )
-                };
-                let fraction = if elapsed >= self.duration_ms {
-                    1.0
-                } else {
-                    fraction
-                };
-                let rate = if elapsed >= self.duration_ms {
-                    0.0
-                } else {
-                    rate
-                };
-                (
-                    std::array::from_fn(|i| from[i] + (to[i] - from[i]) * fraction),
-                    std::array::from_fn(|i| (to[i] - from[i]) * rate),
-                )
-            }
-            MotionPath::Ballistic { from, velocity } => {
-                let mut p: [f32; 3] = std::array::from_fn(|i| from[i] + velocity[i] * t);
-                p[2] -= 0.5 * GRAVITY * t * t;
-                let mut v = velocity;
-                v[2] -= GRAVITY * t;
-                (p, v)
-            }
-        }
-    }
 }
 
 fn vector(text: &str) -> [f32; 3] {
@@ -323,7 +246,6 @@ impl Runtime {
                 shown_to: 0,
                 solid: true,
                 linked_to: None,
-                motion: Vec::new(),
                 light: 1.0,
                 attachments: Vec::new(),
                 contents: 0,
@@ -366,7 +288,6 @@ impl Runtime {
                 shown_to: 0,
                 solid: true,
                 linked_to: None,
-                motion: Vec::new(),
                 light: 1.0,
                 attachments: Vec::new(),
                 contents: 0,
@@ -430,7 +351,7 @@ impl Runtime {
         let t5 = self
             .program
             .as_ref()
-            .is_some_and(|p| p.realm() == super::Realm::T5);
+            .is_some_and(|p| p.rules() == super::Realm::T5);
         for (ordinal, pairs) in entities.iter().enumerate() {
             let classname = pairs
                 .iter()

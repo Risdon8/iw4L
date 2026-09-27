@@ -87,11 +87,6 @@ pub(super) fn register(registry: &mut NativeRegistry) {
     }
     presented![
         "setexpfog",
-        "visionsetnaked",
-        "visionsetnight",
-        "visionsetmissilecam",
-        "visionsetthermal",
-        "visionsetpain",
         "setthermalbodymaterial",
         "ambientplay",
         "ambientstop",

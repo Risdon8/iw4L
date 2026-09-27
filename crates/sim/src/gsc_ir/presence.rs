@@ -76,6 +76,57 @@ pub(super) fn spawn_presence(world: &mut World, origin: [f32; 3]) -> Result<Scri
     Ok(id)
 }
 
+/// The observability boundary for script writes: native collision reads go
+/// through here, so a query sees every pose, solidity and visibility change a
+/// native or field store made earlier in the same tick.
+pub(super) fn settled(world: &mut World) -> FrameWorld<'_> {
+    settle_collision(world);
+    FrameWorld::from_world(world)
+}
+
+/// Collision rows only. Networked mover state is left to `present`: posing a
+/// mover mid-tick would break its tick-to-tick velocity.
+pub(super) fn settle_collision(world: &mut World) {
+    let mut runtime = world.resource_mut::<Runtime>();
+    let placed: Vec<(u64, ScriptModelId, bool, bool)> = runtime
+        .entities
+        .iter()
+        .filter_map(|(id, e)| Some((*id, e.presence?, e.hidden, e.solid)))
+        .collect();
+    let wanted: BTreeMap<ScriptModelId, ([f32; 3], [f32; 3], bool, bool)> = placed
+        .into_iter()
+        .map(|(object, presence, hidden, solid)| {
+            let origin = vector(&mut runtime, object, "origin");
+            let angles = vector(&mut runtime, object, "angles");
+            (presence, (origin, angles, hidden, solid))
+        })
+        .collect();
+    let mut frame = FrameWorld::from_world(world);
+    for row in frame.entity_collision_capabilities_mut() {
+        let Some(&(origin, angles, hidden, solid)) =
+            row.owner.script_model().and_then(|id| wanted.get(&id))
+        else {
+            continue;
+        };
+        row.hidden = hidden;
+        row.solid = solid;
+        let settled = row
+            .followed_pose
+            .is_some_and(|(at, facing)| near(at, origin) && near_angles(facing, angles));
+        if settled {
+            continue;
+        }
+        row.followed_pose = Some((origin, angles));
+        if let Some(dobj) = row.dobj.as_mut() {
+            dobj.set_world_pose(origin, angles);
+        }
+        for brush in &mut row.linked_brushes {
+            brush.origin = origin;
+            brush.angles = angles;
+        }
+    }
+}
+
 pub(crate) fn sync_presence(world: &mut World) {
     let request = world.resource::<crate::step::StepRequest>();
     if !request.reason.advances_authority_world() {
@@ -83,6 +134,7 @@ pub(crate) fn sync_presence(world: &mut World) {
     }
     let tick = request.tick;
     let now = crate::level_time_ms(tick);
+    settle_collision(world);
     super::entity_damage::apply_script_blasts(world, tick);
     publish_loop_sounds(world);
     super::objectives::publish(world);
@@ -193,7 +245,7 @@ fn tag_lookup(world: &mut World, object: u64, tag: &str) -> Option<Option<[f32; 
         .entities
         .get(&object)?
         .presence?;
-    let frame = FrameWorld::from_world(world);
+    let frame = settled(world);
     let dobj = frame
         .entity_collision_capabilities()
         .iter()
@@ -218,7 +270,7 @@ pub(super) fn tag_world(
         .entities
         .get(&object)?
         .presence?;
-    let frame = FrameWorld::from_world(world);
+    let frame = settled(world);
     let matrix = frame
         .entity_collision_capabilities()
         .iter()

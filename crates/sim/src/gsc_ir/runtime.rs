@@ -15,10 +15,6 @@ impl Default for NativeRegistry {
             }
             let defined = match &args[0] {
                 Value::Undefined => false,
-                Value::Entity(entity) => crate::frame::FrameWorld::from_world(world)
-                    .entity_kernel()
-                    .resolve(*entity)
-                    .is_ok(),
                 Value::Object(id) => world.resource::<Runtime>().objects.contains_key(id),
                 _ => true,
             };
@@ -54,6 +50,7 @@ impl Default for NativeRegistry {
         super::physics::register(&mut registry);
         super::natives_t5::register(&mut registry);
         super::controls::register(&mut registry);
+        super::client_effects::register(&mut registry);
         super::guidance::register(&mut registry);
         super::turrets::register(&mut registry);
         registry
@@ -82,6 +79,7 @@ impl Runtime {
 
 pub(crate) fn copy_state(source: &World, target: &mut World) {
     target.insert_resource(source.resource::<Runtime>().clone());
+    target.insert_resource(source.resource::<super::mechanics::Mechanics>().clone());
     target.insert_resource(source.resource::<NativeRegistry>().clone());
     for entity in source.iter_entities() {
         if let Some(thread) = entity.get::<Thread>() {
@@ -99,6 +97,7 @@ pub(crate) fn reset(world: &mut World) {
         world.despawn(id);
     }
     world.insert_resource(Runtime::default());
+    world.insert_resource(super::mechanics::Mechanics::default());
 }
 
 pub(crate) fn install(
@@ -197,48 +196,40 @@ pub(crate) fn take_signals(world: &mut World) -> Vec<Arc<str>> {
     std::mem::take(&mut world.resource_mut::<Runtime>().signals)
 }
 
-const WAIT_FOR_PLAYERS: &str = "maps/mp/gametypes/_gamelogic::waitforplayers";
-const START_TIMER_BEGINNING: &str = "match_start_timer_beginning";
-
-pub(crate) fn skip_prematch(world: &mut World, tick: crate::Tick) -> bool {
-    let runtime = world.resource::<Runtime>();
-    if runtime.fault.is_some() {
-        return false;
-    }
-    let Some(program) = runtime.program.clone() else {
-        return false;
-    };
-    let counting = runtime.waiters.iter().any(|w| {
+/// Whether some live thread holds `level endon(name)`.
+pub(super) fn level_endon_armed(world: &World, name: &str) -> bool {
+    world.resource::<Runtime>().waiters.iter().any(|w| {
         w.receiver == Value::level()
-            && &*w.name == START_TIMER_BEGINNING
+            && &*w.name == name
             && matches!(w.kind, WaiterKind::Endon { .. })
-    });
-    let waiting: Vec<_> = match program.names.get(WAIT_FOR_PLAYERS) {
-        Some(&function) => world
-            .query::<(Entity, &Thread)>()
-            .iter(world)
-            .filter_map(|(entity, thread)| {
-                let depth = thread.frames.iter().position(|f| f.function == function)?;
-                Some((entity, depth))
-            })
-            .collect(),
-        None => Vec::new(),
+    })
+}
+
+/// Makes every thread inside `function` continue as if that call had just
+/// returned. Returns how many threads were unwound.
+pub(super) fn return_from(world: &mut World, function: &str, now: i64) -> usize {
+    let Some(&function) = world
+        .resource::<Runtime>()
+        .program
+        .as_ref()
+        .and_then(|program| program.names.get(function))
+    else {
+        return 0;
     };
-    if !counting && waiting.is_empty() {
-        return false;
-    }
-    let now = i64::from(tick.0) * i64::from(crate::MATCH_TICK_MS);
-    {
-        let mut runtime = world.resource_mut::<Runtime>();
-        runtime.set_object_field(0, "prematchperiodend", Value::Int(0));
-    }
-    for (entity, depth) in waiting {
+    let inside: Vec<_> = world
+        .query::<(Entity, &Thread)>()
+        .iter(world)
+        .filter_map(|(entity, thread)| {
+            let depth = thread.frames.iter().position(|f| f.function == function)?;
+            Some((entity, depth))
+        })
+        .collect();
+    for &(entity, depth) in &inside {
         let mut thread = world.entity_mut(entity).take::<Thread>().unwrap();
         unwind(world, &mut thread, depth, now, false);
         world.entity_mut(entity).insert(thread);
     }
-    raise(world, Value::level(), START_TIMER_BEGINNING, Vec::new());
-    true
+    inside.len()
 }
 
 pub(super) fn raise(world: &mut World, receiver: Value, name: &str, args: Vec<Value>) {
@@ -466,7 +457,6 @@ pub(super) fn type_name(value: &Value) -> &'static str {
         Value::String(_) => "string",
         Value::LocalizedString(_) => "localized string",
         Value::Vector(_) => "vector",
-        Value::Entity(_) => "entity",
         Value::Object(_) => "object",
         Value::Array(_) => "array",
         Value::Function(_) => "function",
@@ -559,7 +549,7 @@ fn equality(a: Value, b: Value) -> Result<bool, String> {
             return Err("cannot compare arrays".into());
         }
         (Value::Undefined, Value::Undefined) => true,
-        (Value::Entity(_) | Value::Object(_), Value::Entity(_) | Value::Object(_)) => a == b,
+        (Value::Object(_), Value::Object(_)) => a == b,
         (Value::String(x), Value::String(y)) => x == y,
         (Value::LocalizedString(x), Value::LocalizedString(y)) => x == y,
         (Value::Vector(x), Value::Vector(y)) => x == y,
@@ -1068,7 +1058,7 @@ fn instruction(
                     .get(id)
                     .ok_or("invalid array reference")?
                     .len(),
-                Value::Object(_) | Value::Entity(_) => 1,
+                Value::Object(_) => 1,
                 Value::String(s) => s.chars().count(),
                 other => return Err(format!("size cannot be applied to {}", type_name(other))),
             };
@@ -1076,22 +1066,6 @@ fn instruction(
         }
         Op::LoadField(field) => {
             let receiver = pop(thread)?;
-            if let Value::Entity(entity) = receiver {
-                let frame = crate::frame::FrameWorld::from_world(world);
-                frame
-                    .entity_kernel()
-                    .resolve(entity)
-                    .map_err(|e| format!("invalid entity receiver: {e:?}"))?;
-                let name = &program.symbols[field as usize];
-                if &**name != "origin" {
-                    return Err(format!("unsupported native entity field {name}"));
-                }
-                let mover = frame
-                    .script_mover_by_number(entity.number())
-                    .ok_or("origin receiver is not a script mover")?;
-                thread.stack.push(Value::Vector(mover.state.tr_base));
-                return Ok(());
-            }
             let Value::Object(id) = receiver else {
                 return Err(format!(
                     "field receiver must be an object or entity, found {}",
@@ -1220,7 +1194,7 @@ fn event_name(value: Value) -> Result<Arc<str>, String> {
 }
 fn event_receiver(value: Value) -> Result<Value, String> {
     match value {
-        Value::Object(_) | Value::Entity(_) => Ok(value),
+        Value::Object(_) => Ok(value),
         other => Err(format!("{} is not an object", type_name(&other))),
     }
 }
@@ -1392,6 +1366,17 @@ fn kill(world: &mut World, entity: Entity, serial: u64) {
     retire(&mut world.resource_mut::<Runtime>(), serial);
 }
 
+fn deliver_timers(world: &mut World, now: i64) {
+    let mut runtime = world.resource_mut::<Runtime>();
+    let timers = std::mem::take(&mut runtime.timers);
+    let (due, pending): (Vec<_>, Vec<_>) = timers.into_iter().partition(|(at, _, _)| *at <= now);
+    runtime.timers = pending;
+    drop(runtime);
+    for (_, receiver, name) in due {
+        raise(world, receiver, &name, Vec::new());
+    }
+}
+
 pub(crate) fn advance_scheduler(world: &mut World) {
     let request = world.resource::<crate::step::StepRequest>();
     if !request.reason.advances_authority_world() {
@@ -1422,8 +1407,8 @@ pub(crate) fn advance_scheduler(world: &mut World) {
     }
     world.resource_mut::<Runtime>().last_tick = Some(tick);
     let now = i64::from(tick.0) * i64::from(crate::MATCH_TICK_MS);
-    super::natives_engine::advance_motions(world, now);
-    super::players::apply_player_links(world);
+    super::mechanics::deliver_finished(world);
+    deliver_timers(world, now);
     deliver_external(world, now);
     let threads: Vec<_> = world
         .query::<(Entity, &Thread)>()
@@ -1640,24 +1625,16 @@ fn entity_receivers(world: &World, thread: &Thread) -> Vec<Value> {
         .iter()
         .filter(|w| w.thread == thread.serial)
         .map(|w| &w.receiver)
-        .filter(|value| matches!(value, Value::Entity(_) | Value::Object(_)))
+        .filter(|value| matches!(value, Value::Object(_)))
         .cloned()
         .collect()
 }
 
-fn any_deleted(world: &mut World, receivers: &[Value]) -> bool {
+fn any_deleted(world: &World, receivers: &[Value]) -> bool {
     let objects = &world.resource::<Runtime>().objects;
-    if receivers
+    receivers
         .iter()
         .any(|value| matches!(value, Value::Object(id) if !objects.contains_key(id)))
-    {
-        return true;
-    }
-    let frame = crate::frame::FrameWorld::from_world(world);
-    receivers.iter().any(|value| match value {
-        Value::Entity(entity) => frame.entity_kernel().resolve(*entity).is_err(),
-        _ => false,
-    })
 }
 
 impl Runtime {

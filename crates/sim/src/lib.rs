@@ -105,9 +105,10 @@ pub use match_state::{
     EntityEventPayload, EntityEventRecord, EventAudience, EventRecord, GiveRejectReason,
     HealthRegenCensus, InputReceipt, ItemPickupRecord, KillcamHud, LoadoutSpec, LocationSelection,
     MENU_COMMAND_TAIL, MatchEndReason, MenuCommand, MenuCommandKind, PelletFxRecord, RadarMode,
-    RemoteMissile, RngDebugMeta, SIM_EVENT_ROSTER, ScriptDvars, ScriptSeat, SimEvent, SimEventRow,
-    SnapshotMeta, UNRELIABLE_SIM_EVENT_COUNT, class_catalog_has, class_catalog_radar_jam_e_flags,
-    perk_bits_from_class_catalog, sim_event_is_reliable,
+    RemoteMissile, RngDebugMeta, SIM_EVENT_ROSTER, ScriptDepthOfField, ScriptDvars, ScriptSeat,
+    SimEvent, SimEventRow, SnapshotMeta, UNRELIABLE_SIM_EVENT_COUNT, ViewEffects, VisionChange,
+    class_catalog_has, class_catalog_radar_jam_e_flags, perk_bits_from_class_catalog,
+    sim_event_is_reliable,
 };
 pub use player_anim_script::{
     AnimConditions, AnimScriptCommand, AnimScriptCondition, AnimScriptItem, PlayerAnimScript,
@@ -138,9 +139,9 @@ pub use weapon_iw4::{
     bake_location_damage, location_damage_is_valid, location_damage_scale,
 };
 pub use world::{
-    ClientId, HitvolDumpRow, PendingPlayerCardEvent, PendingPlayerCardKind, PendingPrint,
-    PlayerKitCollision, SimBrush, SimClipBsp, SimClipCmodels, SimClipMesh, SimStaticModel,
-    SimTriggerHull, Tick, WeaponScriptSounds, blank_player_state,
+    ClientId, HitvolDumpRow, PendingLocalSound, PendingPlayerCardEvent, PendingPlayerCardKind,
+    PendingPrint, PlayerKitCollision, SimBrush, SimClipBsp, SimClipCmodels, SimClipMesh,
+    SimStaticModel, SimTriggerHull, Tick, WeaponScriptSounds, blank_player_state,
 };
 pub use world_objects::{
     DestructibleLoopSound, GLASS_BLAST_DAMAGE_SCALE, GLASS_BLAST_RADIUS_CAP,

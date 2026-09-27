@@ -51,10 +51,12 @@ pub(super) fn register(registry: &mut NativeRegistry) {
             let object = object_of(world, receiver)?;
             vector(args, 0)?;
             let force = vector(args, 1)?;
+            world
+                .resource_mut::<super::mechanics::Mechanics>()
+                .clear(object);
             let mut runtime = world.resource_mut::<Runtime>();
             let entity = runtime.entities.get_mut(&object).unwrap();
             entity.linked_to = None;
-            entity.motion.clear();
             entity.physics = Some(super::entities::Physics {
                 velocity: force,
                 ticks: 0,

@@ -38,6 +38,7 @@ pub(crate) fn schedule() -> Schedule {
         (
             advance_time_system,
             expire_transient_events_system,
+            crate::gsc_ir::advance_mechanics,
             crate::gsc_ir::advance_scheduler,
             (
                 apply_script_signals_system,
@@ -104,9 +105,6 @@ fn apply_script_signals_system(world: &mut World) {
     let mut frame = frame_world(world);
     for signal in signals {
         match &*signal {
-            "prematch_over" if frame.phase() == MatchPhase::Warmup => {
-                crate::score::finish_prematch(&mut frame);
-            }
             crate::gsc_ir::EXIT_LEVEL
                 if !matches!(
                     frame.phase(),
@@ -119,7 +117,7 @@ fn apply_script_signals_system(world: &mut World) {
                 let tick = frame.ecs().resource::<StepRequest>().tick;
                 crate::gsc_ir::restart_level(frame.ecs(), tick);
             }
-            _ => {}
+            name => crate::gsc_ir::iw4_gametype::apply_level_notify(&mut frame, name),
         }
     }
 }
@@ -829,7 +827,7 @@ fn apply_actions(world: &mut FrameWorld, tick: Tick, actions: &[(ClientId, Clien
                     continue;
                 }
                 if phase == MatchPhase::Playing && world.phase() == MatchPhase::Warmup {
-                    if !crate::gsc_ir::skip_prematch(world.ecs(), tick) {
+                    if !crate::gsc_ir::iw4_gametype::force_match_start(world.ecs(), tick) {
                         crate::score::finish_prematch(world);
                     }
                 } else {

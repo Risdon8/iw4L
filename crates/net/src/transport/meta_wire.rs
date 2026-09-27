@@ -1249,6 +1249,18 @@ fn encode_client_meta(out: &mut WireWriter, meta: &ClientSnapshotMeta) {
         put_text(out, value);
     }
     encode_shock(out, meta.shellshock.as_ref());
+    encode_vision(out, meta.view_effects.naked_vision.as_ref());
+    let dof = &meta.view_effects.depth_of_field;
+    for v in [
+        dof.near_start,
+        dof.near_end,
+        dof.far_start,
+        dof.far_end,
+        dof.near_blur,
+        dof.far_blur,
+    ] {
+        out.put_f32(v);
+    }
     debug_assert!(meta.menu_commands.len() <= sim::MENU_COMMAND_TAIL);
     out.put_u8(meta.menu_commands.len() as u8);
     for command in &meta.menu_commands {
@@ -1260,14 +1272,6 @@ fn encode_client_meta(out: &mut WireWriter, meta: &ClientSnapshotMeta) {
             }
             sim::MenuCommandKind::ClosePopup => out.put_u8(1),
             sim::MenuCommandKind::CloseInGame => out.put_u8(2),
-            sim::MenuCommandKind::Client { name, args } => {
-                out.put_u8(3);
-                put_text(out, name);
-                out.put_u8(args.len().min(u8::MAX as usize) as u8);
-                for arg in args.iter().take(u8::MAX as usize) {
-                    put_text(out, arg);
-                }
-            }
         }
     }
     match &meta.location_selection {
@@ -1380,6 +1384,17 @@ fn decode_client_meta(input: &mut WireReader<'_>) -> Result<ClientSnapshotMeta, 
         client_dvars.push((get_text(input)?, get_text(input)?));
     }
     let shellshock = decode_shock(input)?;
+    let view_effects = sim::ViewEffects {
+        naked_vision: decode_vision(input)?,
+        depth_of_field: sim::ScriptDepthOfField {
+            near_start: input.get_f32()?,
+            near_end: input.get_f32()?,
+            far_start: input.get_f32()?,
+            far_end: input.get_f32()?,
+            near_blur: input.get_f32()?,
+            far_blur: input.get_f32()?,
+        },
+    };
     let mut menu_commands = Vec::new();
     for _ in 0..input.get_u8()? {
         let serial = input.get_u32()?;
@@ -1387,15 +1402,6 @@ fn decode_client_meta(input: &mut WireReader<'_>) -> Result<ClientSnapshotMeta, 
             0 => sim::MenuCommandKind::Open(get_text(input)?),
             1 => sim::MenuCommandKind::ClosePopup,
             2 => sim::MenuCommandKind::CloseInGame,
-            3 => {
-                let name = get_text(input)?;
-                let count = input.get_u8()?;
-                let mut args = Vec::with_capacity(count.into());
-                for _ in 0..count {
-                    args.push(get_text(input)?);
-                }
-                sim::MenuCommandKind::Client { name, args }
-            }
             _ => return Err(WireError::Malformed("bad menu command tag")),
         };
         menu_commands.push(sim::MenuCommand { serial, kind });
@@ -1456,9 +1462,33 @@ fn decode_client_meta(input: &mut WireReader<'_>) -> Result<ClientSnapshotMeta, 
         player_card_nameplate,
         client_dvars,
         shellshock,
+        view_effects,
         menu_commands,
         location_selection,
     })
+}
+
+fn encode_vision(out: &mut WireWriter, vision: Option<&sim::VisionChange>) {
+    let Some(vision) = vision else {
+        out.put_u8(0);
+        return;
+    };
+    out.put_u8(1);
+    put_text(out, &vision.name);
+    out.put_i32(vision.duration_ms);
+    out.put_i32(vision.set_ms);
+}
+
+fn decode_vision(input: &mut WireReader<'_>) -> Result<Option<sim::VisionChange>, WireError> {
+    match input.get_u8()? {
+        0 => Ok(None),
+        1 => Ok(Some(sim::VisionChange {
+            name: get_text(input)?,
+            duration_ms: input.get_i32()?,
+            set_ms: input.get_i32()?,
+        })),
+        _ => Err(WireError::Malformed("bad vision tag")),
+    }
 }
 
 fn encode_shock(out: &mut WireWriter, shock: Option<&hud_iw4::ShockParams>) {
@@ -2723,6 +2753,7 @@ fn encode_objectives(out: &mut WireWriter, state: &sim::ObjectiveMatch) {
         out.put_i32(fx.repeat_ms);
         out.put_f32(fx.cull_distance);
     }
+    encode_vision(out, state.naked_vision.as_ref());
 }
 
 fn decode_objectives(input: &mut WireReader<'_>) -> Result<sim::ObjectiveMatch, WireError> {
@@ -2774,5 +2805,6 @@ fn decode_objectives(input: &mut WireReader<'_>) -> Result<sim::ObjectiveMatch, 
             cull_distance: input.get_f32()?,
         });
     }
+    state.naked_vision = decode_vision(input)?;
     Ok(state)
 }

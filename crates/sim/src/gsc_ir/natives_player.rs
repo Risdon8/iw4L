@@ -300,18 +300,6 @@ pub(super) fn register(registry: &mut NativeRegistry) {
             });
         )*};
     }
-    registry.register(Method, "playlocalsound", |world, receiver, args| {
-        let client = player(world, receiver)?;
-        let alias = string(args, 0)?;
-        super::natives_engine::sound_to(
-            world,
-            crate::EventAudience::Client(ClientId(client)),
-            &alias,
-            entity_iw4::LOCAL_SOUND_ENTITY,
-            [0.0; 3],
-        );
-        Ok(Value::Undefined)
-    });
     presented!(
         "setcardtitle",
         "setcardicon",
