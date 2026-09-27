@@ -101,19 +101,26 @@ fn try_attach<C: CollisionBackend>(
     if speed < context.min_speed {
         return false;
     }
-    let Some(normal) = probe_sides(ps, pml, context.trace_dist, bounds, collision) else {
+    let Some(normal) = probe_any(ps, pml, context.trace_dist, bounds, collision) else {
         return false;
     };
-    let (tangent, tangent_speed) = along_wall(ps.velocity, normal);
-    if tangent_speed < context.min_speed {
+    // Running along the wall keeps the along-wall speed; jumping *into* it keeps
+    // the speed and turns it along the wall.
+    let (_, tangent_speed) = along_wall(ps.velocity, normal);
+    let along_speed = if tangent_speed >= context.min_speed {
+        tangent_speed
+    } else {
+        speed
+    };
+    let Some(direction) = wall_direction(pml, ps.velocity, normal) else {
         return false;
-    }
+    };
 
     ps.pm_flags |= PMF_WALLRUN;
     ps.pm_time = context.max_time_ms;
     ps.v_ladder_vec = normal;
-    ps.velocity[0] = tangent[0];
-    ps.velocity[1] = tangent[1];
+    ps.velocity[0] = direction[0] * along_speed;
+    ps.velocity[1] = direction[1] * along_speed;
     hold_height(ps, pml, context, bounds, collision);
     true
 }
@@ -131,7 +138,7 @@ fn continue_run<C: CollisionBackend>(
         return false;
     }
     let stored = ps.v_ladder_vec;
-    let Some(normal) = probe_matching(ps, pml, context.trace_dist, stored, bounds, collision)
+    let Some(normal) = probe_matching(ps, pml, context.trace_dist * 1.5, stored, bounds, collision)
     else {
         detach(ps, context.cooldown_ms);
         return false;
@@ -205,16 +212,16 @@ fn along_wall(velocity: [f32; 3], normal: [f32; 3]) -> ([f32; 3], f32) {
     (tangent, speed)
 }
 
-fn probe_sides<C: CollisionBackend>(
+fn probe_any<C: CollisionBackend>(
     ps: &PlayerState,
     pml: &Pml,
     dist: f32,
     bounds: MoveBounds,
     collision: &C,
 ) -> Option<[f32; 3]> {
-    let right = flat_right(pml);
-    probe(ps, right, dist, bounds, collision)
-        .or_else(|| probe(ps, [-right[0], -right[1], 0.0], dist, bounds, collision))
+    probe_directions(pml)
+        .into_iter()
+        .find_map(|dir| probe(ps, dir, dist, bounds, collision))
 }
 
 fn probe_matching<C: CollisionBackend>(
@@ -225,13 +232,47 @@ fn probe_matching<C: CollisionBackend>(
     bounds: MoveBounds,
     collision: &C,
 ) -> Option<[f32; 3]> {
-    let right = flat_right(pml);
-    let sides = [right, [-right[0], -right[1], 0.0]];
-    for dir in sides {
+    for dir in probe_directions(pml) {
         if let Some(normal) = probe(ps, dir, dist, bounds, collision)
             && normal[0] * stored[0] + normal[1] * stored[1] > 0.5
         {
             return Some(normal);
+        }
+    }
+    None
+}
+
+/// The horizontal rays a wall may be on: either side, ahead and behind.
+fn probe_directions(pml: &Pml) -> [[f32; 3]; 4] {
+    let right = flat_right(pml);
+    let forward = flat_forward(pml);
+    [
+        right,
+        [-right[0], -right[1], 0.0],
+        forward,
+        [-forward[0], -forward[1], 0.0],
+    ]
+}
+
+/// A unit direction along the wall: where the player looks first, then their
+/// right, then where they were moving — each flattened onto the wall.
+fn wall_direction(pml: &Pml, velocity: [f32; 3], normal: [f32; 3]) -> Option<[f32; 2]> {
+    let candidates = [
+        [pml.forward[0], pml.forward[1]],
+        [pml.right[0], pml.right[1]],
+        [velocity[0], velocity[1]],
+    ];
+    for candidate in candidates {
+        let into = candidate[0] * normal[0] + candidate[1] * normal[1];
+        let mut along = [
+            candidate[0] - into * normal[0],
+            candidate[1] - into * normal[1],
+        ];
+        let length = libm::sqrtf(along[0] * along[0] + along[1] * along[1]);
+        if length > 0.2 {
+            along[0] /= length;
+            along[1] /= length;
+            return Some(along);
         }
     }
     None
@@ -275,4 +316,14 @@ fn flat_right(pml: &Pml) -> [f32; 3] {
         right[1] /= length;
     }
     right
+}
+
+fn flat_forward(pml: &Pml) -> [f32; 3] {
+    let mut forward = [pml.forward[0], pml.forward[1], 0.0];
+    let length = libm::sqrtf(forward[0] * forward[0] + forward[1] * forward[1]);
+    if length > 0.0 {
+        forward[0] /= length;
+        forward[1] /= length;
+    }
+    forward
 }

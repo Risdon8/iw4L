@@ -692,6 +692,39 @@ fn wallrun_holds_height_along_a_wall() {
     );
 }
 
+/// Jumping head-on at a wall grabs it and turns the jump into a run along it,
+/// instead of bouncing off or falling away.
+#[test]
+fn wallrun_turns_a_head_on_jump_along_the_wall() {
+    let brushes = wallrun_world();
+    let backend = layout_backend(&brushes);
+    let mut ps = spawn_player_state([0.0, 60.0, 500.0], [0.0, 90.0, 0.0]);
+    ps.command_time = 1_000;
+    ps.jump_time = -100_000;
+    ps.ground_entity_num = trace_iw4::ENTITYNUM_NONE as i32;
+    ps.velocity = [0.0, 300.0, 0.0];
+    let (end, _) = run_policy(&backend, ps, wallrun_on(), 30, |tick, _| Intent {
+        yaw: 90.0,
+        jump: tick == 0,
+        ..Intent::default()
+    });
+    assert!(
+        end.origin[2] > 490.0,
+        "should hold height on the wall: {:?}",
+        end.origin
+    );
+    assert!(
+        end.velocity[0] > 250.0,
+        "should turn along the wall: {:?}",
+        end.velocity
+    );
+    assert!(
+        end.velocity[1].abs() < 50.0,
+        "should stop driving into it: {:?}",
+        end.velocity
+    );
+}
+
 /// Without the tuning the same run falls; a wall alone does not carry you.
 #[test]
 fn retail_along_a_wall_still_falls() {

@@ -15,11 +15,11 @@ pub const SURF_DEFAULT_AIR_WISHSPEED_CAP: f32 = 30.0;
 pub const WALLRUN_DEFAULT_TIME_MS: i32 = 2500;
 pub const WALLRUN_DEFAULT_COOLDOWN_MS: i32 = 600;
 pub const WALLRUN_DEFAULT_MIN_SPEED: f32 = 120.0;
-pub const WALLRUN_DEFAULT_JUMP_UP: f32 = 250.0;
+pub const WALLRUN_DEFAULT_JUMP_UP: f32 = 320.0;
 pub const WALLRUN_DEFAULT_JUMP_OUT: f32 = 260.0;
 
-/// The air jump launches like a normal ground jump.
-pub const DOUBLE_JUMP_DEFAULT_HEIGHT: f32 = 39.0;
+/// The air jump launches a little higher than a ground jump, so it is obvious.
+pub const DOUBLE_JUMP_DEFAULT_HEIGHT: f32 = 50.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MovementTuning {
