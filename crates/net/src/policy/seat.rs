@@ -212,6 +212,7 @@ fn overlay_archived_world(
     }
     out.tick = live.tick;
     out.meta.phase = live.meta.phase;
+    out.meta.movement_tuning = live.meta.movement_tuning;
     out.meta.match_elapsed_ms = live.meta.match_elapsed_ms;
     out.meta.prematch = live.meta.prematch;
     out.meta.score_limit = live.meta.score_limit;

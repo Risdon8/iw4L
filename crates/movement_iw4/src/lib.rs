@@ -32,12 +32,12 @@ mod stance;
 mod viewangles;
 mod walk;
 
-pub use accelerate::pm_accelerate;
+pub use accelerate::{pm_accelerate, pm_surf_air_accelerate};
 pub use ads_frac::{AdsFracContext, pm_update_ads_frac};
 pub use ads_intent::{
     AdsIntentContext, AdsIntentResult, BUTTON_ADS, PMF_ADS_INTENT, pm_update_ads_intent,
 };
-pub use air::{AirMoveContext, pm_air_move};
+pub use air::{AirMoveContext, SurfAirContext, pm_air_move};
 pub use check_prone::{PRONE_CHECK_HEIGHT, PRONE_FEET_DIST, bg_check_prone, player_prone_allowed};
 pub use cmdscale::{CmdScaleWalkContext, pm_cmd_scale_walk};
 pub use collision::CollisionBackend;

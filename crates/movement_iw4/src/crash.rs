@@ -23,12 +23,14 @@ const TWO: f32 = 2.0;
 
 const NEG_ONE: f32 = -1.0;
 
-pub fn pm_crash_land(ps: &mut PlayerState, pml: &Pml) {
+/// `keep_speed` (mod: surf) keeps the landing events but skips the hard-land
+/// velocity cut, which otherwise fires on every ordinary jump.
+pub fn pm_crash_land(ps: &mut PlayerState, pml: &Pml, keep_speed: bool) {
     let Some(fall_height) = crash_land_fall_height(ps, pml) else {
         return;
     };
     let surface = pm_ground_surface_type(pml.ground_trace[4]);
-    crash_land_apply_sfx(ps, fall_height, surface);
+    crash_land_apply_sfx(ps, fall_height, surface, keep_speed);
 }
 
 pub fn crash_land_fall_height(ps: &PlayerState, pml: &Pml) -> Option<f32> {
@@ -52,7 +54,7 @@ pub fn crash_land_fall_height(ps: &PlayerState, pml: &Pml) -> Option<f32> {
     Some((land_vel * land_vel) / ((ps.gravity as f32) * TWO))
 }
 
-fn crash_land_apply_sfx(ps: &mut PlayerState, fall_height: f32, surface: i32) {
+fn crash_land_apply_sfx(ps: &mut PlayerState, fall_height: f32, surface: i32, keep_speed: bool) {
     if fall_height <= FALL_LIGHT_IN {
         return;
     }
@@ -68,9 +70,11 @@ fn crash_land_apply_sfx(ps: &mut PlayerState, fall_height: f32, surface: i32) {
         }
         return;
     }
-    ps.velocity[0] *= HARD_LAND_VEL_SCALE;
-    ps.velocity[1] *= HARD_LAND_VEL_SCALE;
-    ps.velocity[2] *= HARD_LAND_VEL_SCALE;
+    if !keep_speed {
+        ps.velocity[0] *= HARD_LAND_VEL_SCALE;
+        ps.velocity[1] *= HARD_LAND_VEL_SCALE;
+        ps.velocity[2] *= HARD_LAND_VEL_SCALE;
+    }
     if surface != 0 {
         add_predictable_event(ps, EV_LANDING_FIRST + surface, 0);
     }

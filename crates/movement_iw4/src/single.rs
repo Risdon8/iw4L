@@ -126,7 +126,8 @@ pub fn pm_move<C: CollisionBackend, L: MantleXAnimLength, R: MantleRootDelta>(
         return PmoveResult { pml, bounds };
     }
 
-    complete_ground_trace(ps, &mut pml, bounds, collision);
+    let surf = context.air.surf.is_some();
+    complete_ground_trace(ps, &mut pml, bounds, collision, surf);
 
     if (ps.pm_flags & PMF_MANTLE) == 0 {
         let mut mantle_tracer = CollisionMantleTrace { collision, bounds };
@@ -198,7 +199,7 @@ pub fn pm_move<C: CollisionBackend, L: MantleXAnimLength, R: MantleRootDelta>(
         }
     }
 
-    complete_ground_trace(ps, &mut pml, bounds, collision);
+    complete_ground_trace(ps, &mut pml, bounds, collision, surf);
 
     if (ps.pm_flags & PMF_LADDER) != 0 {
         pm_ladder_footsteps(ps, pml.msec, cmd.server_time);

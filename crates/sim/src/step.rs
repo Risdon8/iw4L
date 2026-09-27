@@ -658,6 +658,7 @@ fn run_players_system(ecs: &mut World) {
                 melee_charge_delay_ms,
                 overlay_reticle,
                 crate::damage::shellshock_dump_affects_movement(ps.shellshock_index),
+                world.movement_tuning(),
             );
             let mut cmd = *cmd;
             if world
@@ -1253,6 +1254,15 @@ fn apply_actions(world: &mut FrameWorld, tick: Tick, actions: &[(ClientId, Clien
                 amount,
             } => {
                 apply_debug_damage(world, tick, *id, amount);
+            }
+            ClientAction::SetMovementTuning {
+                request_id: _,
+                tuning,
+            } => {
+                if !world.bootstrap_ref().allow_debug_actions {
+                    continue;
+                }
+                world.set_movement_tuning(tuning);
             }
         }
     }
@@ -2686,6 +2696,7 @@ fn pmove_context(
     melee_charge_delay_ms: i32,
     overlay_reticle: i32,
     shellshock_affects_movement: bool,
+    movement_tuning: crate::MovementTuning,
 ) -> PmoveSingleContext {
     let player_sprint_time = 4.0_f32;
     let weapon_max_sprint_time = bg_get_max_sprint_time(weapon_scales.2, player_sprint_time);
@@ -2694,6 +2705,7 @@ fn pmove_context(
         player_spectate_speed_scale: 1.0,
         shellshock_gravity_scale: 1.0,
         shellshock_gravity_bias: 0.0,
+        surf: movement_tuning.surf_air(),
     };
     PmoveSingleContext {
         walk: WalkMoveContext {
@@ -2805,3 +2817,7 @@ fn arm_held_weapon(
     seed_ps_ammo_tables(ps, weapon, facts, clip0, clip1, last_hand >= 1, stock);
     (clip0, stock)
 }
+
+#[cfg(test)]
+#[path = "step_movement_tests.rs"]
+mod movement_tests;

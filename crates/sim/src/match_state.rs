@@ -450,6 +450,8 @@ pub struct SnapshotMeta {
     pub map_doors: Option<crate::MapDoors>,
     pub phase: MatchPhase,
 
+    pub movement_tuning: crate::MovementTuning,
+
     pub match_elapsed_ms: u32,
     pub prematch: gamemode_iw4::PrematchStep,
 

@@ -517,7 +517,32 @@ pub(crate) fn encode_action(out: &mut WireWriter, action: &ClientAction) {
             out.put_u8(13);
             out.put_u32(request_id);
         }
+        ClientAction::SetMovementTuning { request_id, tuning } => {
+            out.put_u8(16);
+            out.put_u32(request_id);
+            encode_movement_tuning(out, &tuning);
+        }
     }
+}
+
+fn encode_movement_tuning(out: &mut WireWriter, tuning: &sim::MovementTuning) {
+    out.put_u8(u8::from(tuning.surf));
+    out.put_f32(tuning.surf_air_accel);
+    out.put_f32(tuning.surf_air_wishspeed_cap);
+}
+
+fn decode_movement_tuning(input: &mut WireReader<'_>) -> Result<sim::MovementTuning, WireError> {
+    let surf = match input.get_u8()? {
+        0 => false,
+        1 => true,
+        _ => return Err(WireError::Malformed("bad MovementTuning surf flag")),
+    };
+    Ok(sim::MovementTuning {
+        surf,
+        surf_air_accel: input.get_f32()?,
+        surf_air_wishspeed_cap: input.get_f32()?,
+    }
+    .sanitized())
 }
 
 pub(crate) fn decode_action(input: &mut WireReader<'_>) -> Result<ClientAction, WireError> {
@@ -567,6 +592,10 @@ pub(crate) fn decode_action(input: &mut WireReader<'_>) -> Result<ClientAction, 
         10 => Ok(ClientAction::DebugDamage {
             request_id: input.get_u32()?,
             amount: input.get_i32()?,
+        }),
+        16 => Ok(ClientAction::SetMovementTuning {
+            request_id: input.get_u32()?,
+            tuning: decode_movement_tuning(input)?,
         }),
         11 => {
             let request_id = input.get_u32()?;
@@ -648,6 +677,7 @@ pub fn encode_snapshot_meta_sections(
     let mut sizes = SnapshotMetaSectionBytes::default();
     let mut mark = out.len();
     out.put_u8(phase_tag(meta.phase));
+    encode_movement_tuning(out, &meta.movement_tuning);
     out.put_u32(meta.match_elapsed_ms);
     let (prematch_tag, elapsed_ms) = match meta.prematch {
         gamemode_iw4::PrematchStep::Waiting { elapsed_ms } => (0, elapsed_ms),
@@ -775,6 +805,7 @@ pub fn decode_snapshot_meta(
     world_decoder: &mut WorldObjectSyncDecoder,
 ) -> Result<(SnapshotMeta, Vec<u8>), WireError> {
     let phase = phase_from_tag(input.get_u8()?)?;
+    let movement_tuning = decode_movement_tuning(input)?;
     let match_elapsed_ms = input.get_u32()?;
     let prematch_tag = input.get_u8()?;
     let elapsed_ms = input.get_u32()?;
@@ -879,6 +910,7 @@ pub fn decode_snapshot_meta(
     Ok((
         SnapshotMeta {
             phase,
+            movement_tuning,
             match_elapsed_ms,
             prematch,
             score_limit,
@@ -3040,4 +3072,46 @@ fn decode_objectives(input: &mut WireReader<'_>) -> Result<sim::ObjectiveMatch, 
         .transpose()?;
     state.match_over = input.get_u8()? != 0;
     Ok(state)
+}
+
+#[cfg(test)]
+mod movement_tuning_wire_tests {
+    use super::*;
+
+    #[test]
+    fn set_movement_tuning_round_trips() {
+        let action = ClientAction::SetMovementTuning {
+            request_id: 7,
+            tuning: sim::MovementTuning {
+                surf: true,
+                surf_air_accel: 150.0,
+                surf_air_wishspeed_cap: 25.0,
+            },
+        };
+        let mut out = WireWriter::new();
+        encode_actions(&mut out, &[(ClientId(3), action)]);
+        let bytes = out.finish();
+        let mut input = WireReader::new(&bytes);
+        assert_eq!(
+            decode_actions(&mut input).unwrap(),
+            vec![(ClientId(3), action)]
+        );
+        assert!(input.is_empty());
+    }
+
+    #[test]
+    fn decoded_tuning_is_sanitized() {
+        let mut out = WireWriter::new();
+        out.put_u8(1);
+        out.put_f32(f32::NAN);
+        out.put_f32(-5.0);
+        let bytes = out.finish();
+        let tuning = decode_movement_tuning(&mut WireReader::new(&bytes)).unwrap();
+        assert!(tuning.surf);
+        assert_eq!(
+            tuning.surf_air_accel,
+            sim::movement_tuning::SURF_DEFAULT_AIR_ACCEL
+        );
+        assert_eq!(tuning.surf_air_wishspeed_cap, 0.0);
+    }
 }

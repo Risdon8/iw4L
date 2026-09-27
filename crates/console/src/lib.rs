@@ -23,6 +23,7 @@ pub mod input;
 pub mod plugin;
 pub mod registry;
 pub mod suggest;
+mod surf;
 mod user_settings;
 mod weapon_dispatch;
 

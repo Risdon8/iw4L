@@ -28,13 +28,26 @@ pub fn pm_walk_move<C: CollisionBackend>(
     bounds: MoveBounds,
     collision: &C,
 ) {
+    let surf = context.air.surf.is_some();
     if (ps.pm_flags & 0x2000) != 0 {
-        prone_velocity_scale(ps);
+        if surf {
+            // Mod: no jump-landing slowdown. End the movement timer the way
+            // its expiry does, so friction gets no landing boost either.
+            ps.pm_flags &= 0xffbfdfff;
+            ps.jump_origin_z = 0.0;
+        } else {
+            prone_velocity_scale(ps);
+        }
     }
 
     let gate = JumpCheckContext {
         time_since_jump: cmd.server_time.wrapping_sub(ps.jump_time),
-        old_buttons: context.old_buttons,
+        // Mod: surf autobhop — a held jump re-jumps on the landing tick.
+        old_buttons: if surf {
+            context.old_buttons & !playerstate_iw4::buttons::JUMP
+        } else {
+            context.old_buttons
+        },
         stance_surface_type: stance_surface_type(ps) as u8,
     };
     if let JumpCheckResult::Launched { .. } = jump_check(ps, pml, cmd, gate, context.jump) {

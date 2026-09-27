@@ -415,6 +415,8 @@ pub struct SimState {
     running: bool,
     phase: MatchPhase,
 
+    movement_tuning: crate::MovementTuning,
+
     match_elapsed_ms: u32,
 
     prematch: gamemode_iw4::PrematchStep,
@@ -587,6 +589,7 @@ impl Default for SimState {
             bootstrap: MatchBootstrap::default(),
             running: false,
             phase: MatchPhase::Warmup,
+            movement_tuning: crate::MovementTuning::default(),
             match_elapsed_ms: 0,
             prematch: gamemode_iw4::PrematchStep::default(),
             max_alive_seen: 0,
@@ -779,6 +782,14 @@ impl SimState {
 
     pub fn phase(&self) -> MatchPhase {
         self.phase
+    }
+
+    pub fn movement_tuning(&self) -> crate::MovementTuning {
+        self.movement_tuning
+    }
+
+    pub(crate) fn set_movement_tuning(&mut self, tuning: crate::MovementTuning) {
+        self.movement_tuning = tuning.sanitized();
     }
 
     pub fn match_elapsed_ms(&self) -> u32 {
@@ -2995,6 +3006,7 @@ impl SimState {
                 map_doors: self.map_doors.clone(),
                 objectives: self.objectives.clone(),
                 phase: self.phase,
+                movement_tuning: self.movement_tuning,
                 match_elapsed_ms: self.match_elapsed_ms,
                 prematch: self.prematch,
                 score_limit: self.bootstrap.score_limit,
@@ -3215,6 +3227,7 @@ impl SimState {
             .collect();
 
         self.phase = snapshot.meta.phase;
+        self.movement_tuning = snapshot.meta.movement_tuning;
         self.match_elapsed_ms = snapshot.meta.match_elapsed_ms;
         self.prematch = snapshot.meta.prematch;
         self.running = true;

@@ -350,7 +350,11 @@ impl Plugin for ConsolePlugin {
                             crate::weapon_dispatch::echo_configuration_change_results,
                         )
                             .chain(),
-                        crate::debug_move::route_debug_move_commands,
+                        (
+                            crate::debug_move::route_debug_move_commands,
+                            crate::surf::route_surf_commands,
+                        )
+                            .chain(),
                         crate::debug_script_mover::route_debug_script_mover_commands,
                         crate::debug_draw_method::route_debug_draw_method_commands,
                         crate::debug_view_proj::route_view_proj_commands,
@@ -687,6 +691,7 @@ fn setup_console(
     }
     crate::weapon_dispatch::register_weapon_commands(&mut registry, &weapon_completions);
     crate::debug_move::register_debug_move_commands(&mut registry);
+    crate::surf::register_surf_commands(&mut registry);
     crate::debug_script_mover::register_debug_script_mover_commands(&mut registry);
     crate::debug_draw_method::register_debug_draw_method_commands(&mut registry);
     crate::debug_view_proj::register_view_proj_commands(&mut registry);

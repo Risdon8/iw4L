@@ -25,6 +25,7 @@ pub use killstreaks::{
 mod mantle_xanim;
 pub mod match_state;
 mod missile;
+pub mod movement_tuning;
 mod weapon_lock;
 pub use weapon_lock::WeaponLock;
 pub mod player_anim_script;
@@ -129,6 +130,7 @@ pub use match_state::{
     SimEvent, SimEventRow, SnapshotMeta, UNRELIABLE_SIM_EVENT_COUNT, Uav, class_catalog_has,
     class_catalog_radar_jam_e_flags, perk_bits_from_class_catalog, sim_event_is_reliable,
 };
+pub use movement_tuning::MovementTuning;
 pub use player_anim_script::{
     AnimConditions, AnimScriptCommand, AnimScriptCondition, AnimScriptItem, PlayerAnimScript,
     anim_conditions_from_pmove, pmove_anim_weapon_ids,

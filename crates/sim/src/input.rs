@@ -81,6 +81,12 @@ pub enum ClientAction {
     UseCopycat {
         request_id: ActionRequestId,
     },
+
+    /// Mod: world-wide movement tuning (surf). Debug-gated like `SetMatchPhase`.
+    SetMovementTuning {
+        request_id: ActionRequestId,
+        tuning: crate::MovementTuning,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -127,6 +133,7 @@ pub fn action_request_id(action: &ClientAction) -> ActionRequestId {
         | ClientAction::BeginScriptMoverRotateVelocity { request_id, .. }
         | ClientAction::DebugDamage { request_id, .. }
         | ClientAction::SetName { request_id, .. }
-        | ClientAction::UseCopycat { request_id } => request_id,
+        | ClientAction::UseCopycat { request_id }
+        | ClientAction::SetMovementTuning { request_id, .. } => request_id,
     }
 }

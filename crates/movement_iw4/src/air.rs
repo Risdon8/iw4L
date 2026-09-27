@@ -1,6 +1,9 @@
 use playerstate_iw4::{PlayerState, UserCmd};
 
-use crate::{CollisionBackend, MoveBounds, Pml, pm_accelerate, pm_friction, pm_step_slide_move};
+use crate::{
+    CollisionBackend, MoveBounds, Pml, pm_accelerate, pm_friction, pm_step_slide_move,
+    pm_surf_air_accelerate,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AirMoveContext {
@@ -9,6 +12,18 @@ pub struct AirMoveContext {
     pub shellshock_gravity_scale: f32,
 
     pub shellshock_gravity_bias: f32,
+
+    /// Mod: Source-style air acceleration. `None` is retail IW4.
+    pub surf: Option<SurfAirContext>,
+}
+
+/// Mod: CS/Source `AirAccelerate` parameters. The small `wishspeed_cap` is
+/// what lets strafing along a ramp turn sideways input into speed.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SurfAirContext {
+    pub accel: f32,
+
+    pub wishspeed_cap: f32,
 }
 
 pub fn pm_air_move<C: CollisionBackend>(
@@ -35,7 +50,10 @@ pub fn pm_air_move<C: CollisionBackend>(
         (cmd.rightmove as f32) * right[2] + (cmd.forwardmove as f32) * forward[2],
     ];
     let wishspeed = normalize(&mut wishdir);
-    pm_accelerate(ps, pml, &wishdir, wishspeed * command_scale, 1.0);
+    match context.surf {
+        Some(surf) => pm_surf_air_accelerate(ps, pml, &wishdir, wishspeed * command_scale, surf),
+        None => pm_accelerate(ps, pml, &wishdir, wishspeed * command_scale, 1.0),
+    }
 
     if pml.ground_plane != 0 {
         let velocity = ps.velocity;
