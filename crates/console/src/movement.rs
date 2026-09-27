@@ -18,6 +18,13 @@ pub(crate) fn register_movement_commands(registry: &mut ConsoleRegistry) {
             crate::StaticCompleter::new(["fluid", "retail", "surf", "wallrun", "doublejump"]),
         ));
     }
+    if registry.resolve("doublejump").is_none() {
+        registry.register(
+            crate::CommandSpec::new("doublejump")
+                .usage("doublejump [on|off] — one extra jump in the air (mod)")
+                .arg(crate::StaticCompleter::new(["on", "off"])),
+        );
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -45,21 +52,27 @@ pub(crate) fn route_movement_commands(
     }
 
     for cmd in events.read() {
-        if cmd.name != "movement" {
+        let name = cmd.name.clone();
+        if name != "movement" && name != "doublejump" {
             continue;
         }
         let Some(applied) = applied else {
             echo(
-                "movement: no authority world (not a listen host)".into(),
+                format!("{name}: no authority world (not a listen host)"),
                 &mut console,
                 &mut line,
             );
             continue;
         };
         let base = pending.unwrap_or(applied);
-        let next = match parse_movement(&cmd.args, base) {
+        let parsed = if name == "doublejump" {
+            parse_double_jump(&cmd.args, base)
+        } else {
+            parse_movement(&cmd.args, base)
+        };
+        let next = match parsed {
             Ok(None) => {
-                echo(format_profile("movement", &base), &mut console, &mut line);
+                echo(format_profile(&name, &base), &mut console, &mut line);
                 continue;
             }
             Ok(Some(next)) => next,
@@ -69,12 +82,12 @@ pub(crate) fn route_movement_commands(
             }
         };
         if authority.as_ref().is_some_and(|a| !a.0.cheats_enabled()) {
-            echo("movement: cheats are off".into(), &mut console, &mut line);
+            echo(format!("{name}: cheats are off"), &mut console, &mut line);
             continue;
         }
         let Some(inbox) = inbox.as_deref_mut() else {
             echo(
-                "movement: no action inbox (not a listen host)".into(),
+                format!("{name}: no action inbox (not a listen host)"),
                 &mut console,
                 &mut line,
             );
@@ -88,14 +101,14 @@ pub(crate) fn route_movement_commands(
                 tuning: next,
             },
         ) {
-            echo(format!("movement: {error}"), &mut console, &mut line);
+            echo(format!("{name}: {error}"), &mut console, &mut line);
             continue;
         }
         *pending = Some(next.sanitized());
         echo(
             format!(
                 "{} request_id={request_id}",
-                format_profile("movement: queued", &next)
+                format_profile(&format!("{name}: queued"), &next)
             ),
             &mut console,
             &mut line,
@@ -131,11 +144,30 @@ fn parse_movement(args: &[String], base: MovementTuning) -> Result<Option<Moveme
     Ok(Some(next))
 }
 
+/// The `doublejump` shorthand: bare is a status query, `on`/`off` toggles it.
+fn parse_double_jump(
+    args: &[String],
+    base: MovementTuning,
+) -> Result<Option<MovementTuning>, String> {
+    let mut next = base;
+    match args
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
+        [] => return Ok(None),
+        [value] => next.double_jump = parse_bool("doublejump", value)?,
+        _ => return Err("usage: doublejump [on|off]".into()),
+    }
+    Ok(Some(next))
+}
+
 fn parse_bool(name: &str, raw: &str) -> Result<bool, String> {
     match raw {
         "on" | "1" | "true" => Ok(true),
         "off" | "0" | "false" => Ok(false),
-        _ => Err(format!("movement {name}: expected on or off, got `{raw}`")),
+        _ => Err(format!("{name}: expected on or off, got `{raw}`")),
     }
 }
 
@@ -194,5 +226,20 @@ mod tests {
         let base = MovementTuning::default();
         assert!(parse_movement(&args(&["doublejump", "maybe"]), base).is_err());
         assert!(parse_movement(&args(&["nope"]), base).is_err());
+    }
+
+    #[test]
+    fn doublejump_shorthand() {
+        assert_eq!(parse_double_jump(&[], MovementTuning::default()), Ok(None));
+        let on = parse_double_jump(&args(&["on"]), MovementTuning::default())
+            .unwrap()
+            .unwrap();
+        assert!(on.double_jump);
+        let off = parse_double_jump(&args(&["off"]), MovementTuning::fluid())
+            .unwrap()
+            .unwrap();
+        assert!(!off.double_jump);
+        assert!(parse_double_jump(&args(&["maybe"]), MovementTuning::default()).is_err());
+        assert!(parse_double_jump(&args(&["on", "off"]), MovementTuning::default()).is_err());
     }
 }

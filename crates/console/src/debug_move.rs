@@ -38,6 +38,52 @@ pub(crate) fn spawn_showpos_hud(commands: &mut Commands, font: Handle<Font>) {
     ));
 }
 
+#[derive(Component)]
+pub(crate) struct WallRunHud;
+
+/// A small on-screen cue so a wall-run is obvious; the screen looks the same
+/// otherwise.
+pub(crate) fn spawn_wallrun_hud(commands: &mut Commands, font: Handle<Font>) {
+    commands.spawn((
+        WallRunHud,
+        UiLayer::Overlay,
+        Visibility::Hidden,
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Percent(42.0),
+            top: Val::Percent(58.0),
+            padding: UiRect::all(px(6)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.03, 0.10, 0.18, 0.55)),
+        GlobalZIndex(19_001),
+        Text::new("WALL RUN"),
+        TextFont {
+            font: font.into(),
+            font_size: FontSize::Px(22.0),
+            ..default()
+        },
+        TextColor(Color::srgb(0.45, 0.85, 1.0)),
+    ));
+}
+
+pub(crate) fn update_wallrun_overlay(
+    presented: Res<PresentedSnapshot>,
+    local: Res<LocalPresentClient>,
+    mut hud: Query<&mut Visibility, With<WallRunHud>>,
+) {
+    let running = presented
+        .alive_player(local.0)
+        .is_some_and(sim::player_wallrunning);
+    for mut visibility in &mut hud {
+        *visibility = if running {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+}
+
 pub(crate) fn register_debug_move_commands(registry: &mut ConsoleRegistry) {
     if registry.resolve("showpos").is_none() {
         registry.register(
@@ -775,8 +821,11 @@ fn format_showpos_live(
     } else {
         held_names.join(",")
     };
+    let wall = presented
+        .alive_player(id)
+        .is_some_and(sim::player_wallrunning);
     format!(
-        "showpos tick={tick} life={life} origin={origin} eye={eye} yaw={yaw:.0} pitch={pitch:.0} vz={vz:.0} ground={ground} held=[{held}] fps={fps:.0}"
+        "showpos tick={tick} life={life} origin={origin} eye={eye} yaw={yaw:.0} pitch={pitch:.0} vz={vz:.0} ground={ground} wall={wall} held=[{held}] fps={fps:.0}"
     )
 }
 

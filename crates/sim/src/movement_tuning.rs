@@ -4,7 +4,7 @@
 //! predicting client and a replay all step with the same values. It changes
 //! only through `ClientAction::SetMovementTuning`.
 
-use movement_iw4::{DoubleJumpContext, SurfAirContext, WallRunContext};
+use movement_iw4::{DoubleJumpContext, PMF_WALLRUN, SurfAirContext, WallRunContext};
 
 /// CS surf servers run `sv_airaccelerate` 100–150 with Source's fixed 30u cap.
 pub const SURF_DEFAULT_AIR_ACCEL: f32 = 100.0;
@@ -129,3 +129,8 @@ impl MovementTuning {
 
 /// How far to the side a wall is looked for. Constant for now.
 const WALLRUN_TRACE_DIST: f32 = 60.0;
+
+/// Whether the player is on a wall right now (HUD feedback).
+pub fn player_wallrunning(ps: &playerstate_iw4::PlayerState) -> bool {
+    (ps.pm_flags & PMF_WALLRUN) != 0
+}

@@ -853,7 +853,8 @@ fn setup_console(
         });
     commands.insert_resource(ConsolePrompt(prompt_entity.expect("console prompt entity")));
     commands.insert_resource(ConsoleLog(log_entity.expect("console log entity")));
-    crate::debug_move::spawn_showpos_hud(&mut commands, font);
+    crate::debug_move::spawn_showpos_hud(&mut commands, font.clone());
+    crate::debug_move::spawn_wallrun_hud(&mut commands, font);
 }
 
 fn is_console_input(word: &str) -> bool {

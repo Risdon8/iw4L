@@ -29,9 +29,15 @@ applied when a match starts, so a real map needs no layout.
 movement                 show the profile
 movement fluid|retail    all features on, or stock MW2
 movement surf|wallrun|doublejump on|off
+doublejump on|off        shorthand for the air jump
 surf accel <n> | cap <n>      tune the air physics
 wallrun time|cooldown|speed|up|out <n>
 ```
+
+**Wall-running is deliberate**: in the air next to a wall, press jump to
+grip it (hold your height), then press jump again to launch off. Merely hopping
+past a wall does nothing, so bunny hops are never hijacked. A **WALL RUN** cue
+appears on screen while you are on the wall.
 
 `IW4L_MOVEMENT=retail` starts a session with stock MW2 movement. A layout's
 `movement` block still overrides the profile for its map.
@@ -48,9 +54,9 @@ A floating course in the street canyon south of the Highrise towers:
 3. **Hop line** — hold space (autobhop is on) or just run: the platforms step
    down in shallow steps, so a fast player clears several and a slow one still
    lands on each.
-4. **Wall-run corridor** — two long walls (with a floor for now). Fly
-   alongside a wall at speed and it grips, holds your height, and a jump
-   launches you off. Turn `wallrun` on/off with the `wallrun` command.
+4. **Wall-run corridor** — two long walls (with a floor for now). Jump next to
+   a wall to grip it, then jump again to launch off; the `wallrun` command
+   tunes it.
 5. **Portal** on the end deck sends you back to the start.
 
 Falling below z 1500 (or into a reset volume) returns you to the last

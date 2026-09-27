@@ -375,18 +375,20 @@ fn run_policy(
     mut policy: impl FnMut(usize, &PlayerState) -> Intent,
 ) -> (PlayerState, Vec<([f32; 3], [f32; 3])>) {
     let mut frames = Vec::with_capacity(ticks);
+    let mut old_buttons = 0;
     for tick in 0..ticks {
         let want = policy(tick, &ps);
+        let held = if want.jump { buttons::JUMP } else { 0 };
         let mut cmd = UserCmd {
             server_time: ps.command_time + TICK_MS,
             angles: [0, (want.yaw * ANGLE2SHORT) as i32, 0],
             forwardmove: want.forward,
             rightmove: want.right,
-            buttons: if want.jump { buttons::JUMP } else { 0 },
+            buttons: held,
             ..UserCmd::default()
         };
         let context = pmove_context(
-            0,
+            old_buttons,
             (1.0, 1.0, 1.0),
             false,
             false,
@@ -408,6 +410,7 @@ fn run_policy(
             &FlatMantleAnimLength::default(),
             &ZeroMantleRootDelta,
         );
+        old_buttons = held;
         frames.push((ps.origin, ps.velocity));
     }
     (ps, frames)
@@ -664,8 +667,15 @@ fn wallrun_start() -> PlayerState {
 fn wallrun_holds_height_along_a_wall() {
     let brushes = wallrun_world();
     let backend = layout_backend(&brushes);
-    let (end, frames) = run_policy(&backend, wallrun_start(), wallrun_on(), 60, |_, _| {
-        Intent::default()
+    let (end, frames) = run_policy(&backend, wallrun_start(), wallrun_on(), 60, |tick, _| {
+        if tick == 0 {
+            Intent {
+                jump: true,
+                ..Intent::default()
+            }
+        } else {
+            Intent::default()
+        }
     });
     assert!(
         frames
@@ -707,7 +717,7 @@ fn wall_jump_pushes_away_from_the_wall() {
     let brushes = wallrun_world();
     let backend = layout_backend(&brushes);
     let (end, frames) = run_policy(&backend, wallrun_start(), wallrun_on(), 40, |tick, ps| {
-        if tick >= 5 && (ps.pm_flags & movement_iw4::PMF_WALLRUN) != 0 {
+        if tick == 0 || (tick >= 5 && (ps.pm_flags & movement_iw4::PMF_WALLRUN) != 0) {
             Intent {
                 jump: true,
                 ..Intent::default()
@@ -733,7 +743,16 @@ fn wallrun_grips_soon_after_a_jump() {
     let backend = layout_backend(&brushes);
     let mut ps = wallrun_start();
     ps.jump_time = ps.command_time;
-    let (end, _) = run_policy(&backend, ps, wallrun_on(), 30, |_, _| Intent::default());
+    let (end, _) = run_policy(&backend, ps, wallrun_on(), 30, |tick, _| {
+        if tick == 0 {
+            Intent {
+                jump: true,
+                ..Intent::default()
+            }
+        } else {
+            Intent::default()
+        }
+    });
     assert!(
         end.origin[2] > 490.0,
         "should have gripped after the jump instead of falling: {:?}",
@@ -801,4 +820,31 @@ fn double_jump_latch_resets() {
     movement_iw4::double_jump_reset(&mut ps);
     cmd.buttons = 0x400;
     assert!(movement_iw4::pm_double_jump(&mut ps, &cmd, context));
+}
+
+/// A bunny hop down a street must keep its speed: the wall-run only starts on a
+/// deliberate jump press, not from brushing a wall mid-hop.
+#[test]
+fn hop_along_a_wall_is_not_hijacked() {
+    let brushes = map_layout_brushes(
+        r#"{ "type": "box", "center": [0, 0, -8], "size": [6000, 6000, 16] },
+           { "type": "box", "center": [0, 100, 500], "size": [6000, 16, 1000] }"#,
+    );
+    let backend = layout_backend(&brushes);
+    let mut ps = spawn_player_state([-2000.0, 60.0, 1.0], [0.0, 0.0, 0.0]);
+    ps.command_time = 1_000;
+    ps.jump_time = -100_000;
+    ps.ground_entity_num = trace_iw4::ENTITYNUM_NONE as i32;
+    ps.velocity = [300.0, 0.0, 0.0];
+    let (end, _) = run_policy(&backend, ps, MovementTuning::fluid(), 300, |_, _| Intent {
+        forward: 127,
+        jump: true,
+        ..Intent::default()
+    });
+    assert!(
+        horizontal_speed(&end) > 280.0,
+        "the hop should keep its speed past the wall: {:?}",
+        end.velocity
+    );
+    assert_eq!(end.pm_flags & movement_iw4::PMF_WALLRUN, 0);
 }

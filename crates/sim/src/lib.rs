@@ -132,7 +132,7 @@ pub use match_state::{
     SimEvent, SimEventRow, SnapshotMeta, UNRELIABLE_SIM_EVENT_COUNT, Uav, class_catalog_has,
     class_catalog_radar_jam_e_flags, perk_bits_from_class_catalog, sim_event_is_reliable,
 };
-pub use movement_tuning::MovementTuning;
+pub use movement_tuning::{MovementTuning, player_wallrunning};
 pub use player_anim_script::{
     AnimConditions, AnimScriptCommand, AnimScriptCondition, AnimScriptItem, PlayerAnimScript,
     anim_conditions_from_pmove, pmove_anim_weapon_ids,

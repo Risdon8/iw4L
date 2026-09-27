@@ -73,18 +73,24 @@ pub fn pm_wallrun<C: CollisionBackend>(
     if (ps.pm_flags & PMF_WALLRUN) != 0 {
         continue_run(ps, pml, cmd, context, bounds, collision)
     } else {
-        try_attach(ps, pml, context, bounds, collision)
+        try_attach(ps, pml, cmd, context, bounds, collision)
     }
 }
 
 fn try_attach<C: CollisionBackend>(
     ps: &mut PlayerState,
     pml: &Pml,
+    cmd: &UserCmd,
     context: WallRunContext,
     bounds: MoveBounds,
     collision: &C,
 ) -> bool {
     if (ps.pm_flags & PMF_WALLRUN_COOLDOWN) != 0 {
+        return false;
+    }
+    // Deliberate: a fresh jump press beside the wall starts the run, so an
+    // ordinary hop down a street is not hijacked by every wall it passes.
+    if (cmd.buttons & BUTTON_JUMP) == 0 || (context.old_buttons & BUTTON_JUMP) != 0 {
         return false;
     }
     let speed = libm::sqrtf(ps.velocity[0] * ps.velocity[0] + ps.velocity[1] * ps.velocity[1]);
