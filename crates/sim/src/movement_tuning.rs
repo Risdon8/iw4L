@@ -14,7 +14,7 @@ pub const SURF_DEFAULT_AIR_WISHSPEED_CAP: f32 = 30.0;
 /// the wall before it can start again.
 pub const WALLRUN_DEFAULT_TIME_MS: i32 = 2500;
 pub const WALLRUN_DEFAULT_COOLDOWN_MS: i32 = 600;
-pub const WALLRUN_DEFAULT_MIN_SPEED: f32 = 200.0;
+pub const WALLRUN_DEFAULT_MIN_SPEED: f32 = 120.0;
 pub const WALLRUN_DEFAULT_JUMP_UP: f32 = 250.0;
 pub const WALLRUN_DEFAULT_JUMP_OUT: f32 = 260.0;
 
@@ -103,4 +103,4 @@ impl MovementTuning {
 }
 
 /// How far to the side a wall is looked for. Constant for now.
-const WALLRUN_TRACE_DIST: f32 = 40.0;
+const WALLRUN_TRACE_DIST: f32 = 60.0;

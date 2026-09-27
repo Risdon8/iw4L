@@ -14,6 +14,11 @@ use crate::{CollisionBackend, GroundTraceInput, MoveBounds, Pml, pm_step_slide_m
 /// `pm_drop_timers` clears, `0x2180`, does not include it).
 pub const PMF_WALLRUN: u32 = 0x0020_0000;
 
+/// Set while the wall-run cooldown is counting down; `pm_time` holds the ms.
+/// A normal jump must not block a wall-run, so the cooldown is separate from
+/// `jump_time`.
+pub const PMF_WALLRUN_COOLDOWN: u32 = 0x0080_0000;
+
 const BUTTON_JUMP: u32 = 0x400;
 
 /// A surface steeper than this is a wall; a walkable floor or ramp is not.
@@ -62,22 +67,24 @@ pub fn pm_wallrun<C: CollisionBackend>(
     bounds: MoveBounds,
     collision: &C,
 ) -> bool {
+    if (ps.pm_flags & PMF_WALLRUN_COOLDOWN) != 0 && ps.pm_time <= 0 {
+        ps.pm_flags &= !PMF_WALLRUN_COOLDOWN;
+    }
     if (ps.pm_flags & PMF_WALLRUN) != 0 {
         continue_run(ps, pml, cmd, context, bounds, collision)
     } else {
-        try_attach(ps, pml, cmd, context, bounds, collision)
+        try_attach(ps, pml, context, bounds, collision)
     }
 }
 
 fn try_attach<C: CollisionBackend>(
     ps: &mut PlayerState,
     pml: &Pml,
-    cmd: &UserCmd,
     context: WallRunContext,
     bounds: MoveBounds,
     collision: &C,
 ) -> bool {
-    if cmd.server_time - ps.jump_time < context.cooldown_ms {
+    if (ps.pm_flags & PMF_WALLRUN_COOLDOWN) != 0 {
         return false;
     }
     let speed = libm::sqrtf(ps.velocity[0] * ps.velocity[0] + ps.velocity[1] * ps.velocity[1]);
@@ -110,13 +117,13 @@ fn continue_run<C: CollisionBackend>(
     collision: &C,
 ) -> bool {
     if ps.pm_time <= 0 {
-        detach(ps, cmd);
+        detach(ps, context.cooldown_ms);
         return false;
     }
     let stored = ps.v_ladder_vec;
     let Some(normal) = probe_matching(ps, pml, context.trace_dist, stored, bounds, collision)
     else {
-        detach(ps, cmd);
+        detach(ps, context.cooldown_ms);
         return false;
     };
 
@@ -125,7 +132,7 @@ fn continue_run<C: CollisionBackend>(
         ps.velocity[0] = tangent[0] * WALL_JUMP_KEEP + normal[0] * context.jump_out;
         ps.velocity[1] = tangent[1] * WALL_JUMP_KEEP + normal[1] * context.jump_out;
         ps.velocity[2] = context.jump_up;
-        detach(ps, cmd);
+        detach(ps, context.cooldown_ms);
         // The launch moves this tick under ordinary gravity.
         pm_step_slide_move(
             ps,
@@ -169,12 +176,11 @@ fn hold_height<C: CollisionBackend>(
     );
 }
 
-fn detach(ps: &mut PlayerState, cmd: &UserCmd) {
+fn detach(ps: &mut PlayerState, cooldown_ms: i32) {
     ps.pm_flags &= !PMF_WALLRUN;
-    ps.pm_time = 0;
+    ps.pm_flags |= PMF_WALLRUN_COOLDOWN;
+    ps.pm_time = cooldown_ms;
     ps.v_ladder_vec = [0.0; 3];
-    // Doubles as the cooldown stamp and blocks an immediate normal jump.
-    ps.jump_time = cmd.server_time;
 }
 
 /// Velocity with the into-wall component removed, and its horizontal length.

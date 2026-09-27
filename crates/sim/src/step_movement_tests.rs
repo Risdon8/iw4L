@@ -724,3 +724,19 @@ fn wall_jump_pushes_away_from_the_wall() {
     assert_eq!(end.pm_flags & movement_iw4::PMF_WALLRUN, 0);
     assert!(end.origin[1] < 60.0, "left the wall: {:?}", end.origin);
 }
+
+/// In a corridor you have to jump to get airborne, so a fresh jump must not
+/// lock the wall-run out for the whole hop.
+#[test]
+fn wallrun_grips_soon_after_a_jump() {
+    let brushes = wallrun_world();
+    let backend = layout_backend(&brushes);
+    let mut ps = wallrun_start();
+    ps.jump_time = ps.command_time;
+    let (end, _) = run_policy(&backend, ps, wallrun_on(), 30, |_, _| Intent::default());
+    assert!(
+        end.origin[2] > 490.0,
+        "should have gripped after the jump instead of falling: {:?}",
+        end.origin
+    );
+}
