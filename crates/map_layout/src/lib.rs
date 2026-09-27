@@ -41,6 +41,10 @@ pub struct Layout {
     pub default_model: String,
     #[serde(default)]
     pub shapes: Vec<Shape>,
+    /// Ordered sections of a course. Standing in a checkpoint's volume makes
+    /// it where a fall sends you; `checkpoint` jumps straight to one.
+    #[serde(default)]
+    pub checkpoints: Vec<Checkpoint>,
 }
 
 fn default_model() -> String {
@@ -74,6 +78,10 @@ pub struct Reset {
     pub below_z: Option<f32>,
     #[serde(default)]
     pub volumes: Vec<Aabb>,
+    /// Like `volumes`, but always sends the player back to the start even
+    /// after a checkpoint: the course's "go again" portal.
+    #[serde(default)]
+    pub restart_volumes: Vec<Aabb>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -81,6 +89,20 @@ pub struct Reset {
 pub struct Aabb {
     pub min: [f32; 3],
     pub max: [f32; 3],
+}
+
+/// One ordered section of a course: standing inside `volume` remembers it, so a
+/// later fall returns the player to `origin`. `origin` must lie in `volume`,
+/// otherwise the checkpoint cannot be held by standing on it.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Checkpoint {
+    #[serde(default)]
+    pub name: String,
+    pub volume: Aabb,
+    pub origin: [f32; 3],
+    #[serde(default)]
+    pub yaw: f32,
 }
 
 impl Aabb {
@@ -161,6 +183,19 @@ impl Layout {
         stem.eq_ignore_ascii_case(&self.base_map)
     }
 
+    /// Resolves a `checkpoint` argument: a 0-based index, or a name
+    /// (case-insensitive). An index wins when both would match.
+    pub fn checkpoint_index(&self, key: &str) -> Option<usize> {
+        if let Ok(index) = key.parse::<usize>()
+            && index < self.checkpoints.len()
+        {
+            return Some(index);
+        }
+        self.checkpoints
+            .iter()
+            .position(|checkpoint| checkpoint.name.eq_ignore_ascii_case(key))
+    }
+
     pub fn brushes(&self) -> Vec<Brush> {
         self.shapes.iter().map(Shape::brush).collect()
     }
@@ -180,6 +215,39 @@ impl Layout {
         for spawn in &self.spawns {
             if !finite(&spawn.origin) || !spawn.yaw.is_finite() {
                 return Err("spawn has a non-finite value".into());
+            }
+        }
+        for (index, checkpoint) in self.checkpoints.iter().enumerate() {
+            let label = if checkpoint.name.is_empty() {
+                format!("checkpoint #{index}")
+            } else {
+                format!("checkpoint `{}`", checkpoint.name)
+            };
+            if !finite(&checkpoint.origin) || !checkpoint.yaw.is_finite() {
+                return Err(format!("{label} has a non-finite value"));
+            }
+            if !finite(&checkpoint.volume.min) || !finite(&checkpoint.volume.max) {
+                return Err(format!("{label} has a non-finite volume"));
+            }
+            if (0..3).any(|i| checkpoint.volume.min[i] > checkpoint.volume.max[i]) {
+                return Err(format!("{label} volume min is above its max"));
+            }
+            if !checkpoint.volume.contains(checkpoint.origin) {
+                return Err(format!("{label} origin is outside its volume"));
+            }
+        }
+        for (index, volume) in self
+            .reset
+            .volumes
+            .iter()
+            .chain(&self.reset.restart_volumes)
+            .enumerate()
+        {
+            if !finite(&volume.min) || !finite(&volume.max) {
+                return Err(format!("reset volume #{index} has a non-finite bound"));
+            }
+            if (0..3).any(|i| volume.min[i] > volume.max[i]) {
+                return Err(format!("reset volume #{index} min is above its max"));
             }
         }
         for (index, shape) in self.shapes.iter().enumerate() {
@@ -643,6 +711,54 @@ mod tests {
         assert!(l.applies_to_zone("mp_highrise"));
         assert!(l.applies_to_zone("iw4:MP_Highrise"));
         assert!(!l.applies_to_zone("mp_rust"));
+    }
+
+    #[test]
+    fn checkpoints_resolve_by_index_or_name() {
+        let l = Layout::parse(
+            r#"{ "name": "t", "base_map": "m", "checkpoints": [
+                { "name": "start", "volume": { "min": [0,0,0], "max": [64,64,64] }, "origin": [32,32,32] },
+                { "name": "mid", "volume": { "min": [100,0,0], "max": [164,64,64] }, "origin": [132,32,32], "yaw": 90 }
+            ] }"#,
+        )
+        .unwrap();
+        assert_eq!(l.checkpoints.len(), 2);
+        assert_eq!(l.checkpoint_index("0"), Some(0));
+        assert_eq!(l.checkpoint_index("1"), Some(1));
+        assert_eq!(l.checkpoint_index("mid"), Some(1));
+        assert_eq!(l.checkpoint_index("MID"), Some(1));
+        assert_eq!(l.checkpoint_index("2"), None);
+        assert_eq!(l.checkpoint_index("nope"), None);
+    }
+
+    #[test]
+    fn rejects_bad_checkpoints() {
+        let bad = [
+            r#"{ "name": "t", "base_map": "m", "checkpoints": [
+                { "volume": { "min": [0,0,0], "max": [64,64,64] }, "origin": [100,0,0] } ] }"#,
+            r#"{ "name": "t", "base_map": "m", "checkpoints": [
+                { "volume": { "min": [64,0,0], "max": [0,64,64] }, "origin": [32,32,32] } ] }"#,
+            r#"{ "name": "t", "base_map": "m", "reset": {
+                "volumes": [{ "min": [0,0,0], "max": [64,64,64] }, { "min": [1,1,1] }] } }"#,
+        ];
+        for text in bad {
+            assert!(Layout::parse(text).is_err(), "accepted {text}");
+        }
+    }
+
+    #[test]
+    fn restart_volumes_parse_alongside_fall_volumes() {
+        let l = Layout::parse(
+            r#"{ "name": "t", "base_map": "m", "reset": {
+                "below_z": 10,
+                "volumes": [{ "min": [0,0,0], "max": [1,1,1] }],
+                "restart_volumes": [{ "min": [2,2,2], "max": [3,3,3] }]
+            } }"#,
+        )
+        .unwrap();
+        assert_eq!(l.reset.volumes.len(), 1);
+        assert_eq!(l.reset.restart_volumes.len(), 1);
+        assert_eq!(l.reset.below_z, Some(10.0));
     }
 
     #[test]

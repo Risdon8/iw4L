@@ -23,7 +23,7 @@ pub use killstreaks::{
     CRATE_MODEL_KIND, LITTLE_BIRD_MODEL_KIND, PAVELOW_MODEL_KIND, UAV_MODEL_KIND,
     model_source as killstreak_model_source,
 };
-pub use layout::{ClipProbe, LayoutRules};
+pub use layout::{CheckpointRule, ClipProbe, LayoutRules};
 mod mantle_xanim;
 pub mod match_state;
 mod missile;

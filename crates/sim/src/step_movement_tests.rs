@@ -367,6 +367,122 @@ fn run_backend(
     ps
 }
 
+fn run_policy(
+    backend: &super::ClipBackend<'_>,
+    mut ps: PlayerState,
+    tuning: MovementTuning,
+    ticks: usize,
+    mut policy: impl FnMut(usize, &PlayerState) -> Intent,
+) -> (PlayerState, Vec<([f32; 3], [f32; 3])>) {
+    let mut frames = Vec::with_capacity(ticks);
+    for tick in 0..ticks {
+        let want = policy(tick, &ps);
+        let mut cmd = UserCmd {
+            server_time: ps.command_time + TICK_MS,
+            angles: [0, (want.yaw * ANGLE2SHORT) as i32, 0],
+            forwardmove: want.forward,
+            rightmove: want.right,
+            buttons: if want.jump { buttons::JUMP } else { 0 },
+            ..UserCmd::default()
+        };
+        let context = pmove_context(
+            0,
+            (1.0, 1.0, 1.0),
+            false,
+            false,
+            1.0 / 200.0,
+            1.0 / 200.0,
+            true,
+            false,
+            0,
+            0,
+            0,
+            false,
+            tuning,
+        );
+        pm_move(
+            &mut ps,
+            &mut cmd,
+            context,
+            backend,
+            &FlatMantleAnimLength::default(),
+            &ZeroMantleRootDelta,
+        );
+        frames.push((ps.origin, ps.velocity));
+    }
+    (ps, frames)
+}
+
+fn course_brushes() -> Vec<crate::world::SimBrush> {
+    let text = include_str!("../../../layouts/highrise_playground.json");
+    map_layout::Layout::parse(text)
+        .expect("the shipped layout parses")
+        .brushes()
+        .into_iter()
+        .map(|brush| solid(brush.planes))
+        .collect()
+}
+
+/// The shipped playground is traversable: ride both ramps, land on the mid
+/// deck, cross the hop line and the corridor and reach the end-deck portal —
+/// bunny-hopping or walking. Reads `layouts/highrise_playground.json`, so it
+/// guards the course geometry against future edits.
+#[test]
+fn playground_course_reaches_the_end() {
+    for hopping in [true, false] {
+        let brushes = course_brushes();
+        let backend = layout_backend(&brushes);
+        let layout =
+            map_layout::Layout::parse(include_str!("../../../layouts/highrise_playground.json"))
+                .unwrap();
+        let mut ps = spawn_player_state(layout.spawns[0].origin, [0.0, 0.0, 0.0]);
+        ps.command_time = 1_000;
+        ps.jump_time = -10_000;
+        ps.ground_entity_num = trace_iw4::ENTITYNUM_NONE as i32;
+
+        let mut landed = false;
+        let (_, frames) = run_policy(&backend, ps, surf_on(), 1100, |_, ps| {
+            let grounded = ps.ground_entity_num != trace_iw4::ENTITYNUM_NONE as i32;
+            if ps.origin[2] > 3300.0 {
+                return Intent {
+                    forward: 127,
+                    ..Intent::default()
+                };
+            }
+            if !landed && grounded && ps.origin[2] < 1950.0 && ps.origin[0] > 100.0 {
+                landed = true;
+            }
+            if landed {
+                Intent {
+                    forward: 127,
+                    jump: hopping,
+                    ..Intent::default()
+                }
+            } else {
+                Intent {
+                    right: 127,
+                    ..Intent::default()
+                }
+            }
+        });
+        let portal = frames
+            .iter()
+            .position(|(origin, _)| origin[0] >= 3000.0)
+            .unwrap_or_else(|| {
+                panic!(
+                    "hopping={hopping}: never reached the end-deck portal (final {:?})",
+                    frames.last().map(|(origin, _)| *origin)
+                )
+            });
+        assert!(
+            frames[..portal]
+                .iter()
+                .all(|(origin, _)| origin[2] > 1500.0),
+            "hopping={hopping}: fell off the course before the portal"
+        );
+    }
+}
+
 #[test]
 fn layout_box_is_standable() {
     let floor = [solid(vec![

@@ -655,6 +655,11 @@ pub struct ClientMatchState {
 
     pub(crate) forced_spawn: Option<crate::SpawnPick>,
 
+    /// Layout checkpoint held this life: the life it was reached on and the
+    /// section index, so a fall returns to the last section rather than the
+    /// start. Cleared by a restart volume and by a new life.
+    pub(crate) layout_checkpoint: Option<(LifeSequence, usize)>,
+
     pub(crate) look_at_killer_yaw: i32,
 
     pub(crate) name: [u8; 16],

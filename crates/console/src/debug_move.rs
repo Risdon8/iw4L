@@ -93,6 +93,12 @@ pub(crate) fn register_debug_move_commands(registry: &mut ConsoleRegistry) {
             "force_match_start — skip waitForPlayers and matchStartTimer (needs cheats; invented)",
         ));
     }
+    if registry.resolve("checkpoint").is_none() {
+        registry.register(
+            crate::CommandSpec::new("checkpoint")
+                .usage("checkpoint [list | <index|name>] — jump to a layout section (mod)"),
+        );
+    }
 }
 
 pub(crate) fn route_debug_move_commands(
@@ -201,6 +207,113 @@ pub(crate) fn route_debug_move_commands(
                     );
                 }
             },
+            "checkpoint" => {
+                let Some(active) = map_layout::active() else {
+                    echo(
+                        "checkpoint: no active layout".into(),
+                        &mut console,
+                        &mut line,
+                    );
+                    continue;
+                };
+                let list = || {
+                    active
+                        .checkpoints
+                        .iter()
+                        .enumerate()
+                        .map(|(index, checkpoint)| {
+                            if checkpoint.name.is_empty() {
+                                index.to_string()
+                            } else {
+                                format!("{index}:{}", checkpoint.name)
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                };
+                let key = match cmd.args.first().map(String::as_str) {
+                    None | Some("list") => {
+                        let held = authority
+                            .as_ref()
+                            .and_then(|a| a.0.layout_checkpoint(local.0))
+                            .map_or("none".to_owned(), |index| index.to_string());
+                        echo(
+                            format!(
+                                "checkpoint: holding {held}; sections [{}]; usage: checkpoint <index|name>",
+                                list()
+                            ),
+                            &mut console,
+                            &mut line,
+                        );
+                        continue;
+                    }
+                    Some(key) => key,
+                };
+                let Some(index) = active.checkpoint_index(key) else {
+                    echo(
+                        format!("checkpoint: no section `{key}` (sections: {})", list()),
+                        &mut console,
+                        &mut line,
+                    );
+                    continue;
+                };
+                if !alive(&presented, local.0) {
+                    echo(
+                        "checkpoint: not Alive — spawn a class first".into(),
+                        &mut console,
+                        &mut line,
+                    );
+                    continue;
+                }
+                let Some(inbox) = inbox.as_deref_mut() else {
+                    echo(
+                        "checkpoint: no action inbox (not a listen host)".into(),
+                        &mut console,
+                        &mut line,
+                    );
+                    continue;
+                };
+                let checkpoint = &active.checkpoints[index];
+                let origin = checkpoint.origin;
+                let angles = [0.0, checkpoint.yaw, 0.0];
+                let request_id = seq.allocate();
+                if let Err(error) = inbox.push(
+                    local.0,
+                    ClientAction::Move {
+                        request_id,
+                        origin,
+                        angles,
+                    },
+                ) {
+                    echo(format!("checkpoint: {error}"), &mut console, &mut line);
+                    continue;
+                }
+                look.angles = look_angles_from_degrees(angles);
+                arm_wait_move(
+                    &mut dispatch,
+                    cmd.background,
+                    local.0,
+                    origin,
+                    angles,
+                    "checkpoint",
+                );
+                echo(
+                    format!(
+                        "checkpoint {index}: {} — queued ({:.0} {:.0} {:.0}) yaw={:.0} request_id={request_id}",
+                        if checkpoint.name.is_empty() {
+                            "section"
+                        } else {
+                            &checkpoint.name
+                        },
+                        origin[0],
+                        origin[1],
+                        origin[2],
+                        angles[1],
+                    ),
+                    &mut console,
+                    &mut line,
+                );
+            }
             "look" => match parse_look(&cmd.args, &presented, local.0) {
                 Err(msg) => echo(msg, &mut console, &mut line),
                 Ok((origin, angles)) => {

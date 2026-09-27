@@ -33,10 +33,26 @@ pub(crate) fn install_sim(content: &mut sim::SimContentBuilder, layout: &Layout)
             .iter()
             .map(|volume| (volume.min, volume.max))
             .collect(),
+        restart_volumes: layout
+            .reset
+            .restart_volumes
+            .iter()
+            .map(|volume| (volume.min, volume.max))
+            .collect(),
         respawn: layout
             .spawns
             .iter()
             .map(|spawn| (spawn.origin, spawn.yaw))
+            .collect(),
+        checkpoints: layout
+            .checkpoints
+            .iter()
+            .map(|checkpoint| sim::CheckpointRule {
+                name: checkpoint.name.clone(),
+                volume: (checkpoint.volume.min, checkpoint.volume.max),
+                origin: checkpoint.origin,
+                yaw: checkpoint.yaw,
+            })
             .collect(),
         ignore_contents: if layout.ignore_player_clip {
             map_layout::CONTENTS_PLAYER_CLIPS
@@ -46,12 +62,14 @@ pub(crate) fn install_sim(content: &mut sim::SimContentBuilder, layout: &Layout)
     };
     diag::info!(
         Sim,
-        "layout `{}`: {} collision shapes, {} spawns, reset below z {:?}, {} reset volumes, ignore player clip {}",
+        "layout `{}`: {} collision shapes, {} spawns, reset below z {:?}, {} reset volumes, {} restart volumes, {} checkpoints, ignore player clip {}",
         layout.name,
         brushes.len(),
         rules.respawn.len(),
         rules.reset_below_z,
         rules.reset_volumes.len(),
+        rules.restart_volumes.len(),
+        rules.checkpoints.len(),
         layout.ignore_player_clip
     );
     content.set_layout(brushes, rules);

@@ -1,7 +1,7 @@
 {
   "name": "highrise_playground",
   "base_map": "mp_highrise",
-  "description": "A floating movement course in the street canyon south of the Highrise towers. Walk off the start deck onto the first ramp and hold D (strafe into the ramp, no W) to surf; transfer to the second ramp, land on the mid deck, bunny-hop the platform line, run the wall-run corridor and step into the portal on the end deck to go again. Fall and you are back at the start.",
+  "description": "A floating movement course in the street canyon south of the Highrise towers. Walk off the start deck onto the first ramp and hold D (strafe into the ramp, no W) to surf; fly off the end onto the second ramp, land on the mid deck, bunny-hop the platform line, run the wall-run corridor and step into the portal on the end deck to go again. Fall and you return to the last checkpoint you stood in.",
   "movement": { "surf": true },
   "spawns": [
     { "origin": [-3000, 4500, 3312], "yaw": 0 },
@@ -12,30 +12,35 @@
   ],
   "reset": {
     "below_z": 1500,
-    "volumes": [
-      { "min": [3040, 4400, 2000], "max": [3090, 4500, 2120] }
+    "restart_volumes": [
+      { "min": [3040, 4400, 1680], "max": [3090, 4500, 1810] }
     ]
   },
+  "checkpoints": [
+    { "name": "start",    "volume": { "min": [-3130, 4370, 3250], "max": [-2870, 4630, 3400] }, "origin": [-3000, 4500, 3312] },
+    { "name": "mid",      "volume": { "min": [-100, 4230, 1885], "max": [600, 4730, 1990] }, "origin": [250, 4480, 1894] },
+    { "name": "corridor", "volume": { "min": [2140, 4340, 1695], "max": [2660, 4620, 1810] }, "origin": [2200, 4480, 1698] },
+    { "name": "end",      "volume": { "min": [2720, 4360, 1685], "max": [3020, 4600, 1810] }, "origin": [2900, 4480, 1694] }
+  ],
   "ignore_player_clip": true,
   "default_model": "ch_crate64x64",
   "shapes": [
     { "type": "box",  "name": "start_deck", "center": [-3000, 4500, 3300], "size": [384, 384, 16] },
 
     { "type": "ramp", "name": "surf_1", "center": [-2150, 4380, 2698], "length": 1400, "width": 320, "drop": 350, "yaw": 0 },
-    { "type": "ramp", "name": "surf_2", "center": [-650, 4320, 2128],  "length": 1400, "width": 320, "drop": 350, "yaw": 0 },
+    { "type": "ramp", "name": "surf_2", "center": [-650, 4380, 2128],  "length": 1400, "width": 320, "drop": 350, "yaw": 0 },
 
-    { "type": "box",  "name": "mid_deck", "center": [400, 4480, 1992], "size": [512, 512, 16] },
+    { "type": "box",  "name": "mid_deck", "center": [250, 4480, 1882], "size": [768, 512, 16] },
 
-    { "type": "box",  "name": "hop_1", "center": [840,  4430, 2004], "size": [128, 128, 16] },
-    { "type": "box",  "name": "hop_2", "center": [1100, 4530, 2016], "size": [128, 128, 16] },
-    { "type": "box",  "name": "hop_3", "center": [1360, 4430, 2028], "size": [128, 128, 16] },
-    { "type": "box",  "name": "hop_4", "center": [1620, 4530, 2040], "size": [128, 128, 16] },
+    { "type": "box",  "name": "hop_1", "center": [880,  4480, 1832], "size": [440, 384, 16] },
+    { "type": "box",  "name": "hop_2", "center": [1360, 4480, 1782], "size": [440, 384, 16] },
+    { "type": "box",  "name": "hop_3", "center": [1860, 4480, 1732], "size": [440, 384, 16] },
 
-    { "type": "box",  "name": "wallrun_left",  "center": [2240, 4330, 2192], "size": [896, 16, 320], "model": "ch_corkboard_metaltrim_4x8" },
-    { "type": "box",  "name": "wallrun_right", "center": [2240, 4630, 2192], "size": [896, 16, 320], "model": "ch_corkboard_metaltrim_4x8" },
-    { "type": "box",  "name": "wallrun_floor", "center": [2240, 4480, 2024], "size": [896, 284, 16] },
+    { "type": "box",  "name": "wallrun_left",  "center": [2414, 4330, 1850], "size": [548, 16, 320], "model": "ch_corkboard_metaltrim_4x8" },
+    { "type": "box",  "name": "wallrun_right", "center": [2414, 4630, 1850], "size": [548, 16, 320], "model": "ch_corkboard_metaltrim_4x8" },
+    { "type": "box",  "name": "wallrun_floor", "center": [2414, 4480, 1682], "size": [548, 284, 16] },
 
-    { "type": "box",  "name": "end_deck", "center": [2900, 4480, 1992], "size": [384, 384, 16] },
-    { "type": "box",  "name": "portal_frame", "center": [3065, 4450, 2152], "size": [16, 160, 16], "model": "ch_corkboard_metaltrim_4x8" }
+    { "type": "box",  "name": "end_deck", "center": [2900, 4480, 1682], "size": [384, 384, 16] },
+    { "type": "box",  "name": "portal_frame", "center": [3065, 4450, 1842], "size": [16, 160, 16], "model": "ch_corkboard_metaltrim_4x8" }
   ]
 }
