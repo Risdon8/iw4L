@@ -134,9 +134,7 @@ impl ZoneLane for T5Lane {
             stream.unsettled_offsets()
         ));
         let runtime_overrun = stream.block_overrun(fastfile_t5::XFILE_BLOCK_RUNTIME as u8);
-        report.push(format!(
-            "retail block overrun: runtime +{runtime_overrun} bytes"
-        ));
+        report.push(format!("block overrun: runtime +{runtime_overrun} bytes"));
 
         let clip = if let Some(geometry) = stream.clip_map() {
             report.push(format!(
@@ -716,7 +714,7 @@ impl ZoneLane for T5Lane {
         ));
         let gun_named = weapons.gun_xmodel_count();
         report.push(format!(
-        "common_mp weapons: {captured} captures → {} unique catalog ids (sorted; not retail bg_weaponIndex); {gun_named} with gunXModel[0]",
+        "common_mp weapons: {captured} captures → {} unique catalog ids (sorted); {gun_named} with gunXModel[0]",
         weapons.len()
     ));
         report.push(format!(

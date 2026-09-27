@@ -411,7 +411,7 @@ pub struct WeaponGeometry {
 
     pub fx_override_count: i32,
 
-    pub fx_overrides: Option<Ptr>,
+    pub overrides: Option<Ptr>,
 
     pub reload_override_count: i32,
 

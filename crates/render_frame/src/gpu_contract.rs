@@ -62,7 +62,7 @@ pub fn texture_table_bind_entries() -> [WgpuBindLayoutEntry; 4] {
         binding: u16::try_from(binding).expect("table binding fits u16"),
         visibility: WgpuShaderVisibility::VertexFragment,
         kind,
-        retail_register: None,
+        register_packed: None,
     };
     [
         entry(
@@ -102,7 +102,7 @@ pub struct WgpuBindLayoutEntry {
     pub visibility: WgpuShaderVisibility,
     pub kind: WgpuBindingKind,
 
-    pub retail_register: Option<u16>,
+    pub register_packed: Option<u16>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -192,7 +192,7 @@ pub fn derive_wgpu_pass_layout(
         binding: 0,
         visibility: WgpuShaderVisibility::VertexFragment,
         kind: WgpuBindingKind::ReadOnlyStorageBuffer,
-        retail_register: None,
+        register_packed: None,
     });
 
     bind_entries.extend(texture_table_bind_entries());

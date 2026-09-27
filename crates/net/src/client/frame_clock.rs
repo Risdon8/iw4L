@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::ServerTime;
 
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
-pub struct CgFrameClock {
+pub struct FrameClock {
     time: i32,
 
     old_time: i32,
@@ -25,9 +25,9 @@ pub struct CgFrameClock {
 }
 
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct CgameActive(pub bool);
+pub struct GameActive(pub bool);
 
-impl CgameActive {
+impl GameActive {
     pub fn get(self) -> bool {
         self.0
     }
@@ -38,7 +38,7 @@ impl CgameActive {
 }
 
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct CgameJoinCensus {
+pub struct GameJoinCensus {
     pub level_ms: Option<i32>,
 
     pub tick: Option<u32>,
@@ -46,7 +46,7 @@ pub struct CgameJoinCensus {
     pub bevy_elapsed_ms: Option<i32>,
 }
 
-impl CgameJoinCensus {
+impl GameJoinCensus {
     pub fn latch(&mut self, level_ms: i32, tick: u32, bevy_elapsed_ms: i32) {
         if self.level_ms.is_some() {
             return;
@@ -61,7 +61,7 @@ impl CgameJoinCensus {
     }
 }
 
-impl CgFrameClock {
+impl FrameClock {
     pub fn time(&self) -> i32 {
         self.time
     }

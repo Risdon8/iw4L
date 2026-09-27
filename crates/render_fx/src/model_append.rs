@@ -15,15 +15,15 @@ fn install_retained_packed(
     decoded_count: usize,
     empty: &'static str,
     missing: &'static str,
-) -> assets::RetailPackedVertexPayload {
+) -> assets::PackedVertexPayload {
     if packed_ok && packed.len() == decoded_count && !packed.is_empty() {
-        assets::RetailPackedVertexPayload::Iw4(packed)
+        assets::PackedVertexPayload::Iw4(packed)
     } else if decoded_count == 0 {
-        assets::RetailPackedVertexPayload::Unavailable {
+        assets::PackedVertexPayload::Unavailable {
             source_layout: empty,
         }
     } else {
-        assets::RetailPackedVertexPayload::Unavailable {
+        assets::PackedVertexPayload::Unavailable {
             source_layout: missing,
         }
     }
@@ -108,16 +108,16 @@ pub fn append_fx_model_asset(
     let mut packed_ok = vertices_empty
         || matches!(
             geometry.packed_vertices,
-            assets::RetailPackedVertexPayload::Iw4(_)
+            assets::PackedVertexPayload::Iw4(_)
         );
     let mut packed = match std::mem::replace(
         &mut geometry.packed_vertices,
-        assets::RetailPackedVertexPayload::Unavailable {
+        assets::PackedVertexPayload::Unavailable {
             source_layout: XMODEL_PACKED_UNAVAILABLE,
         },
     ) {
-        assets::RetailPackedVertexPayload::Iw4(rows) => rows,
-        assets::RetailPackedVertexPayload::Unavailable { .. } => Vec::new(),
+        assets::PackedVertexPayload::Iw4(rows) => rows,
+        assets::PackedVertexPayload::Unavailable { .. } => Vec::new(),
     };
     for (surface, material) in surfaces.iter().zip(materials) {
         let Some(material) = material else { continue };

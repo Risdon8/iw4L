@@ -4,7 +4,7 @@ use crate::match_state::ClientLifecycle;
 use crate::world::{ClientId, Tick};
 use crate::world_objects::{GlassPaneBasis, GlassPieceId};
 use gamemode_iw4::{
-    G_CAN_DAMAGE_CONTENTS_MASK, g_can_damage_player_vis_scale, g_radius_damage_amount,
+    G_CAN_DAMAGE_CONTENTS_MASK, can_damage_player_vis_scale, radius_damage_amount,
     radius_damage_distance_to_aabb,
 };
 
@@ -102,7 +102,7 @@ fn apply_entity_blast(world: &mut FrameWorld, blast: &ExplosionBlast) {
     for (target, mid, dist) in
         crate::gsc_ir::radius_targets(world.ecs(), blast.origin, blast.radius)
     {
-        let amount = g_radius_damage_amount(
+        let amount = radius_damage_amount(
             blast.inner_damage,
             blast.outer_damage,
             blast.radius,
@@ -152,7 +152,7 @@ pub(crate) fn apply_script_blast(
         };
         let dist = radius_damage_distance_to_aabb(blast.origin, bounds.mid(), bounds.half());
         let vis_scale = player_radius_vis_scale(world, blast.origin, target);
-        let amount = g_radius_damage_amount(blast.max, blast.min, blast.radius, dist, vis_scale);
+        let amount = radius_damage_amount(blast.max, blast.min, blast.radius, dist, vis_scale);
         if amount <= 0 {
             continue;
         }
@@ -274,11 +274,11 @@ fn radius_player_attempts(world: &FrameWorld, blast: &ExplosionBlast) -> Vec<Dam
             continue;
         };
         let bounds = world.player_area_bounds(target).unwrap_or_else(|| {
-            panic!("CM_AreaEntities returned a player without linked absolute Bounds");
+            panic!("area query returned a player without linked absolute Bounds");
         });
         let dist = radius_damage_distance_to_aabb(blast.origin, bounds.mid(), bounds.half());
         let vis_scale = player_radius_vis_scale(world, blast.origin, target);
-        let amount = g_radius_damage_amount(
+        let amount = radius_damage_amount(
             blast.inner_damage,
             blast.outer_damage,
             blast.radius,
@@ -313,7 +313,7 @@ fn radius_glass_hits(world: &FrameWorld, blast: &ExplosionBlast) -> Vec<GlassBla
     for (id, pane) in world.world_objects().glass_radius_targets() {
         let (mid, half) = glass_pane_aabb(pane);
         let dist = radius_damage_distance_to_aabb(blast.origin, mid, half);
-        let amount = g_radius_damage_amount(
+        let amount = radius_damage_amount(
             blast.inner_damage,
             blast.outer_damage,
             blast.radius,
@@ -351,7 +351,7 @@ fn apply_glass_blast_hits(world: &mut FrameWorld, tick: Tick, hits: Vec<GlassBla
             at_time_ms,
             hit.hit,
             hit.dir,
-            &mut || crate::item::g_random(&mut holdrand),
+            &mut || crate::item::random_unit(&mut holdrand),
         );
     }
     *world.stuck_holdrand_mut() = holdrand;
@@ -400,7 +400,7 @@ pub(crate) fn radius_player_candidates(
     origin: [f32; 3],
     radius: f32,
 ) -> Vec<ClientId> {
-    let area_half = gamemode_iw4::g_radius_damage_area_half_extent(radius);
+    let area_half = gamemode_iw4::radius_damage_area_half_extent(radius);
     let query =
         clipmap_iw4::AreaBounds::from_mid_half(origin, [area_half; 3]).unwrap_or_else(|_| {
             panic!("radius damage query Bounds are invalid");
@@ -428,7 +428,7 @@ pub(crate) fn apply_shared_glass_blast(
         outer_damage,
         radius,
         time,
-        &mut || crate::item::g_random(&mut holdrand),
+        &mut || crate::item::random_unit(&mut holdrand),
     );
     *world.stuck_holdrand_mut() = holdrand;
 }
@@ -438,7 +438,7 @@ fn player_radius_vis_scale(world: &FrameWorld, inflictor: [f32; 3], target: Clie
         return 1.0;
     };
     let (_, right, _) = math_iw4::angle_vectors(ps.viewangles);
-    g_can_damage_player_vis_scale(
+    can_damage_player_vis_scale(
         ps.origin,
         ps.view_height_current,
         right,

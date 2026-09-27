@@ -8,13 +8,12 @@ use bevy::ui::{Display, FocusPolicy};
 use hud_iw4::{
     ExprError, ExprHost, LowAmmoWarningQuery, Operand, PERKS_INFO_HD_MENU, SCREEN_BLEND_BLURRED,
     SPECIALTY_NULL, WEAPON_NAME_FADE_DURATION_MS, WEAPON_NAME_FADE_TAIL_MS, WEAPONBAR_HD_MENU,
-    bg_get_perk_slot_index, bg_perk_code_key, cg_draw_player_weapon_low_ammo_warning,
-    cg_fade_color, cg_is_flashbanged, cg_low_ammo_warning_color_pair,
-    cg_low_ammo_warning_pulse_frac, vec4_lerp,
+    draw_player_weapon_low_ammo_warning, fade_color, get_perk_slot_index, is_flashbanged,
+    low_ammo_warning_color_pair, low_ammo_warning_pulse_frac, perk_code_key, vec4_lerp,
 };
-use net::{CgFrameClock, CgWeaponSelect, LocalPresentClient, PresentedSnapshot};
+use net::{FrameClock, LocalPresentClient, PresentedSnapshot, WeaponSelect};
 use playerstate_iw4::{PM_TYPE_DEAD, PlayerState};
-use weapon_iw4::{bg_get_viewmodel_weapon_index, bg_player_weapons_find_slot};
+use weapon_iw4::{get_viewmodel_weapon_index, player_weapons_find_slot};
 
 use crate::ammo::{
     OWNERDRAW_CLIP, OWNERDRAW_CLIP_LEFT, OWNERDRAW_COMPASS_RING, OWNERDRAW_LOW_AMMO,
@@ -32,7 +31,7 @@ use crate::gaps::{GapCause, HudGap, HudPresentationGaps, ImageMiss};
 use crate::gpu_list::{GpuListLatch, HudTessPass, TessJob};
 use crate::images::HudImages;
 use crate::playercard::UiLocalVars;
-use crate::scorebar::sys_milliseconds;
+use crate::scorebar::milliseconds;
 use crate::weapon_name::localized_weapon_name;
 
 const EFLAGS_HIDE_AMMO_HUD: u32 = 0x100000;
@@ -107,10 +106,7 @@ impl WeaponbarExprHost<'_> {
 
 impl ExprHost for WeaponbarExprHost<'_> {
     fn ui_active(&self) -> Result<i32, ExprError> {
-        Ok(i32::from(
-            self.input
-                .is_some_and(|i| i.script_menu_open),
-        ))
+        Ok(i32::from(self.input.is_some_and(|i| i.script_menu_open)))
     }
     fn action_slot_usable(&self, slot: i32) -> Result<i32, ExprError> {
         if self
@@ -237,11 +233,11 @@ impl ExprHost for WeaponbarExprHost<'_> {
         Ok(Operand::Str(String::from(t.cell(row, col))))
     }
     fn get_perk(&self, name: &str) -> Result<Operand, ExprError> {
-        let Some(slot) = bg_get_perk_slot_index(name) else {
+        let Some(slot) = get_perk_slot_index(name) else {
             return Ok(Operand::Str(SPECIALTY_NULL.to_owned()));
         };
         let code = self.perk_slots.get(slot).copied().unwrap_or(0);
-        let Some(key) = bg_perk_code_key(code) else {
+        let Some(key) = perk_code_key(code) else {
             return Ok(Operand::Str(SPECIALTY_NULL.to_owned()));
         };
         let Some(t) = self.table("mp/perkTable.csv") else {
@@ -262,7 +258,7 @@ impl ExprHost for WeaponbarExprHost<'_> {
         let Some(ps) = self.ps else {
             return Ok(0);
         };
-        Ok(cg_is_flashbanged(
+        Ok(is_flashbanged(
             self.cg_time,
             ps.shellshock_time,
             ps.shellshock_duration,
@@ -360,7 +356,7 @@ fn paint_low_ammo(
     };
     let hands = if ammo.dual { 2 } else { 1 };
     let clip_alt = ammo.clip_alt.unwrap_or(0);
-    let Some(kind) = cg_draw_player_weapon_low_ammo_warning(LowAmmoWarningQuery {
+    let Some(kind) = draw_player_weapon_low_ammo_warning(LowAmmoWarningQuery {
         pm_type: state.ps.pm_type,
         e_flags: state.ps.e_flags,
         weapon: state.ps.weapon,
@@ -381,8 +377,8 @@ fn paint_low_ammo(
     let Some(text) = table.text(kind.loc_key()) else {
         return OwnerDrawPaint::Gap(ChromeGapKind::Localize);
     };
-    let (c1, c2) = cg_low_ammo_warning_color_pair(kind);
-    let pulse = cg_low_ammo_warning_pulse_frac(state.cg_time);
+    let (c1, c2) = low_ammo_warning_color_pair(kind);
+    let pulse = low_ammo_warning_pulse_frac(state.cg_time);
     let lerped = vec4_lerp(c1, c2, pulse);
     let color = [
         lerped[0].clamp(0.0, 1.0),
@@ -407,7 +403,7 @@ fn paint_weapon_name(
     }
     let mut color = args.color;
     if fade {
-        let Some(alpha) = cg_fade_color(
+        let Some(alpha) = fade_color(
             state.cg_time,
             state.select_time,
             WEAPON_NAME_FADE_DURATION_MS,
@@ -426,9 +422,9 @@ fn paint_weapon_name(
     }
 }
 
-fn cg_selected_weapon_index(ps: &PlayerState, selected: u32) -> u32 {
+fn selected_weapon_index(ps: &PlayerState, selected: u32) -> u32 {
     let owned = i32::try_from(selected)
-        .is_ok_and(|weapon| weapon != 0 && bg_player_weapons_find_slot(&ps.weapons, weapon) >= 0);
+        .is_ok_and(|weapon| weapon != 0 && player_weapons_find_slot(&ps.weapons, weapon) >= 0);
     if owned { selected } else { ps.weapon }
 }
 
@@ -506,7 +502,7 @@ fn background_stem(background: &str) -> Option<String> {
 const WEAPOVERLAYINTERFACE_JAVELIN: i32 = 1;
 
 fn ads_javelin(ps: &PlayerState, weapons: &PreparedWeapons) -> bool {
-    let viewmodel = bg_get_viewmodel_weapon_index(ps);
+    let viewmodel = get_viewmodel_weapon_index(ps);
     viewmodel > 0
         && ps.f_weapon_pos_frac == 1.0
         && weapons
@@ -530,15 +526,12 @@ pub(crate) struct HudPlayerVis {
 pub(crate) struct HudPlayerVisInput<'w> {
     input: Option<Res<'w, frame::HudInputView>>,
     weapons: Option<Res<'w, PreparedWeapons>>,
-    cg_clock: Res<'w, CgFrameClock>,
+    cg_clock: Res<'w, FrameClock>,
 }
 
 impl HudPlayerVisInput<'_> {
     pub(crate) fn read(&self, presented: &PresentedSnapshot, local: sim::ClientId) -> HudPlayerVis {
-        let ui_active = self
-            .input
-            .as_ref()
-            .is_some_and(|i| i.script_menu_open);
+        let ui_active = self.input.as_ref().is_some_and(|i| i.script_menu_open);
         let Some(ps) = presented.player(local) else {
             return HudPlayerVis {
                 ui_active,
@@ -549,7 +542,7 @@ impl HudPlayerVisInput<'_> {
         let weapons = self.weapons.as_deref();
         HudPlayerVis {
             ui_active,
-            flashbanged: cg_is_flashbanged(
+            flashbanged: is_flashbanged(
                 self.cg_clock.time(),
                 ps.shellshock_time,
                 ps.shellshock_duration,
@@ -559,7 +552,7 @@ impl HudPlayerVisInput<'_> {
             ) != 0,
             weapon_script: weapons
                 .map(|w| {
-                    w.0.script_name_of(bg_get_viewmodel_weapon_index(ps))
+                    w.0.script_name_of(get_viewmodel_weapon_index(ps))
                         .to_owned()
                 })
                 .unwrap_or_default(),
@@ -625,7 +618,7 @@ fn ammo_hud_hidden(ps: &PlayerState) -> bool {
 
 #[derive(bevy::ecs::system::SystemParam)]
 pub(crate) struct WeaponbarInput<'w, 's> {
-    select: Res<'w, CgWeaponSelect>,
+    select: Res<'w, WeaponSelect>,
     input: Option<Res<'w, frame::HudInputView>>,
     cameras: Query<'w, 's, &'static Projection, With<Camera3d>>,
 }
@@ -646,7 +639,7 @@ pub(crate) fn update_weaponbar(
     presented: Res<PresentedSnapshot>,
     local: Res<LocalPresentClient>,
     view: Option<Res<frame::ViewSubject>>,
-    cg_clock: Res<CgFrameClock>,
+    cg_clock: Res<FrameClock>,
     client_input: WeaponbarInput,
 ) {
     if !surface.is_ready() {
@@ -676,13 +669,13 @@ pub(crate) fn update_weaponbar(
         .snapshot()
         .and_then(|s| s.meta.for_client(local.0));
     let ammo = weapons.as_ref().and_then(|w| weaponbar_ammo(ps, w, meta));
-    let viewmodel = bg_get_viewmodel_weapon_index(ps);
+    let viewmodel = get_viewmodel_weapon_index(ps);
     let weapon_script = weapons
         .as_ref()
         .map(|w| w.0.script_name_of(viewmodel))
         .unwrap_or_default();
     let name = localized_weapon_name(
-        cg_selected_weapon_index(ps, client_input.select.index),
+        selected_weapon_index(ps, client_input.select.index),
         weapons.as_deref(),
         strings.as_deref(),
         &mut gaps,
@@ -700,7 +693,7 @@ pub(crate) fn update_weaponbar(
         weapons: weapons.as_deref(),
         ps: Some(ps),
         input: client_input.input.as_deref(),
-        ms: sys_milliseconds() as i32,
+        ms: milliseconds() as i32,
         cg_time: cg_clock.time(),
         shock_screen_type: presented
             .shellshock(local.0)

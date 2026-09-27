@@ -41,7 +41,7 @@ pub enum HudGap {
 
     DeathIcons,
 
-    RetailFont,
+    AssetFont,
 
     MenuVisExp,
 
@@ -79,7 +79,7 @@ impl ledger::Gap for HudGap {
         HudGap::HudElemMaterial,
         HudGap::AdsOverlay,
         HudGap::DeathIcons,
-        HudGap::RetailFont,
+        HudGap::AssetFont,
         HudGap::MenuVisExp,
         HudGap::EngineSplash,
         HudGap::MantleHint,
@@ -109,7 +109,7 @@ impl ledger::Gap for HudGap {
             HudGap::HudElemMaterial => "hudelem-material",
             HudGap::AdsOverlay => "ads-overlay",
             HudGap::DeathIcons => "death-icons",
-            HudGap::RetailFont => "retail-font",
+            HudGap::AssetFont => "asset-font",
             HudGap::MenuVisExp => "menu-visexp",
             HudGap::EngineSplash => "engine-splash",
             HudGap::MantleHint => "mantle-hint",
@@ -134,7 +134,7 @@ impl ledger::Gap for HudGap {
                 | HudGap::HudElemMaterial
                 | HudGap::AdsOverlay
                 | HudGap::MenuVisExp
-                | HudGap::RetailFont
+                | HudGap::AssetFont
                 | HudGap::EngineSplash
                 | HudGap::Obituary
                 | HudGap::MantleHint
@@ -461,7 +461,7 @@ impl ledger::GapCause for GapCause {
             | GapCause::MenuScriptUnsupported { .. } => HudGap::MenuVisExp,
             GapCause::NoFontCatalog
             | GapCause::FontMissing { .. }
-            | GapCause::FontAtlasMissing { .. } => HudGap::RetailFont,
+            | GapCause::FontAtlasMissing { .. } => HudGap::AssetFont,
             GapCause::SplashNoTable
             | GapCause::SplashNoMenu { .. }
             | GapCause::SplashKeyMissing { .. }

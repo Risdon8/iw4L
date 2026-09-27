@@ -7,7 +7,7 @@ use crate::anim::xmodel_pose::PosedModelSurface;
 use crate::occupancy::script_model::pose_script_dobj_with_materials;
 use crate::{
     MissileDrawPlan, MissileOwnerDraw, XMODEL_OBJECT_ID_MISSILE_BASE, append_missile_surfaces,
-    dobj_lighting_box_half,
+    lighting_box_half,
 };
 use anim_iw4::DOBJ_RADIUS_PARENT_ROOT;
 use render_scene::{
@@ -145,7 +145,7 @@ fn occupy_missile_scene_ents(
     mut occupancy: ResMut<MissileOccupancy>,
     mut scene_skels: ResMut<AnimDObjSceneSkels>,
     mut scene_submissions: MessageWriter<AnimDObjSceneSubmission>,
-    cg_clock: Option<Res<net::CgFrameClock>>,
+    cg_clock: Option<Res<net::FrameClock>>,
     local: Option<Res<net::LocalPresentClient>>,
 ) {
     occupancy.rows.clear();
@@ -174,7 +174,7 @@ fn occupy_missile_scene_ents(
         })
         .map(|link| link.projectile);
     for (index, row) in rows.iter().enumerate() {
-        if entity_iw4::cg_missile_nodraw(0, row.launch_time(), at_time).is_some() {
+        if entity_iw4::missile_nodraw(0, row.launch_time(), at_time).is_some() {
             continue;
         }
         if piloted.is_some() && row.authoritative_id() == piloted {
@@ -200,7 +200,7 @@ fn occupy_missile_scene_ents(
             net::PresentedProjectile::Predicted { .. } => row.origin_at(at_time),
         };
         let lighting_origin = missile_lighting_origin(origin);
-        let angles = entity_iw4::bg_evaluate_trajectory(&row.apos(), at_time);
+        let angles = entity_iw4::evaluate_trajectory(&row.apos(), at_time);
         let entnum = row.authoritative_id().map(|id| id.0).unwrap_or(0);
         scene_submissions.write(AnimDObjSceneSubmission {
             render_fx_flags: 0,
@@ -365,7 +365,7 @@ fn append_missile_draws(
         let box_half = entry
             .skel
             .radius
-            .and_then(|radius| dobj_lighting_box_half(&[radius], &[DOBJ_RADIUS_PARENT_ROOT]));
+            .and_then(|radius| lighting_box_half(&[radius], &[DOBJ_RADIUS_PARENT_ROOT]));
         let lookup_fallback = atpoint.fallback(row.lighting_origin, box_half);
         let pending_lighting = Some(lighting_requests.request(ModelLightingRequest {
             owner: row.lighting_owner,

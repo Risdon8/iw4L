@@ -1,6 +1,6 @@
 use entity_iw4::{
     ET_ITEM, ET_MISSILE, ET_SCRIPTMOVER, EntityState, TR_LINEAR_STOP, TR_STATIONARY, Trajectory,
-    bg_evaluate_trajectory,
+    evaluate_trajectory,
 };
 use playerstate_iw4::{GENTITY_SPAWN_BASE, buttons};
 use trace_iw4::ENTITYNUM_WORLD;
@@ -728,7 +728,7 @@ pub fn rotate_velocity_apos(
     level_time_ms: i32,
 ) -> Trajectory {
     let tr_base = if current.tr_type != 0 {
-        bg_evaluate_trajectory(current, level_time_ms)
+        evaluate_trajectory(current, level_time_ms)
     } else {
         current.tr_base
     };

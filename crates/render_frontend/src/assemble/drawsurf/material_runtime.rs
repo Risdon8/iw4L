@@ -23,8 +23,8 @@ pub use render_material::{
     StableMaterialShell, StablePassShell, TECHNIQUE_SLOT_COUNT, add_surf_has_technique,
     capture_stable_shell, draw_binds_code_texture, draw_code_sampler_mask, execute_material,
     pack_local_banks, pack_local_samplers, prepared_draw_technique, rebind_stable_material,
-    resolve_material_technique, resolve_sorted_material, smodel_tess_vertex_type,
-    sort_pass_args_retail, world_tess_vertex_type, world_tess_vertex_type_authored,
+    resolve_material_technique, resolve_sorted_material, smodel_tess_vertex_type, sort_pass_args,
+    world_tess_vertex_type, world_tess_vertex_type_authored,
 };
 
 pub use render_scene::runtime_cull_face;
@@ -1284,7 +1284,7 @@ pub fn capture_runtime_catalog(source: &assets::MaterialDefinitions) -> RuntimeM
                                 slot_index as u8,
                             ),
                         };
-                        sort_pass_args_retail(&mut runtime_pass);
+                        sort_pass_args(&mut runtime_pass);
                         runtime_pass
                     })
                     .collect();
@@ -1350,7 +1350,7 @@ pub fn capture_runtime_catalog(source: &assets::MaterialDefinitions) -> RuntimeM
             );
             let asset_id = MaterialAssetId(
                 u16::try_from(material_index)
-                    .expect("material catalog index exceeds the retail u16 asset-id domain"),
+                    .expect("material catalog index exceeds the u16 asset-id domain"),
             );
             let baked_draw_surf =
                 sorted_materials
@@ -1360,7 +1360,7 @@ pub fn capture_runtime_catalog(source: &assets::MaterialDefinitions) -> RuntimeM
                         dpvs_iw4::bake_material_draw_surf_key(dpvs_iw4::MaterialDrawSurfBakeInput {
                             sort_key: material.sort_key,
                             info_game_flags: material.info_game_flags,
-                            material_sorted_index: ordinal.retail_sort_band(),
+                            material_sorted_index: ordinal.sort_band(),
                             technique0_absent: table.is_none_or(|table| table.slots & 1 == 0),
                             technique1_present: table.is_some_and(|table| table.slots & 2 != 0),
                             material_byte_4b: material.state_flags,

@@ -10,8 +10,8 @@ use crate::{
 use entity_iw4::{
     GLASS_PROJECTILE_PANE_HOPS, GRENADE_SPIN_PITCH_MAX, GRENADE_SPIN_PITCH_MIN,
     GRENADE_SPIN_ROLL_MAX, GRENADE_SPIN_ROLL_MIN, MISSILE_GLASS_SHATTER_VEL, MissileLandAnglesIn,
-    TR_GRAVITY, TR_STATIONARY, Trajectory, bg_evaluate_trajectory, bg_evaluate_trajectory_delta,
-    g_fire_grenade_no_draw_ms, g_fire_missile_apos, g_init_grenade_apos, g_init_grenade_pos,
+    TR_GRAVITY, TR_STATIONARY, Trajectory, evaluate_trajectory, evaluate_trajectory_delta,
+    fire_grenade_no_draw_ms, fire_missile_apos, init_grenade_apos, init_grenade_pos,
     missile_land_angles,
 };
 use trace_iw4::surface_type_from_flags;
@@ -91,11 +91,11 @@ pub struct ProjectileState {
 
 impl ProjectileState {
     pub fn origin_at(&self, at_time_ms: i32) -> [f32; 3] {
-        bg_evaluate_trajectory(&self.pos, at_time_ms)
+        evaluate_trajectory(&self.pos, at_time_ms)
     }
 
     pub fn velocity_at(&self, at_time_ms: i32) -> [f32; 3] {
-        bg_evaluate_trajectory_delta(&self.pos, at_time_ms)
+        evaluate_trajectory_delta(&self.pos, at_time_ms)
     }
 
     pub fn is_armed(&self, activate_dist: i32) -> bool {
@@ -287,14 +287,14 @@ pub(crate) fn spawn_grenade_projectile(
         GrenadeLaunchKind::Thrown { .. } => grenade_spin_rates(world),
     };
     let apos = if pitch_rate == 0.0 && roll_rate == 0.0 {
-        g_fire_missile_apos(direction)
+        fire_missile_apos(direction)
     } else {
-        g_init_grenade_apos(direction, time_ms, pitch_rate, roll_rate)
+        init_grenade_apos(direction, time_ms, pitch_rate, roll_rate)
     };
     let velocity = grenade_launch_velocity(direction, &facts, owner_vel);
-    let pos = g_init_grenade_pos(origin, velocity, time_ms);
+    let pos = init_grenade_pos(origin, velocity, time_ms);
     let speed = vec3_length(velocity);
-    let launch_time = time_ms + g_fire_grenade_no_draw_ms(speed);
+    let launch_time = time_ms + fire_grenade_no_draw_ms(speed);
     let (detonate_at_ms, cleanup_at_ms) = grenade_deadlines(&facts, kind, time_ms);
     let id_projectile = world.allocate_projectile_id();
     let entnum = world
@@ -1321,7 +1321,7 @@ fn stick_missile(tick: Tick, projectile: &mut ProjectileState, origin: [f32; 3])
         tr_type: TR_STATIONARY,
         tr_time: time,
         tr_duration: 0,
-        tr_base: bg_evaluate_trajectory(&projectile.apos, time),
+        tr_base: evaluate_trajectory(&projectile.apos, time),
         tr_delta: [0.0; 3],
     };
 }
@@ -1363,7 +1363,7 @@ fn knife_impact(
         push_grenade_bounce(world, tick, projectile, surf_type);
         return;
     }
-    let mut angles = bg_evaluate_trajectory(&projectile.apos, hit_time);
+    let mut angles = evaluate_trajectory(&projectile.apos, hit_time);
     let mut origin = projectile.origin;
     if !player_hit && floor && (speed < 20.0 || incidence < 0.7) {
         let forward = forward(angles);
@@ -1405,18 +1405,18 @@ fn apply_missile_land_angles(
     let time = level_time_ms(tick);
     let prev = time.saturating_sub(crate::MATCH_TICK_MS as i32);
     let hit_time = prev.saturating_add(((time - prev) as f32 * fraction) as i32);
-    let (g_random, wall_spin_addend) = {
+    let (spin_random, wall_spin_addend) = {
         let rng = world.combat_rng_mut();
-        let g_random = rng.next_u32() as f32 * (1.0 / 4_294_967_296.0);
+        let spin_random = rng.next_u32() as f32 * (1.0 / 4_294_967_296.0);
         let wall_spin_addend = ((rng.next_u32() & 0x7f) as i32 - 63) as f32;
-        (g_random, wall_spin_addend)
+        (spin_random, wall_spin_addend)
     };
     projectile.apos = missile_land_angles(MissileLandAnglesIn {
         apos: projectile.apos,
         normal,
         hit_time_ms: hit_time,
         force_align: false,
-        g_random,
+        spin_random,
         wall_spin_addend,
     })
     .apos;

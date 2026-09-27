@@ -1,9 +1,9 @@
 use bevy::prelude::*;
-use lighting_iw4::{ComPrimaryLightCull, LIGHT_GRID_ATPOINT_EMPTY_PRIMARY, LightRegionHull};
+use lighting_iw4::{LIGHT_GRID_ATPOINT_EMPTY_PRIMARY, LightRegionHull, PrimaryLightCull};
 
 #[derive(Resource, Clone, Debug, Default)]
 pub struct DynAtPointLookup {
-    primary_light_cull: Vec<ComPrimaryLightCull>,
+    primary_light_cull: Vec<PrimaryLightCull>,
     sun_primary_light_count: u32,
     light_region_hulls: Option<Vec<Vec<assets::WorldLightRegionHull>>>,
 }
@@ -11,7 +11,7 @@ pub struct DynAtPointLookup {
 impl DynAtPointLookup {
     pub fn replace(
         &mut self,
-        primary_light_cull: Vec<ComPrimaryLightCull>,
+        primary_light_cull: Vec<PrimaryLightCull>,
         sun_primary_light_count: u32,
         light_region_hulls: Option<Vec<Vec<assets::WorldLightRegionHull>>>,
     ) {

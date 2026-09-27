@@ -47,7 +47,7 @@ fn code_transpose_matrix_rows(m: Mat4) -> Vec<[u32; 4]> {
 }
 
 pub fn hud_2d_sources(width: f32, height: f32) -> Option<RuntimeCodeSources> {
-    let projection = hud_iw4::r_cmd_buf_set_2d_projection(width as i32, height as i32)?;
+    let projection = hud_iw4::cmd_buf_set_2d_projection(width as i32, height as i32)?;
     let mut sources = RuntimeCodeSources::default();
     sources.set_constant(
         CODE_TRANSPOSE_WORLD_VIEW_PROJECTION0,
@@ -65,7 +65,7 @@ pub fn film_sources(
         .map_err(|_| PostFxSourceRefusal::InvalidDimensions { width, height })?;
     let height_i32 = i32::try_from(height)
         .map_err(|_| PostFxSourceRefusal::InvalidDimensions { width, height })?;
-    let mut projection = hud_iw4::r_cmd_buf_set_2d_projection(width_i32, height_i32)
+    let mut projection = hud_iw4::cmd_buf_set_2d_projection(width_i32, height_i32)
         .ok_or(PostFxSourceRefusal::InvalidDimensions { width, height })?;
     // Fullscreen quads must cover wgpu's half-integer pixel centers. The D3D9
     // projection shifts the right/bottom edges onto the last pixel centers,
@@ -142,7 +142,7 @@ pub fn film_sources(
 
 fn apply_glow_consts(sources: &mut RuntimeCodeSources, authored: assets::FilmVision) {
     let bits = |row: [f32; 4]| row.map(f32::to_bits);
-    match lighting_iw4::r_set_glow_info(
+    match lighting_iw4::set_glow_info(
         authored.glow_bloom_cutoff,
         authored.glow_bloom_desaturation,
         authored.glow_bloom_intensity,
@@ -228,7 +228,7 @@ impl GlowFrame {
     }
 
     pub fn using(self) -> bool {
-        lighting_iw4::r_using_glow(
+        lighting_iw4::using_glow(
             self.enable,
             self.intensity,
             self.radius,

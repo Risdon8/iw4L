@@ -129,9 +129,9 @@ pub struct CapturedCombatInput {
 
     pub quick_drop_time_ms: i32,
 
-    pub select_requires_ammo_at_0x667: Option<bool>,
+    pub select_requires_ammo: Option<bool>,
 
-    pub offhand_hold_is_cancelable_at_0x681: Option<bool>,
+    pub offhand_hold_is_cancelable: Option<bool>,
 
     pub ads_gun_kick_reduced_kick_bullets: i32,
 
@@ -255,9 +255,9 @@ pub struct WeaponCombatFacts {
 
     pub quick_drop_time_ms: i32,
 
-    pub select_requires_ammo_at_0x667: Option<bool>,
+    pub select_requires_ammo: Option<bool>,
 
-    pub offhand_hold_is_cancelable_at_0x681: Option<bool>,
+    pub offhand_hold_is_cancelable: Option<bool>,
 
     pub ads_gun_kick_reduced_kick_bullets: i32,
 
@@ -348,8 +348,8 @@ impl WeaponCombatFacts {
             knife_model: 0,
             quick_raise_time_ms: 0,
             quick_drop_time_ms: 0,
-            select_requires_ammo_at_0x667: Some(false),
-            offhand_hold_is_cancelable_at_0x681: Some(false),
+            select_requires_ammo: Some(false),
+            offhand_hold_is_cancelable: Some(false),
             ads_gun_kick_reduced_kick_bullets: 0,
             hip_gun_kick_reduced_kick_bullets: 0,
             location_damage: crate::LOCATION_DAMAGE_IDENTITY,
@@ -461,8 +461,8 @@ impl WeaponCombatFacts {
             knife_model: input.knife_model,
             quick_raise_time_ms: input.quick_raise_time_ms,
             quick_drop_time_ms: input.quick_drop_time_ms,
-            select_requires_ammo_at_0x667: input.select_requires_ammo_at_0x667,
-            offhand_hold_is_cancelable_at_0x681: input.offhand_hold_is_cancelable_at_0x681,
+            select_requires_ammo: input.select_requires_ammo,
+            offhand_hold_is_cancelable: input.offhand_hold_is_cancelable,
             ads_gun_kick_reduced_kick_bullets: input.ads_gun_kick_reduced_kick_bullets,
             hip_gun_kick_reduced_kick_bullets: input.hip_gun_kick_reduced_kick_bullets,
             location_damage: input.location_damage,
@@ -688,7 +688,7 @@ pub const CHECK_FIRING_AMMO_DRY_FIRE_MS: i32 = 500;
 
 pub const BUTTON_THROW: u32 = playerstate_iw4::buttons::THROW;
 
-pub fn pm_get_weapon_fire_button(last_weapon_hand: i32, hand_index: i32) -> u32 {
+pub fn get_weapon_fire_button(last_weapon_hand: i32, hand_index: i32) -> u32 {
     let left = hand_index != 0;
     if last_weapon_hand == 1 {
         if left { BUTTON_ATTACK } else { BUTTON_THROW }
@@ -699,7 +699,7 @@ pub fn pm_get_weapon_fire_button(last_weapon_hand: i32, hand_index: i32) -> u32 
     }
 }
 
-pub fn pm_weapon_time_adjust(
+pub fn weapon_time_adjust(
     hand: &WeaponHandState,
     facts: &WeaponCombatFacts,
     cmd: &WeaponCmd,
@@ -787,12 +787,12 @@ fn decay_offhand_family_timers(hand: &mut WeaponHandState, msec: i32) -> bool {
     delay_before > 0 && hand.weapon_delay == 0
 }
 
-pub fn pm_weapon_ordinary(
+pub fn weapon_ordinary(
     hand: &mut WeaponHandState,
     facts: &WeaponCombatFacts,
     cmd: &mut WeaponCmd,
 ) -> Option<WeaponTickEvent> {
-    if let Some(cooked) = crate::offhand::pm_weapon_update_grenade_throw(hand, cmd) {
+    if let Some(cooked) = crate::offhand::weapon_update_grenade_throw(hand, cmd) {
         return Some(cooked);
     }
 
@@ -802,10 +802,10 @@ pub fn pm_weapon_ordinary(
 
     if facts.fire_time_ms <= 0 && hand.weapon != 0 {
         let delayed_action = decay_offhand_family_timers(hand, cmd.msec);
-        if let Some(prepare) = crate::offhand::pm_weapon_check_for_offhand(hand, cmd) {
+        if let Some(prepare) = crate::offhand::weapon_check_for_offhand(hand, cmd) {
             return Some(prepare);
         }
-        return crate::offhand::pm_weapon_advance_offhand(hand, cmd, delayed_action);
+        return crate::offhand::weapon_advance_offhand(hand, cmd, delayed_action);
     }
     let fire_ty = match facts.fire_type_enum() {
         Ok(ty) => ty,
@@ -813,18 +813,18 @@ pub fn pm_weapon_ordinary(
         Err(_) => return None,
     };
 
-    let fire_mask = pm_get_weapon_fire_button(cmd.last_weapon_hand, i32::from(hand.hand_index));
+    let fire_mask = get_weapon_fire_button(cmd.last_weapon_hand, i32::from(hand.hand_index));
     let attack = cmd.buttons & fire_mask != 0;
     let was_attack = cmd.old_buttons & fire_mask != 0;
     let time_before = hand.weapon_time;
     let delay_before = hand.weapon_delay;
-    let decay_ms = pm_weapon_time_adjust(hand, facts, cmd);
+    let decay_ms = weapon_time_adjust(hand, facts, cmd);
     if hand.weapon_time > 0 {
         hand.weapon_time = (hand.weapon_time - decay_ms).max(0);
     }
 
     if time_before != 0 && hand.weapon_time < 1 {
-        pm_weapon_decay_hold_interrupt(hand, fire_ty, cmd, attack);
+        weapon_decay_hold_interrupt(hand, fire_ty, cmd, attack);
     }
     if hand.weapon_delay > 0 {
         hand.weapon_delay = (hand.weapon_delay - decay_ms).max(0);
@@ -835,14 +835,9 @@ pub fn pm_weapon_ordinary(
         hand.weapon_restrict_kick_time = (hand.weapon_restrict_kick_time - cmd.msec).max(0);
     }
 
-    crate::sprint::pm_weapon_check_for_sprint(hand, facts, cmd.pm_flags);
-    crate::sprint::pm_weapon_advance_sprint(
-        hand,
-        &mut cmd.weap_flags,
-        &mut cmd.pm_flags,
-        cmd.pm_type,
-    );
-    if let Some(melee) = crate::melee::pm_weapon_advance_melee(
+    crate::sprint::weapon_check_for_sprint(hand, facts, cmd.pm_flags);
+    crate::sprint::weapon_advance_sprint(hand, &mut cmd.weap_flags, &mut cmd.pm_flags, cmd.pm_type);
+    if let Some(melee) = crate::melee::weapon_advance_melee(
         hand,
         &facts.melee_facts(),
         &mut cmd.weap_flags,
@@ -853,12 +848,12 @@ pub fn pm_weapon_ordinary(
         return Some(melee);
     }
 
-    if let Some(prepare) = crate::offhand::pm_weapon_check_for_offhand(hand, cmd) {
+    if let Some(prepare) = crate::offhand::weapon_check_for_offhand(hand, cmd) {
         return Some(prepare);
     }
-    let mut event = crate::weapon_change::pm_weapon_check_for_change(hand, facts, cmd);
+    let mut event = crate::weapon_change::weapon_check_for_change(hand, facts, cmd);
 
-    let delayed = crate::reload::pm_weapon_reload_delayed_action(hand, facts, delayed_action);
+    let delayed = crate::reload::weapon_reload_delayed_action(hand, facts, delayed_action);
     let ammo_credited = delayed.shells;
     let rechamber_ev = delayed.rechamber_event;
     hand.delayed_rechamber = rechamber_ev;
@@ -869,21 +864,21 @@ pub fn pm_weapon_ordinary(
 
     let reload = cmd.buttons & BUTTON_RELOAD != 0;
     let reload_edge = reload && cmd.old_buttons & BUTTON_RELOAD == 0;
-    if crate::reload::pm_weapon_process_input_wants_reload(hand, facts, reload_edge, cmd.pm_flags)
-        && pm_begin_weapon_reload(hand, facts)
+    if crate::reload::weapon_process_input_wants_reload(hand, facts, reload_edge, cmd.pm_flags)
+        && begin_weapon_reload(hand, facts)
     {
         return Some(WeaponTickEvent::ReloadStarted);
     }
 
     if event.is_none() {
-        event = pm_weapon_check_for_rechamber(hand, facts, cmd, delayed_action);
+        event = weapon_check_for_rechamber(hand, facts, cmd, delayed_action);
     }
 
     match WeaponState::from_i32(hand.weaponstate) {
         Ok(WeaponState::Raising) | Ok(WeaponState::RaisingAltswitch) => {
             if hand.weapon_time <= 0 {
                 hand.weaponstate = WeaponState::Ready as i32;
-                crate::weap_anim::pm_weapon_idle_weap_anim(&mut hand.weap_anim, cmd.pm_type);
+                crate::weap_anim::weapon_idle_weap_anim(&mut hand.weap_anim, cmd.pm_type);
                 event = Some(WeaponTickEvent::RaiseFinished);
             }
         }
@@ -911,7 +906,7 @@ pub fn pm_weapon_ordinary(
                 if fire_ty.is_burst() {
                     if burst_pending(hand, fire_ty) {
                     } else {
-                        crate::weap_anim::pm_continue_weapon_anim(
+                        crate::weap_anim::continue_weapon_anim(
                             &mut hand.weap_anim,
                             crate::weap_anim::weap_anim_event::IDLE,
                             cmd.pm_type,
@@ -922,7 +917,7 @@ pub fn pm_weapon_ordinary(
                     }
                 } else {
                     if !attack && !hand.burst_latch {
-                        crate::weap_anim::pm_continue_weapon_anim(
+                        crate::weap_anim::continue_weapon_anim(
                             &mut hand.weap_anim,
                             crate::weap_anim::weap_anim_event::IDLE,
                             cmd.pm_type,
@@ -940,7 +935,7 @@ pub fn pm_weapon_ordinary(
                 }
                 let interrupt_with_shells =
                     hand.weaponstate == WeaponState::ReloadStartInterrupt as i32 && hand.clip > 0;
-                if interrupt_with_shells || !crate::reload::pm_weapon_allow_reload(hand, facts) {
+                if interrupt_with_shells || !crate::reload::weapon_allow_reload(hand, facts) {
                     event = begin_reload_end(hand, facts, cmd.pm_type);
                 } else {
                     event = begin_reload_loop(hand, facts, cmd.pm_type);
@@ -954,7 +949,7 @@ pub fn pm_weapon_ordinary(
                         hand.weaponstate = WeaponState::ReloadingInterrupt as i32;
                     }
                     if hand.weaponstate == WeaponState::ReloadingInterrupt as i32
-                        || !crate::reload::pm_weapon_allow_reload(hand, facts)
+                        || !crate::reload::weapon_allow_reload(hand, facts)
                     {
                         event = begin_reload_end(hand, facts, cmd.pm_type);
                     } else {
@@ -964,14 +959,14 @@ pub fn pm_weapon_ordinary(
                     hand.weaponstate = WeaponState::Ready as i32;
                     hand.weapon_delay = 0;
                     hand.rechamber_pending = false;
-                    crate::weap_anim::pm_weapon_idle_weap_anim(&mut hand.weap_anim, cmd.pm_type);
+                    crate::weap_anim::weapon_idle_weap_anim(&mut hand.weap_anim, cmd.pm_type);
                 }
             }
         }
         Ok(WeaponState::ReloadEnd) => {
             if hand.weapon_time <= 0 {
                 hand.weaponstate = WeaponState::Ready as i32;
-                crate::weap_anim::pm_weapon_idle_weap_anim(&mut hand.weap_anim, cmd.pm_type);
+                crate::weap_anim::weapon_idle_weap_anim(&mut hand.weap_anim, cmd.pm_type);
             }
         }
         Ok(WeaponState::Ready) => {}
@@ -982,7 +977,7 @@ pub fn pm_weapon_ordinary(
             | WeaponState::OffhandStart
             | WeaponState::OffhandEnd,
         ) => {
-            event = crate::offhand::pm_weapon_advance_offhand(hand, cmd, delayed_action);
+            event = crate::offhand::weapon_advance_offhand(hand, cmd, delayed_action);
         }
 
         Ok(
@@ -1027,11 +1022,11 @@ pub fn pm_weapon_ordinary(
         if trigger {
             if hand.clip <= 0 {
                 hand.shot_count = 0;
-                if hand.stock > 0 && pm_begin_weapon_reload(hand, facts) {
+                if hand.stock > 0 && begin_weapon_reload(hand, facts) {
                     return Some(WeaponTickEvent::ReloadStarted);
                 }
 
-                crate::weap_anim::pm_continue_weapon_anim(
+                crate::weap_anim::continue_weapon_anim(
                     &mut hand.weap_anim,
                     crate::weap_anim::weap_anim_event::IDLE,
                     cmd.pm_type,
@@ -1080,7 +1075,7 @@ pub fn pm_weapon_ordinary(
             if facts.bolt_action {
                 hand.rechamber_pending = true;
             }
-            crate::weap_anim::pm_set_fps_fire_anim(
+            crate::weap_anim::set_fps_fire_anim(
                 &mut hand.weap_anim,
                 cmd.f_weapon_pos_frac > 0.0,
                 hand.clip <= 0,
@@ -1100,8 +1095,8 @@ pub fn pm_weapon_ordinary(
     }
 }
 
-fn pm_weapon_finish_rechamber(hand: &mut WeaponHandState, pm_type: i32) {
-    crate::weap_anim::pm_continue_weapon_anim(
+fn weapon_finish_rechamber(hand: &mut WeaponHandState, pm_type: i32) {
+    crate::weap_anim::continue_weapon_anim(
         &mut hand.weap_anim,
         crate::weap_anim::weap_anim_event::IDLE,
         pm_type,
@@ -1109,7 +1104,7 @@ fn pm_weapon_finish_rechamber(hand: &mut WeaponHandState, pm_type: i32) {
     hand.weaponstate = WeaponState::Ready as i32;
 }
 
-fn pm_weapon_check_for_rechamber(
+fn weapon_check_for_rechamber(
     hand: &mut WeaponHandState,
     facts: &WeaponCombatFacts,
     cmd: &WeaponCmd,
@@ -1135,7 +1130,7 @@ fn pm_weapon_check_for_rechamber(
             && hand.weapon_time == 0
             && hand.weapon_delay == 0
         {
-            pm_weapon_finish_rechamber(hand, cmd.pm_type);
+            weapon_finish_rechamber(hand, cmd.pm_type);
         }
         return delayed_brass;
     }
@@ -1157,12 +1152,12 @@ fn pm_weapon_check_for_rechamber(
     } else {
         1
     };
-    crate::weap_anim::pm_set_rechamber_anim(&mut hand.weap_anim, cmd.f_weapon_pos_frac > 0.0);
+    crate::weap_anim::set_rechamber_anim(&mut hand.weap_anim, cmd.f_weapon_pos_frac > 0.0);
 
     Some(WeaponTickEvent::RechamberWeapon)
 }
 
-fn pm_weapon_decay_hold_interrupt(
+fn weapon_decay_hold_interrupt(
     hand: &mut WeaponHandState,
     fire_ty: FireType,
     cmd: &WeaponCmd,
@@ -1193,9 +1188,9 @@ fn pm_weapon_decay_hold_interrupt(
     }
     hand.weapon_time = 1;
     if rechamber {
-        pm_weapon_finish_rechamber(hand, cmd.pm_type);
+        weapon_finish_rechamber(hand, cmd.pm_type);
     } else {
-        crate::weap_anim::pm_continue_weapon_anim(
+        crate::weap_anim::continue_weapon_anim(
             &mut hand.weap_anim,
             crate::weap_anim::weap_anim_event::IDLE,
             cmd.pm_type,
@@ -1204,7 +1199,7 @@ fn pm_weapon_decay_hold_interrupt(
     }
 }
 
-fn pm_begin_weapon_reload(hand: &mut WeaponHandState, facts: &WeaponCombatFacts) -> bool {
+fn begin_weapon_reload(hand: &mut WeaponHandState, facts: &WeaponCombatFacts) -> bool {
     let ws = hand.weaponstate;
     if !(ws == 0 || ws == 6 || ws == 7 || (0x16 < ws && ws < 0x1a)) {
         return false;
@@ -1221,23 +1216,23 @@ fn pm_begin_weapon_reload(hand: &mut WeaponHandState, facts: &WeaponCombatFacts)
         let start = start.max(1);
         hand.weaponstate = WeaponState::ReloadStart as i32;
         hand.weapon_time = start;
-        crate::weap_anim::pm_start_weapon_anim(
+        crate::weap_anim::start_weapon_anim(
             &mut hand.weap_anim,
             crate::weap_anim::weap_anim_event::RELOAD_START,
         );
-        crate::reload::pm_weapon_arm_reload_add_delay(hand, facts, start);
+        crate::reload::weapon_arm_reload_add_delay(hand, facts, start);
         return true;
     }
     let empty = reload_from_empty_clip(hand, facts);
     let (full, anim) = crate::reload::reload_segment(hand, facts, empty);
     hand.weaponstate = WeaponState::Reloading as i32;
     hand.weapon_time = full;
-    crate::weap_anim::pm_start_weapon_anim(&mut hand.weap_anim, anim);
-    crate::reload::pm_weapon_arm_reload_add_delay(hand, facts, full);
+    crate::weap_anim::start_weapon_anim(&mut hand.weap_anim, anim);
+    crate::reload::weapon_arm_reload_add_delay(hand, facts, full);
     true
 }
 
-pub fn pm_weapon_hands(
+pub fn weapon_hands(
     hands: &mut [WeaponHandState],
     facts: &WeaponCombatFacts,
     cmd: &mut WeaponCmd,
@@ -1248,7 +1243,7 @@ pub fn pm_weapon_hands(
     cmd.melee_charge.pm_flags = cmd.pm_flags;
     cmd.melee_charge.pm_type = cmd.pm_type;
     cmd.melee_charge.e_flags = cmd.e_flags;
-    let _ = crate::melee::pm_weapon_try_melee(
+    let _ = crate::melee::weapon_try_melee(
         hands,
         &facts.melee_facts(),
         cmd.buttons,
@@ -1266,7 +1261,7 @@ pub fn pm_weapon_hands(
     let n = hands.len().min(last + 1);
     for i in 0..n {
         hands[i].hand_index = i as u8;
-        if let Some(ev) = pm_weapon_ordinary(&mut hands[i], facts, cmd) {
+        if let Some(ev) = weapon_ordinary(&mut hands[i], facts, cmd) {
             out[i] = Some((i as u8, ev));
         }
     }
@@ -1290,7 +1285,7 @@ fn begin_reload_loop(
     let empty = reload_from_empty_clip(hand, facts);
     let (full, anim) = crate::reload::reload_segment(hand, facts, empty);
     if pm_type < 8 {
-        crate::weap_anim::pm_start_weapon_anim(&mut hand.weap_anim, anim);
+        crate::weap_anim::start_weapon_anim(&mut hand.weap_anim, anim);
     }
 
     hand.weaponstate = if hand.weaponstate == WeaponState::ReloadStartInterrupt as i32 {
@@ -1300,7 +1295,7 @@ fn begin_reload_loop(
     };
     hand.weapon_time = full;
     hand.weapon_delay = 0;
-    crate::reload::pm_weapon_arm_reload_add_delay(hand, facts, full);
+    crate::reload::weapon_arm_reload_add_delay(hand, facts, full);
     Some(WeaponTickEvent::ReloadInsert)
 }
 
@@ -1316,7 +1311,7 @@ fn begin_reload_end(
         hand.weaponstate = WeaponState::ReloadEnd as i32;
         hand.weapon_time = facts.reload_end_time_ms;
         if pm_type < 8 {
-            crate::weap_anim::pm_start_weapon_anim(
+            crate::weap_anim::start_weapon_anim(
                 &mut hand.weap_anim,
                 crate::weap_anim::weap_anim_event::RELOAD_END,
             );
@@ -1325,7 +1320,7 @@ fn begin_reload_end(
     } else {
         hand.weaponstate = WeaponState::Ready as i32;
         hand.weapon_time = 0;
-        crate::weap_anim::pm_weapon_idle_weap_anim(&mut hand.weap_anim, pm_type);
+        crate::weap_anim::weapon_idle_weap_anim(&mut hand.weap_anim, pm_type);
         None
     }
 }
@@ -1359,7 +1354,7 @@ pub fn spawn_weapon_hand(weapon: u32, facts: &WeaponCombatFacts) -> WeaponHandSt
     };
     let mut weap_anim = 0;
     if raise > 0 {
-        crate::weap_anim::pm_start_weapon_anim(
+        crate::weap_anim::start_weapon_anim(
             &mut weap_anim,
             crate::weap_anim::weap_anim_event::RAISE,
         );

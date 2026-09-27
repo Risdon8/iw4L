@@ -774,7 +774,7 @@ pub(crate) fn update_script_menus(
         input.frontend_strings.as_deref()
     };
     let world = MenuWorld {
-        ms: crate::scorebar::sys_milliseconds() as i32,
+        ms: crate::scorebar::milliseconds() as i32,
         in_game,
         party: &input.party,
         dvars: snapshot

@@ -76,7 +76,7 @@ pub fn ui_get_font_handle(font_enum: i32, placement_scale: f32, text_scale: f32)
     }
 }
 
-pub fn r_normalized_text_scale(pixel_height: i32, text_scale: f32) -> f32 {
+pub fn normalized_text_scale(pixel_height: i32, text_scale: f32) -> f32 {
     if pixel_height <= 0 {
         return 0.0;
     }

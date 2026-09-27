@@ -139,9 +139,9 @@ pub struct WeaponBodyFacts {
 
     pub quick_drop_time_ms: i32,
 
-    pub select_requires_ammo_at_0x667: Option<bool>,
+    pub select_requires_ammo: Option<bool>,
 
-    pub offhand_hold_is_cancelable_at_0x681: Option<bool>,
+    pub offhand_hold_is_cancelable: Option<bool>,
 
     pub move_speed_scale: f32,
 
@@ -149,15 +149,15 @@ pub struct WeaponBodyFacts {
 
     pub sprint_duration_scale: f32,
 
-    pub stance_ofs_at_0x168: [f32; 3],
+    pub ducked_ofs: [f32; 3],
 
-    pub stance_ofs_at_0x18c: [f32; 3],
+    pub prone_ofs: [f32; 3],
 
     pub night_vision_wear_time: i32,
 
-    pub ads_bob_factor_at_0x330: f32,
+    pub ads_bob_factor: f32,
 
-    pub ads_view_bob_mult_at_0x334: f32,
+    pub ads_view_bob_mult: f32,
 
     pub movement: WeaponMovementOfsInputs,
 
@@ -1118,7 +1118,7 @@ impl WeaponCombatFx {
         self.present_bound(self.explosion, &self.explosion_hint)
     }
 
-    pub fn fx_edges(&self) -> [AssetEdge<FxSpace>; 7] {
+    pub fn edges(&self) -> [AssetEdge<FxSpace>; 7] {
         [
             self.view_flash,
             self.world_flash,
@@ -1392,9 +1392,7 @@ impl WeaponCatalog {
                 .and_then(|p| read_name(stream, p)),
             name: name.to_owned(),
             weap_def: geometry.weap_def.map(ptr_key),
-            display_name_key: geometry
-                .display_name_at_0x8
-                .and_then(|ptr| read_name(stream, ptr)),
+            display_name_key: geometry.display_name.and_then(|ptr| read_name(stream, ptr)),
             reticle: WeaponReticleAssets {
                 center_material: None,
                 side_material: None,
@@ -1402,7 +1400,7 @@ impl WeaponCatalog {
                 side_edge: AssetEdge::Absent,
                 center_image: None,
                 side_image: None,
-                center_size: geometry.reticle_center_size_at_0x128,
+                center_size: geometry.reticle_center_size,
                 side_size: geometry.i_reticle_side_size,
                 center_authored: geometry.reticle_center_material_slot.is_some(),
                 side_authored: geometry.reticle_side_material_slot.is_some(),
@@ -1667,16 +1665,16 @@ impl WeaponCatalog {
                 knife_model: geometry.knife_model,
                 quick_raise_time_ms: geometry.quick_raise_time_ms,
                 quick_drop_time_ms: geometry.quick_drop_time_ms,
-                select_requires_ammo_at_0x667: geometry.select_requires_ammo_at_0x667,
-                offhand_hold_is_cancelable_at_0x681: geometry.offhand_hold_is_cancelable_at_0x681,
+                select_requires_ammo: geometry.select_requires_ammo,
+                offhand_hold_is_cancelable: geometry.offhand_hold_is_cancelable,
                 move_speed_scale: geometry.move_speed_scale,
                 ads_move_speed_scale: geometry.ads_move_speed_scale,
                 sprint_duration_scale: geometry.sprint_duration_scale,
-                stance_ofs_at_0x168: geometry.stance_ofs_at_0x168,
-                stance_ofs_at_0x18c: geometry.stance_ofs_at_0x18c,
+                ducked_ofs: geometry.ducked_ofs,
+                prone_ofs: geometry.prone_ofs,
                 night_vision_wear_time: geometry.night_vision_wear_time,
-                ads_bob_factor_at_0x330: geometry.ads_bob_factor_at_0x330,
-                ads_view_bob_mult_at_0x334: geometry.ads_view_bob_mult_at_0x334,
+                ads_bob_factor: geometry.ads_bob_factor,
+                ads_view_bob_mult: geometry.ads_view_bob_mult,
                 movement: movement_from_capture(geometry.movement),
                 idle: idle_from_capture(geometry.idle),
                 clip_size: geometry.clip_size,
@@ -2010,7 +2008,7 @@ impl WeaponCatalog {
     }
 
     pub fn resolve_projectile_fx_edges(&mut self, fx: &crate::FxCatalog) {
-        let ns = crate::fx_body_namespace(self.capture_ns);
+        let ns = crate::body_namespace(self.capture_ns);
         for entry in &mut self.entries {
             stamp_fx_edge(
                 entry.proj_trail_slot,
@@ -2364,7 +2362,7 @@ impl WeaponCatalog {
     pub fn combat_fx_census(&self) -> AssetEdgeCensus {
         let mut census = AssetEdgeCensus::default();
         for entry in &self.entries {
-            for edge in entry.combat_fx.fx_edges() {
+            for edge in entry.combat_fx.edges() {
                 census.push(edge);
             }
         }
@@ -2441,7 +2439,7 @@ fn stamp_combat_fx(
     fx: &crate::FxCatalog,
     tracers: &crate::TracerCatalog,
 ) {
-    let ns = crate::fx_body_namespace(ns);
+    let ns = crate::body_namespace(ns);
     combat.namespace = ns;
     stamp_fx_edge(
         slots.view_flash,
@@ -2543,38 +2541,6 @@ fn sound_alias_in_bank<'a>(
     let name = hint.filter(|name| !name.is_empty())?;
     let order = catalog.index_in(ns, name)?;
     Some((catalog.namespace_of_alias(order), catalog.name_at(order)?))
-}
-
-fn xanim_hint_edge(
-    hint: Option<&str>,
-    ns: crate::AssetNamespace,
-    xanims: &crate::XAnimCatalog,
-) -> AssetEdge<XAnimSpace> {
-    let hint = hint.filter(|name| !name.is_empty());
-    match hint {
-        None => AssetEdge::Absent,
-        Some(name) => match xanims.index_by_name(ns, name) {
-            Some(index) => AssetEdge::bind_order(index, xanims.zone_of(index)),
-            None => AssetEdge::Unresolved(AssetEdgeReason::CatalogMiss),
-        },
-    }
-}
-
-fn fx_hint_edge(
-    authored_slot: bool,
-    hint: Option<&str>,
-    ns: crate::AssetNamespace,
-    fx: &crate::FxCatalog,
-) -> AssetEdge<FxSpace> {
-    let hint = hint.filter(|name| !name.is_empty());
-    if !authored_slot && hint.is_none() {
-        return AssetEdge::Absent;
-    }
-    let ns = crate::fx_body_namespace(ns);
-    match hint.and_then(|name| fx.index_in(ns, name)) {
-        Some(index) => AssetEdge::bind_order(index, fx.zone_of(index)),
-        None => AssetEdge::Unresolved(AssetEdgeReason::CatalogMiss),
-    }
 }
 
 fn ptr_key(p: Ptr) -> (u8, u32) {
@@ -3028,7 +2994,7 @@ fn capture_t5_body_facts(
         alternate_drop_time_ms: geometry.alternate_drop_time_ms,
         raise_time_ms: geometry.raise_time_ms,
         bolt_action: geometry.bolt_action,
-        select_requires_ammo_at_0x667: Some(leftover_t5_select_requires_ammo()),
+        select_requires_ammo: Some(leftover_t5_select_requires_ammo()),
         ..WeaponBodyFacts::default()
     };
     if let Some(body) = geometry.weap_def {
@@ -3090,7 +3056,7 @@ fn capture_t5_body_facts(
     facts.hold_fire_time_ms = i32_at_t5(stream, body, sz::WEAPON_DEF_HOLD_FIRE_TIME_OFF);
     facts.fuse_time_ms = i32_at_t5(stream, body, sz::WEAPON_DEF_FUSE_TIME_OFF);
     facts.cook_off_hold = u8_at_t5(stream, body, sz::WEAPON_DEF_COOK_OFF_HOLD_OFF) != 0;
-    facts.offhand_hold_is_cancelable_at_0x681 =
+    facts.offhand_hold_is_cancelable =
         Some(u8_at_t5(stream, body, sz::WEAPON_DEF_OFFHAND_HOLD_IS_CANCELABLE_OFF) != 0);
     facts.parallel_bounce = read_bounce_array_t5(stream, body, sz::WEAPON_DEF_PARALLEL_BOUNCE_OFF);
     facts.perpendicular_bounce =
@@ -3139,12 +3105,12 @@ fn capture_t5_body_facts(
     facts.no_partial_reload = u8_at_t5(stream, body, sz::WEAPON_DEF_NO_PARTIAL_RELOAD_OFF) != 0;
     facts.segmented_reload = u8_at_t5(stream, body, sz::WEAPON_DEF_SEGMENTED_RELOAD_OFF) != 0;
     facts.idle = WeaponIdleInputs {
-        ads_idle_amount_at_0x36c: f32_at_t5(stream, body, sz::WEAPON_DEF_ADS_IDLE_AMOUNT_OFF),
-        hip_idle_amount_at_0x370: f32_at_t5(stream, body, sz::WEAPON_DEF_HIP_IDLE_AMOUNT_OFF),
-        ads_idle_speed_at_0x374: f32_at_t5(stream, body, sz::WEAPON_DEF_ADS_IDLE_SPEED_OFF),
-        hip_idle_speed_at_0x378: f32_at_t5(stream, body, sz::WEAPON_DEF_HIP_IDLE_SPEED_OFF),
-        idle_crouch_factor_at_0x37c: f32_at_t5(stream, body, sz::WEAPON_DEF_IDLE_CROUCH_FACTOR_OFF),
-        idle_prone_factor_at_0x380: f32_at_t5(stream, body, sz::WEAPON_DEF_IDLE_PRONE_FACTOR_OFF),
+        ads_idle_amount: f32_at_t5(stream, body, sz::WEAPON_DEF_ADS_IDLE_AMOUNT_OFF),
+        hip_idle_amount: f32_at_t5(stream, body, sz::WEAPON_DEF_HIP_IDLE_AMOUNT_OFF),
+        ads_idle_speed: f32_at_t5(stream, body, sz::WEAPON_DEF_ADS_IDLE_SPEED_OFF),
+        hip_idle_speed: f32_at_t5(stream, body, sz::WEAPON_DEF_HIP_IDLE_SPEED_OFF),
+        idle_crouch_factor: f32_at_t5(stream, body, sz::WEAPON_DEF_IDLE_CROUCH_FACTOR_OFF),
+        idle_prone_factor: f32_at_t5(stream, body, sz::WEAPON_DEF_IDLE_PRONE_FACTOR_OFF),
     };
     facts.inherits_perks = leftover_t5_inherits_host_perks();
     facts.kick = leftover_t5_kick(stream, geometry);
@@ -3506,7 +3472,7 @@ fn capture_iw5_body_facts(
         u8_at_iw5(stream, body, sz::WEAPON_DEF_NO_PARTIAL_RELOAD_OFF, 2456) != 0;
     facts.segmented_reload =
         u8_at_iw5(stream, body, sz::WEAPON_DEF_SEGMENTED_RELOAD_OFF, 2457) != 0;
-    facts.select_requires_ammo_at_0x667 = Some(
+    facts.select_requires_ammo = Some(
         u8_at_iw5(
             stream,
             body,
@@ -3514,7 +3480,7 @@ fn capture_iw5_body_facts(
             2450,
         ) != 0,
     );
-    facts.offhand_hold_is_cancelable_at_0x681 = Some(
+    facts.offhand_hold_is_cancelable = Some(
         u8_at_iw5(
             stream,
             body,
@@ -3523,32 +3489,12 @@ fn capture_iw5_body_facts(
         ) != 0,
     );
     facts.idle = WeaponIdleInputs {
-        ads_idle_amount_at_0x36c: f32_at_iw5(
-            stream,
-            body,
-            sz::WEAPON_DEF_ADS_IDLE_AMOUNT_OFF,
-            1472,
-        ),
-        hip_idle_amount_at_0x370: f32_at_iw5(
-            stream,
-            body,
-            sz::WEAPON_DEF_HIP_IDLE_AMOUNT_OFF,
-            1476,
-        ),
-        ads_idle_speed_at_0x374: f32_at_iw5(stream, body, sz::WEAPON_DEF_ADS_IDLE_SPEED_OFF, 1480),
-        hip_idle_speed_at_0x378: f32_at_iw5(stream, body, sz::WEAPON_DEF_HIP_IDLE_SPEED_OFF, 1484),
-        idle_crouch_factor_at_0x37c: f32_at_iw5(
-            stream,
-            body,
-            sz::WEAPON_DEF_IDLE_CROUCH_FACTOR_OFF,
-            1488,
-        ),
-        idle_prone_factor_at_0x380: f32_at_iw5(
-            stream,
-            body,
-            sz::WEAPON_DEF_IDLE_PRONE_FACTOR_OFF,
-            1492,
-        ),
+        ads_idle_amount: f32_at_iw5(stream, body, sz::WEAPON_DEF_ADS_IDLE_AMOUNT_OFF, 1472),
+        hip_idle_amount: f32_at_iw5(stream, body, sz::WEAPON_DEF_HIP_IDLE_AMOUNT_OFF, 1476),
+        ads_idle_speed: f32_at_iw5(stream, body, sz::WEAPON_DEF_ADS_IDLE_SPEED_OFF, 1480),
+        hip_idle_speed: f32_at_iw5(stream, body, sz::WEAPON_DEF_HIP_IDLE_SPEED_OFF, 1484),
+        idle_crouch_factor: f32_at_iw5(stream, body, sz::WEAPON_DEF_IDLE_CROUCH_FACTOR_OFF, 1488),
+        idle_prone_factor: f32_at_iw5(stream, body, sz::WEAPON_DEF_IDLE_PRONE_FACTOR_OFF, 1492),
     };
     facts.offhand_class = i32_at_iw5(stream, body, sz::WEAPON_DEF_OFFHAND_CLASS_OFF, 104);
     facts.hold_fire_time_ms = i32_at_iw5(stream, body, sz::WEAPON_DEF_HOLD_FIRE_TIME_OFF, 948);
@@ -4033,17 +3979,17 @@ fn read_iw5_combat_fx(
     let Some(body) = geometry.weap_def else {
         return WeaponCombatFx::default();
     };
-    let fx_name = |x86, x64| match stream.ptr_at(body, stream.layout(x86, x64)) {
+    let name = |x86, x64| match stream.ptr_at(body, stream.layout(x86, x64)) {
         Ok(fastfile_iw5::ZonePtr::Offset(q)) => fx_name_at_slot(stream.resolve_alias(q)),
         _ => None,
     };
-    let view_last_shot_eject_hint = fx_name(sz::WEAPON_DEF_VIEW_LAST_SHOT_EJECT_OFF, 544);
-    let world_last_shot_eject_hint = fx_name(sz::WEAPON_DEF_WORLD_LAST_SHOT_EJECT_OFF, 552);
+    let view_last_shot_eject_hint = name(sz::WEAPON_DEF_VIEW_LAST_SHOT_EJECT_OFF, 544);
+    let world_last_shot_eject_hint = name(sz::WEAPON_DEF_WORLD_LAST_SHOT_EJECT_OFF, 552);
     WeaponCombatFx {
-        view_flash_hint: fx_name(sz::WEAPON_DEF_VIEW_FLASH_OFF, 112),
-        world_flash_hint: fx_name(sz::WEAPON_DEF_WORLD_FLASH_OFF, 120),
-        view_shell_eject_hint: fx_name(sz::WEAPON_DEF_VIEW_SHELL_EJECT_OFF, 528),
-        world_shell_eject_hint: fx_name(sz::WEAPON_DEF_WORLD_SHELL_EJECT_OFF, 536),
+        view_flash_hint: name(sz::WEAPON_DEF_VIEW_FLASH_OFF, 112),
+        world_flash_hint: name(sz::WEAPON_DEF_WORLD_FLASH_OFF, 120),
+        view_shell_eject_hint: name(sz::WEAPON_DEF_VIEW_SHELL_EJECT_OFF, 528),
+        world_shell_eject_hint: name(sz::WEAPON_DEF_WORLD_SHELL_EJECT_OFF, 536),
         last_shot_eject_pair_authored: view_last_shot_eject_hint.is_some()
             && world_last_shot_eject_hint.is_some(),
         view_last_shot_eject_hint,
@@ -4058,7 +4004,7 @@ fn read_iw5_fx_overrides(
     fx_name_at_slot: &dyn Fn(fastfile_iw5::Ptr) -> Option<String>,
 ) -> Vec<Iw5FxOverride> {
     geometry
-        .fx_overrides(stream)
+        .overrides(stream)
         .map(|row| Iw5FxOverride {
             attachment1: row.attachment1,
             attachment2: row.attachment2,
@@ -4516,60 +4462,60 @@ fn stance_ofs_captured(duck: &[f32; 3], prone: &[f32; 3]) -> bool {
 }
 
 fn movement_ofs_captured(m: &WeaponMovementOfsInputs) -> bool {
-    m.stand_move_at_0x138.iter().any(|v| *v != 0.0)
-        || m.stand_rot_at_0x144.iter().any(|v| *v != 0.0)
-        || m.strafe_move_at_0x150.iter().any(|v| *v != 0.0)
-        || m.strafe_rot_at_0x15c.iter().any(|v| *v != 0.0)
-        || m.ducked_move_at_0x174.iter().any(|v| *v != 0.0)
-        || m.ducked_rot_at_0x180.iter().any(|v| *v != 0.0)
-        || m.prone_move_at_0x198.iter().any(|v| *v != 0.0)
-        || m.prone_rot_at_0x1a4.iter().any(|v| *v != 0.0)
-        || m.pos_move_rate_at_0x1b0 != 0.0
-        || m.pos_prone_move_rate_at_0x1b4 != 0.0
-        || m.stand_move_min_speed_at_0x1b8 != 0.0
-        || m.ducked_move_min_speed_at_0x1bc != 0.0
-        || m.prone_move_min_speed_at_0x1c0 != 0.0
-        || m.pos_rot_rate_at_0x1c4 != 0.0
-        || m.pos_prone_rot_rate_at_0x1c8 != 0.0
+    m.stand_move.iter().any(|v| *v != 0.0)
+        || m.stand_rot.iter().any(|v| *v != 0.0)
+        || m.strafe_move.iter().any(|v| *v != 0.0)
+        || m.strafe_rot.iter().any(|v| *v != 0.0)
+        || m.ducked_move.iter().any(|v| *v != 0.0)
+        || m.ducked_rot.iter().any(|v| *v != 0.0)
+        || m.prone_move.iter().any(|v| *v != 0.0)
+        || m.prone_rot.iter().any(|v| *v != 0.0)
+        || m.pos_move_rate != 0.0
+        || m.pos_prone_move_rate != 0.0
+        || m.stand_move_min_speed != 0.0
+        || m.ducked_move_min_speed != 0.0
+        || m.prone_move_min_speed != 0.0
+        || m.pos_rot_rate != 0.0
+        || m.pos_prone_rot_rate != 0.0
 }
 
 fn movement_from_capture(c: WeaponMovementOfsCapture) -> WeaponMovementOfsInputs {
     WeaponMovementOfsInputs {
-        stand_move_at_0x138: c.stand_move_at_0x138,
-        stand_rot_at_0x144: c.stand_rot_at_0x144,
-        strafe_move_at_0x150: c.strafe_move_at_0x150,
-        strafe_rot_at_0x15c: c.strafe_rot_at_0x15c,
-        ducked_move_at_0x174: c.ducked_move_at_0x174,
-        ducked_rot_at_0x180: c.ducked_rot_at_0x180,
-        prone_move_at_0x198: c.prone_move_at_0x198,
-        prone_rot_at_0x1a4: c.prone_rot_at_0x1a4,
-        pos_move_rate_at_0x1b0: c.pos_move_rate_at_0x1b0,
-        pos_prone_move_rate_at_0x1b4: c.pos_prone_move_rate_at_0x1b4,
-        stand_move_min_speed_at_0x1b8: c.stand_move_min_speed_at_0x1b8,
-        ducked_move_min_speed_at_0x1bc: c.ducked_move_min_speed_at_0x1bc,
-        prone_move_min_speed_at_0x1c0: c.prone_move_min_speed_at_0x1c0,
-        pos_rot_rate_at_0x1c4: c.pos_rot_rate_at_0x1c4,
-        pos_prone_rot_rate_at_0x1c8: c.pos_prone_rot_rate_at_0x1c8,
+        stand_move: c.stand_move,
+        stand_rot: c.stand_rot,
+        strafe_move: c.strafe_move,
+        strafe_rot: c.strafe_rot,
+        ducked_move: c.ducked_move,
+        ducked_rot: c.ducked_rot,
+        prone_move: c.prone_move,
+        prone_rot: c.prone_rot,
+        pos_move_rate: c.pos_move_rate,
+        pos_prone_move_rate: c.pos_prone_move_rate,
+        stand_move_min_speed: c.stand_move_min_speed,
+        ducked_move_min_speed: c.ducked_move_min_speed,
+        prone_move_min_speed: c.prone_move_min_speed,
+        pos_rot_rate: c.pos_rot_rate,
+        pos_prone_rot_rate: c.pos_prone_rot_rate,
     }
 }
 
 fn idle_captured(i: &WeaponIdleInputs) -> bool {
-    i.ads_idle_amount_at_0x36c != 0.0
-        || i.hip_idle_amount_at_0x370 != 0.0
-        || i.ads_idle_speed_at_0x374 != 0.0
-        || i.hip_idle_speed_at_0x378 != 0.0
-        || i.idle_crouch_factor_at_0x37c != 0.0
-        || i.idle_prone_factor_at_0x380 != 0.0
+    i.ads_idle_amount != 0.0
+        || i.hip_idle_amount != 0.0
+        || i.ads_idle_speed != 0.0
+        || i.hip_idle_speed != 0.0
+        || i.idle_crouch_factor != 0.0
+        || i.idle_prone_factor != 0.0
 }
 
 fn idle_from_capture(c: WeaponIdleCapture) -> WeaponIdleInputs {
     WeaponIdleInputs {
-        ads_idle_amount_at_0x36c: c.ads_idle_amount_at_0x36c,
-        hip_idle_amount_at_0x370: c.hip_idle_amount_at_0x370,
-        ads_idle_speed_at_0x374: c.ads_idle_speed_at_0x374,
-        hip_idle_speed_at_0x378: c.hip_idle_speed_at_0x378,
-        idle_crouch_factor_at_0x37c: c.idle_crouch_factor_at_0x37c,
-        idle_prone_factor_at_0x380: c.idle_prone_factor_at_0x380,
+        ads_idle_amount: c.ads_idle_amount,
+        hip_idle_amount: c.hip_idle_amount,
+        ads_idle_speed: c.ads_idle_speed,
+        hip_idle_speed: c.hip_idle_speed,
+        idle_crouch_factor: c.idle_crouch_factor,
+        idle_prone_factor: c.idle_prone_factor,
     }
 }
 
@@ -4621,11 +4567,11 @@ fn merge_body_facts(dst: &mut WeaponBodyFacts, src: WeaponBodyFacts) {
     if !sway_body_captured(&dst.sway) && sway_body_captured(&src.sway) {
         dst.sway = src.sway;
     }
-    if !stance_ofs_captured(&dst.stance_ofs_at_0x168, &dst.stance_ofs_at_0x18c)
-        && stance_ofs_captured(&src.stance_ofs_at_0x168, &src.stance_ofs_at_0x18c)
+    if !stance_ofs_captured(&dst.ducked_ofs, &dst.prone_ofs)
+        && stance_ofs_captured(&src.ducked_ofs, &src.prone_ofs)
     {
-        dst.stance_ofs_at_0x168 = src.stance_ofs_at_0x168;
-        dst.stance_ofs_at_0x18c = src.stance_ofs_at_0x18c;
+        dst.ducked_ofs = src.ducked_ofs;
+        dst.prone_ofs = src.prone_ofs;
     }
     if dst.night_vision_wear_time == 0 {
         dst.night_vision_wear_time = src.night_vision_wear_time;
@@ -4637,12 +4583,12 @@ fn merge_body_facts(dst: &mut WeaponBodyFacts, src: WeaponBodyFacts) {
     if !idle_captured(&dst.idle) && idle_captured(&src.idle) {
         dst.idle = src.idle;
     }
-    if dst.select_requires_ammo_at_0x667.is_none() {
-        dst.select_requires_ammo_at_0x667 = src.select_requires_ammo_at_0x667;
+    if dst.select_requires_ammo.is_none() {
+        dst.select_requires_ammo = src.select_requires_ammo;
         dst.quick_drop_time_ms = src.quick_drop_time_ms;
     }
-    if dst.offhand_hold_is_cancelable_at_0x681.is_none() {
-        dst.offhand_hold_is_cancelable_at_0x681 = src.offhand_hold_is_cancelable_at_0x681;
+    if dst.offhand_hold_is_cancelable.is_none() {
+        dst.offhand_hold_is_cancelable = src.offhand_hold_is_cancelable;
     }
     if dst.drop_time_ms == 0 {
         dst.drop_time_ms = src.drop_time_ms;
@@ -5312,23 +5258,20 @@ impl WeaponBuild {
     pub fn resolve_projectile_fx_edges(&mut self, fx: &crate::FxCatalog) {
         for row in &mut self.registry.rows {
             row.projectile_fx = WeaponProjectileFx {
-                trail: fx_hint_edge(
+                trail: fx.hint_edge(
                     row.proj_trail_from_slot,
                     row.proj_trail.as_deref(),
                     row.namespace,
-                    fx,
                 ),
-                beacon: fx_hint_edge(
+                beacon: fx.hint_edge(
                     row.proj_beacon_from_slot,
                     row.proj_beacon.as_deref(),
                     row.namespace,
-                    fx,
                 ),
-                ignition: fx_hint_edge(
+                ignition: fx.hint_edge(
                     row.proj_ignition_from_slot,
                     row.proj_ignition.as_deref(),
                     row.namespace,
-                    fx,
                 ),
             };
         }
@@ -5338,14 +5281,14 @@ impl WeaponBuild {
         for row in &mut self.registry.rows {
             let mut edges = [AssetEdge::Absent; WEAPON_ANIM_SLOTS];
             for (edge, hint) in edges.iter_mut().zip(row.sz_xanims.iter()) {
-                *edge = xanim_hint_edge(hint.as_deref(), row.namespace, xanims);
+                *edge = xanims.hint_edge(hint.as_deref(), row.namespace);
             }
             row.sz_xanim_edges = edges;
             row.sz_xanim_right_edges = std::array::from_fn(|slot| {
-                xanim_hint_edge(row.sz_xanims_right[slot].as_deref(), row.namespace, xanims)
+                xanims.hint_edge(row.sz_xanims_right[slot].as_deref(), row.namespace)
             });
             row.sz_xanim_left_edges = std::array::from_fn(|slot| {
-                xanim_hint_edge(row.sz_xanims_left[slot].as_deref(), row.namespace, xanims)
+                xanims.hint_edge(row.sz_xanims_left[slot].as_deref(), row.namespace)
             });
         }
     }
@@ -7275,7 +7218,7 @@ impl WeaponRegistry {
     pub fn combat_fx_census(&self) -> AssetEdgeCensus {
         let mut census = AssetEdgeCensus::default();
         for row in self.rows.iter().skip(1) {
-            for edge in row.combat_fx.fx_edges() {
+            for edge in row.combat_fx.edges() {
                 census.push(edge);
             }
         }
@@ -7288,7 +7231,7 @@ impl WeaponRegistry {
             .skip(1)
             .filter(|row| {
                 row.combat_fx
-                    .fx_edges()
+                    .edges()
                     .iter()
                     .any(|edge| edge.is_unresolved())
             })
@@ -7631,8 +7574,8 @@ fn apply_iw5_parameter_blocks(facts: &mut WeaponBodyFacts, assets: &[&Iw5ScopeRo
         facts.ads_zoom_fov = ads.ads_zoom_fov;
         facts.ads_zoom_in_frac = ads.ads_zoom_in_frac;
         facts.ads_zoom_out_frac = ads.ads_zoom_out_frac;
-        facts.ads_bob_factor_at_0x330 = ads.ads_bob_factor;
-        facts.ads_view_bob_mult_at_0x334 = ads.ads_view_bob_mult;
+        facts.ads_bob_factor = ads.ads_bob_factor;
+        facts.ads_view_bob_mult = ads.ads_view_bob_mult;
         // Attachment transition times are seconds; the rates are per millisecond.
         if ads.ads_trans_in_time > 0.0 {
             facts.ads_in_rate = 1.0 / (ads.ads_trans_in_time * 1000.0);
@@ -7709,14 +7652,14 @@ fn apply_iw5_parameter_blocks(facts: &mut WeaponBodyFacts, assets: &[&Iw5ScopeRo
     }
 
     if let Some(idle) = iw5_first_block(assets, |a| a.idle_settings) {
-        facts.idle.hip_idle_amount_at_0x370 = idle.hip_idle_amount;
-        facts.idle.hip_idle_speed_at_0x378 = idle.hip_idle_speed;
-        facts.idle.idle_crouch_factor_at_0x37c = idle.idle_crouch_factor;
-        facts.idle.idle_prone_factor_at_0x380 = idle.idle_prone_factor;
+        facts.idle.hip_idle_amount = idle.hip_idle_amount;
+        facts.idle.hip_idle_speed = idle.hip_idle_speed;
+        facts.idle.idle_crouch_factor = idle.idle_crouch_factor;
+        facts.idle.idle_prone_factor = idle.idle_prone_factor;
     }
     let idle_scale = iw5_scale_product(assets, |s| s.idle_settings);
-    facts.idle.hip_idle_amount_at_0x370 *= idle_scale;
-    facts.idle.ads_idle_amount_at_0x36c *= idle_scale;
+    facts.idle.hip_idle_amount *= idle_scale;
+    facts.idle.ads_idle_amount *= idle_scale;
 
     if let Some(spread) = iw5_first_block(assets, |a| a.hip_spread) {
         let v = spread.values;

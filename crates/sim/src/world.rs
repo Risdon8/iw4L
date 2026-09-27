@@ -164,10 +164,7 @@ impl PlayerKitCollision {
     fn reuse_key(&self) -> xmodel_runtime::DObjReuseKey {
         xmodel_runtime::DObjReuseKey {
             e_type: entity_iw4::ET_PLAYER,
-            model: xmodel_runtime::dobj_model_token(&[
-                self.body_key.as_str(),
-                self.head_key.as_str(),
-            ]),
+            model: xmodel_runtime::model_token(&[self.body_key.as_str(), self.head_key.as_str()]),
         }
     }
 }
@@ -291,7 +288,7 @@ pub struct SimContentBuilder {
     player_kits: [PlayerKitCollision; 2],
     player_anim_tree: Option<Arc<xmodel_runtime::XAnimTreeDefinition>>,
     player_anim_node_names: Vec<String>,
-    mantle_xanims: Arc<crate::MantleXAnimBind>,
+    xanims: Arc<crate::MantleXAnimBind>,
     weapon_script_names: Arc<[String]>,
     weapon_setups: Arc<[Option<WeaponSetup>]>,
     weapon_world_models: Vec<(String, Vec<String>)>,
@@ -361,7 +358,7 @@ impl SimContentBuilder {
     }
 
     pub fn set_mantle_xanims(&mut self, bind: crate::MantleXAnimBind) {
-        self.mantle_xanims = Arc::new(bind);
+        self.xanims = Arc::new(bind);
     }
 
     pub fn set_weapon_script_names(&mut self, names: Vec<String>) {
@@ -988,8 +985,8 @@ impl SimState {
         }
     }
 
-    pub fn mantle_xanims(&self) -> Arc<crate::MantleXAnimBind> {
-        Arc::clone(&self.content.data.mantle_xanims)
+    pub fn xanims(&self) -> Arc<crate::MantleXAnimBind> {
+        Arc::clone(&self.content.data.xanims)
     }
 
     pub fn player_body_pose_kind(&self) -> &'static str {
@@ -1126,7 +1123,7 @@ impl SimState {
         id
     }
 
-    pub fn dobj_anim_mat(&self, entnum: i32, bone: i32) -> Option<entity_iw4::DObjAnimMat> {
+    pub fn anim_mat(&self, entnum: i32, bone: i32) -> Option<entity_iw4::DObjAnimMat> {
         self.dobj_anim_mats.get(&(entnum, bone)).copied()
     }
 
@@ -1269,7 +1266,7 @@ impl SimState {
         let world_bounds =
             clipmap_iw4::AreaBounds::from_mins_maxs(world_model.mins, world_model.maxs)
                 .unwrap_or_else(|_| {
-                    panic!("CM_AreaEntities world cmodel Bounds are invalid");
+                    panic!("area query: world cmodel Bounds are invalid");
                 });
         self.area_entity_world = Some(clipmap_iw4::AreaEntityWorld::new(world_bounds));
     }
@@ -1285,7 +1282,7 @@ impl SimState {
             return false;
         };
         let entity_num = u16::try_from(id.0).unwrap_or_else(|_| {
-            panic!("player entity index does not fit the retail 1024-entry CM world");
+            panic!("player entity index does not fit the 1024-entry collision world");
         });
         let absmin = [
             origin[0] + mins[0] - 1.0,
@@ -1310,7 +1307,7 @@ impl SimState {
                 [absmax[0], absmax[1]],
             )
             .unwrap_or_else(|_| {
-                panic!("CM_LinkEntity rejected player link state");
+                panic!("collision link rejected player link state");
             });
         true
     }
@@ -1320,10 +1317,10 @@ impl SimState {
             return false;
         };
         let Ok(entity_num) = u16::try_from(id.0) else {
-            panic!("player entity index does not fit the retail 1024-entry CM world");
+            panic!("player entity index does not fit the 1024-entry collision world");
         };
         area_world.translate(entity_num, delta).unwrap_or_else(|_| {
-            panic!("CM_LinkEntity rejected translated player Bounds");
+            panic!("collision link rejected translated player Bounds");
         })
     }
 
@@ -1332,10 +1329,10 @@ impl SimState {
             return false;
         };
         let Ok(entity_num) = u16::try_from(id.0) else {
-            panic!("player entity index does not fit the retail 1024-entry CM world");
+            panic!("player entity index does not fit the 1024-entry collision world");
         };
         area_world.unlink(entity_num).unwrap_or_else(|_| {
-            panic!("CM_UnlinkEntity rejected player entity index");
+            panic!("collision unlink rejected player entity index");
         })
     }
 
@@ -1359,7 +1356,7 @@ impl SimState {
         self.area_entity_world
             .as_ref()
             .unwrap_or_else(|| {
-                panic!("CM_AreaEntities needs an initialized world cmodel Bounds root");
+                panic!("area query needs an initialized world cmodel Bounds root");
             })
             .query(bounds, mask, capacity)
     }
@@ -2111,7 +2108,7 @@ impl SimState {
             let reuse = self
                 .player_dobjs
                 .get(&id.0)
-                .is_some_and(|slot| xmodel_runtime::dobj_reuse_matches(slot.reuse_key, key));
+                .is_some_and(|slot| xmodel_runtime::reuse_matches(slot.reuse_key, key));
             if reuse {
                 if let Some(slot) = self.player_dobjs.get_mut(&id.0) {
                     slot.persist = 1;
@@ -2680,7 +2677,7 @@ impl SimState {
                 };
                 crate::item::DroppedItem {
                     state: *state,
-                    origin: entity_iw4::bg_evaluate_trajectory(
+                    origin: entity_iw4::evaluate_trajectory(
                         &trajectory,
                         snapshot.meta.entity_kernel.level_time_ms,
                     ),
@@ -3420,17 +3417,12 @@ pub(crate) fn give_weapon_to_ps_akimbo(ps: &mut PlayerState, weapon: u32, akimbo
     if ps.weapons.iter().all(|&slot| slot != weapon as i32) {
         if let Some(slot) = ps.weapons.first_mut() {
             *slot = weapon as i32;
-            weapon_iw4::bg_latch_weapon_dual_wield(
-                &ps.weapons,
-                &mut ps.weapon_data,
-                weapon,
-                akimbo,
-            );
+            weapon_iw4::latch_weapon_dual_wield(&ps.weapons, &mut ps.weapon_data, weapon, akimbo);
         }
     }
     ps.weapon = weapon;
     ps.weapon_primary = weapon;
-    ps.last_weapon_hand = weapon_iw4::pm_num_hands_for_held(&ps.weapons, &ps.weapon_data, weapon);
+    ps.last_weapon_hand = weapon_iw4::num_hands_for_held(&ps.weapons, &ps.weapon_data, weapon);
 }
 
 pub(crate) fn inventory_add_weapon(ps: &mut PlayerState, weapon: u32, akimbo: bool) {
@@ -3443,7 +3435,7 @@ pub(crate) fn inventory_add_weapon(ps: &mut PlayerState, weapon: u32, akimbo: bo
             *slot = want;
         }
     }
-    weapon_iw4::bg_latch_weapon_dual_wield(&ps.weapons, &mut ps.weapon_data, weapon, akimbo);
+    weapon_iw4::latch_weapon_dual_wield(&ps.weapons, &mut ps.weapon_data, weapon, akimbo);
 }
 
 pub fn blank_player_state() -> PlayerState {

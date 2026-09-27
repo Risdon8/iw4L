@@ -7,10 +7,10 @@ use bevy::prelude::*;
 use entity_iw4::client_state_name;
 use frame::LaunchIdentity;
 use gamemode_iw4::{ParsedScores, Score};
-use hud_iw4::{ALIGN_CENTER, r_normalized_text_scale};
+use hud_iw4::{ALIGN_CENTER, normalized_text_scale};
 use net::{
-    CgScores, ClientActionInput, LocalPresentClient, MasterBridge, MasterBridgeState,
-    PresentedSnapshot,
+    ClientActionInput, LocalPresentClient, MasterBridge, MasterBridgeState, PresentedSnapshot,
+    Scoreboard,
 };
 use sim::{ClientLifecycle, MatchPhase, Snapshot};
 
@@ -153,7 +153,7 @@ impl BoardDraw<'_> {
         } else {
             x
         };
-        let nscale = r_normalized_text_scale(self.font.pixel_height, scale);
+        let nscale = normalized_text_scale(self.font.pixel_height, scale);
         let r = self.surface.apply_rect(
             x - 320.0,
             y - 240.0,
@@ -282,7 +282,7 @@ pub(crate) fn update_scoreboard(
     strings: Option<Res<PreparedLocalizedStrings>>,
     identity: Option<Res<LaunchIdentity>>,
     session_icons: Option<Res<SessionTeamSettings>>,
-    scores: Option<Res<CgScores>>,
+    scores: Option<Res<Scoreboard>>,
     bridge: Option<Res<MasterBridge>>,
     mut hud_images: ResMut<HudImages>,
     mut images: ResMut<Assets<Image>>,

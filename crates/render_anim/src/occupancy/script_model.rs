@@ -370,8 +370,8 @@ fn sample_script_mover_pose(
     at_time_ms: i32,
 ) -> ([f32; 3], [f32; 3]) {
     (
-        entity_iw4::bg_evaluate_trajectory(&runtime.current.pos, at_time_ms),
-        entity_iw4::bg_evaluate_trajectory(&runtime.current.apos, at_time_ms),
+        entity_iw4::evaluate_trajectory(&runtime.current.pos, at_time_ms),
+        entity_iw4::evaluate_trajectory(&runtime.current.apos, at_time_ms),
     )
 }
 
@@ -381,7 +381,7 @@ fn apply_script_mover_centity_pose(
     runtimes: Query<&net::CEntityRuntime>,
     mut owners: Query<(&WorldScriptModelInstance, &mut Transform)>,
     mut persist: ResMut<ScriptModelDobjs>,
-    cg_clock: Option<Res<net::CgFrameClock>>,
+    cg_clock: Option<Res<net::FrameClock>>,
 ) {
     persist.mover_pose.clear();
     let Some(slots) = slots else {
@@ -455,7 +455,7 @@ fn occupy_script_model_scene_ents(
             continue;
         };
         let skel_refs: Vec<&assets::ModelSkel> = skels.iter().map(|skel| skel.as_ref()).collect();
-        if dobj_lod_culled(
+        if lod_culled(
             &skel_refs,
             transform.translation.to_array(),
             eye,
@@ -587,7 +587,7 @@ fn pose_script_models(
         };
         let origin = transform.translation.to_array();
 
-        if dobj_lod_culled(&skels, origin, eye, skinned_ramp) {
+        if lod_culled(&skels, origin, eye, skinned_ramp) {
             if let Some(id) = focused_owner_id {
                 focus.refuse(id, &owner.current_model.0, "lod_culled");
             }
@@ -945,7 +945,7 @@ fn script_dobj_reuse_key(state: &assets::dobj::DObjSemanticState) -> assets::dob
     }
     assets::dobj::DObjReuseKey {
         e_type: entity_iw4::ET_SCRIPTMOVER,
-        model: assets::dobj::dobj_model_token(&parts),
+        model: assets::dobj::model_token(&parts),
     }
 }
 
@@ -1080,7 +1080,7 @@ fn compose_or_reuse_script_dobj(
     let reuse = persist
         .by_id
         .get(&id)
-        .is_some_and(|slot| assets::dobj::dobj_reuse_matches(slot.reuse_key, key));
+        .is_some_and(|slot| assets::dobj::reuse_matches(slot.reuse_key, key));
     if reuse {
         return Some(());
     }
@@ -1175,7 +1175,7 @@ pub(crate) fn submodel_camera_lod(
     smodel_camera_lod(skel.lod, view.origin, 1.0, view.eye, view.ramp)
 }
 
-fn dobj_lod_culled(
+fn lod_culled(
     skels: &[&assets::ModelSkel],
     origin: [f32; 3],
     eye: Option<[f32; 3]>,

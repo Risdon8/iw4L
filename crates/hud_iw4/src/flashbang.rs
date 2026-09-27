@@ -12,7 +12,7 @@ pub const SCREEN_BLEND_FLASHED: i32 = 1;
 pub const SCREEN_BLEND_NONE: i32 = 2;
 
 #[must_use]
-pub fn cg_is_flashbanged(cg_time: i32, start_time: i32, duration: i32, screen_type: i32) -> i32 {
+pub fn is_flashbanged(cg_time: i32, start_time: i32, duration: i32, screen_type: i32) -> i32 {
     let remaining = start_time.wrapping_sub(cg_time).wrapping_add(duration);
     if remaining < 1 {
         0
@@ -28,13 +28,13 @@ const FLASH_FADE_HALF: f32 = 0.5;
 const FLASH_FADE_PI: f32 = 3.141592741012573;
 
 #[must_use]
-pub fn cg_shellshock_flash_fade_sin_cos(percent: f32) -> f32 {
+pub fn shellshock_flash_fade_sin_cos(percent: f32) -> f32 {
     let s = libm::sinf((percent - FLASH_FADE_HALF) * FLASH_FADE_PI);
     (s + 1.0) * FLASH_FADE_HALF
 }
 
 #[must_use]
-pub fn cg_shellshock_flash_blend(
+pub fn shellshock_flash_blend(
     remaining_ms: i32,
     white_fade_ms: i32,
     shot_fade_ms: i32,
@@ -54,8 +54,8 @@ pub fn cg_shellshock_flash_blend(
         dt / shot_fade_ms as f32
     };
     Some((
-        cg_shellshock_flash_fade_sin_cos(white_lin),
-        cg_shellshock_flash_fade_sin_cos(shot_lin),
+        shellshock_flash_fade_sin_cos(white_lin),
+        shellshock_flash_fade_sin_cos(shot_lin),
     ))
 }
 

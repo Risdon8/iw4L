@@ -5,7 +5,7 @@ use crate::{
     AnimInstance, Attach, DObj, DObjError, HidePartBits, Local, ModelPoseSrc, PartBits,
     XAnimTreeError, XAnimTreeRuntime,
 };
-use anim_iw4::xanim_apply_additive;
+use anim_iw4::apply_additive;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BoneCollision {
@@ -390,7 +390,7 @@ fn apply_additive_layers(
             {
                 continue;
             }
-            let (rot, trans) = xanim_apply_additive(
+            let (rot, trans) = apply_additive(
                 dest[i].rotation,
                 dest[i].translation,
                 add[i].rotation,

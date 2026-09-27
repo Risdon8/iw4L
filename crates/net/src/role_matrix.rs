@@ -155,7 +155,7 @@ pub fn worker_cmd_graph() -> Result<(), String> {
         let expected = WORKER_CMD_RETAIL_NAMES[index];
         if name != expected {
             return Err(format!(
-                "worker_cmd_name({set:?}) = {name:?}, retail table[{index}] = {expected:?}"
+                "worker_cmd_name({set:?}) = {name:?}, table[{index}] = {expected:?}"
             ));
         }
     }
@@ -182,7 +182,7 @@ pub fn worker_cmd_graph() -> Result<(), String> {
     ];
     if WORKER_CMD_END_FENCE != fence.as_slice() {
         return Err(format!(
-            "WORKER_CMD_END_FENCE {WORKER_CMD_END_FENCE:?} != retail vertex writers {fence:?}"
+            "WORKER_CMD_END_FENCE {WORKER_CMD_END_FENCE:?} != vertex writers {fence:?}"
         ));
     }
     Ok(())

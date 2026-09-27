@@ -1,5 +1,5 @@
-use crate::pm_weapon::{WeaponCombatFacts, WeaponHandState};
-use crate::weap_anim::{pm_set_weap_anim, pm_start_weapon_anim, weap_anim_event};
+use crate::tick::{WeaponCombatFacts, WeaponHandState};
+use crate::weap_anim::{set_weap_anim, start_weapon_anim, weap_anim_event};
 use crate::weaponstate::WeaponState;
 use playerstate_iw4::pm_flags;
 
@@ -108,21 +108,21 @@ fn hand_blocks_melee(hand: &WeaponHandState) -> bool {
     (1..=5).contains(&ws)
 }
 
-pub fn pm_weapon_has_charge_melee(facts: &MeleeWeaponFacts) -> bool {
+pub fn weapon_has_charge_melee(facts: &MeleeWeaponFacts) -> bool {
     facts.melee_charge_anim && facts.melee_charge_time_ms > 0
 }
 
-pub fn pm_weapon_start_melee_uses_charge(
+pub fn weapon_start_melee_uses_charge(
     charge: &MeleeChargeState,
     player_melee_range: f32,
     facts: &MeleeWeaponFacts,
 ) -> bool {
     (charge.pm_flags & pm_flags::MELEE_CHARGE) != 0
         && (charge.melee_charge_dist as f32) > player_melee_range
-        && pm_weapon_has_charge_melee(facts)
+        && weapon_has_charge_melee(facts)
 }
 
-pub fn pm_melee_charge_start(
+pub fn melee_charge_start(
     charge: &mut MeleeChargeState,
     cmd_melee_charge_yaw: f32,
     cmd_melee_charge_dist: u8,
@@ -147,7 +147,7 @@ pub fn pm_melee_charge_start(
     }
 }
 
-pub fn pm_weapon_settle_ready(
+pub fn weapon_settle_ready(
     hand: &mut WeaponHandState,
     weap_flags: &mut u32,
     pm_flags_word: &mut u32,
@@ -158,10 +158,10 @@ pub fn pm_weapon_settle_ready(
     hand.weapon_time = 0;
     hand.weapon_delay = 0;
     hand.weaponstate = WeaponState::Ready as i32;
-    crate::weap_anim::pm_weapon_idle_weap_anim(&mut hand.weap_anim, pm_type);
+    crate::weap_anim::weapon_idle_weap_anim(&mut hand.weap_anim, pm_type);
 }
 
-pub fn pm_weapon_start_melee(
+pub fn weapon_start_melee(
     primary: &mut WeaponHandState,
     mut secondary: Option<&mut WeaponHandState>,
     facts: &MeleeWeaponFacts,
@@ -190,7 +190,7 @@ pub fn pm_weapon_start_melee(
 
     if pm_type <= 7 {
         let mut sec_anim = secondary.as_ref().map(|h| h.weap_anim).unwrap_or(0);
-        pm_set_weap_anim(
+        set_weap_anim(
             &mut primary.weap_anim,
             &mut sec_anim,
             last_weapon_hand,
@@ -215,7 +215,7 @@ pub fn pm_weapon_start_melee(
     }
 }
 
-pub fn pm_weapon_try_melee(
+pub fn weapon_try_melee(
     hands: &mut [WeaponHandState],
     facts: &MeleeWeaponFacts,
     buttons: u32,
@@ -253,17 +253,17 @@ pub fn pm_weapon_try_melee(
         }
     }
 
-    pm_melee_charge_start(
+    melee_charge_start(
         charge,
         cmd_melee_charge_yaw,
         cmd_melee_charge_dist,
         is_in_air,
     );
-    let use_charge = pm_weapon_start_melee_uses_charge(charge, player_melee_range, facts);
+    let use_charge = weapon_start_melee_uses_charge(charge, player_melee_range, facts);
 
     let (primary, rest) = hands.split_first_mut().expect("non-empty");
     let secondary = rest.first_mut();
-    pm_weapon_start_melee(
+    weapon_start_melee(
         primary,
         secondary,
         facts,
@@ -274,11 +274,11 @@ pub fn pm_weapon_try_melee(
     true
 }
 
-pub fn pm_weapon_melee_to_fire(hand: &mut WeaponHandState) {
+pub fn weapon_melee_to_fire(hand: &mut WeaponHandState) {
     hand.weaponstate = WeaponState::MeleeFire as i32;
 }
 
-pub fn pm_weapon_melee_to_end(
+pub fn weapon_melee_to_end(
     hand: &mut WeaponHandState,
     facts: &MeleeWeaponFacts,
     weap_flags: &mut u32,
@@ -290,14 +290,14 @@ pub fn pm_weapon_melee_to_end(
         hand.weapon_time = facts.quick_raise_time_ms.max(1);
         hand.weapon_delay = 0;
         if pm_type < 8 {
-            pm_start_weapon_anim(&mut hand.weap_anim, weap_anim_event::QUICK_RAISE);
+            start_weapon_anim(&mut hand.weap_anim, weap_anim_event::QUICK_RAISE);
         }
     } else {
-        pm_weapon_settle_ready(hand, weap_flags, pm_flags_word, pm_type);
+        weapon_settle_ready(hand, weap_flags, pm_flags_word, pm_type);
     }
 }
 
-pub fn pm_weapon_advance_melee(
+pub fn weapon_advance_melee(
     hand: &mut WeaponHandState,
     facts: &MeleeWeaponFacts,
     weap_flags: &mut u32,
@@ -313,15 +313,15 @@ pub fn pm_weapon_advance_melee(
     }
     match ws {
         WeaponState::MeleeInit => {
-            pm_weapon_melee_to_fire(hand);
+            weapon_melee_to_fire(hand);
             Some(crate::WeaponTickEvent::MeleeFired)
         }
         WeaponState::MeleeFire => {
-            pm_weapon_melee_to_end(hand, facts, weap_flags, pm_flags_word, pm_type);
+            weapon_melee_to_end(hand, facts, weap_flags, pm_flags_word, pm_type);
             None
         }
         WeaponState::MeleeEnd => {
-            pm_weapon_settle_ready(hand, weap_flags, pm_flags_word, pm_type);
+            weapon_settle_ready(hand, weap_flags, pm_flags_word, pm_type);
             None
         }
         _ => None,

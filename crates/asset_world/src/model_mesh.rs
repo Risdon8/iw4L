@@ -221,11 +221,11 @@ pub struct ModelSurfaceDraw {
 
     pub xsurface_vert_offset: u16,
 
-    pub collision: RetailXSurfaceCollisionPayload,
+    pub collision: XSurfaceCollisionPayload,
 }
 
 #[derive(Clone, Debug)]
-pub enum RetailXSurfaceCollisionPayload {
+pub enum XSurfaceCollisionPayload {
     Iw4(Vec<OwnedXRigidVertListCollision>),
     Unavailable { source_layout: &'static str },
 }
@@ -246,12 +246,12 @@ pub struct OwnedXSurfaceCollisionTree {
 }
 
 #[derive(Clone, Debug)]
-pub enum RetailPackedVertexPayload {
+pub enum PackedVertexPayload {
     Iw4(Vec<[u8; asset_iw4::size::GFX_PACKED_VERTEX]>),
     Unavailable { source_layout: &'static str },
 }
 
-impl Default for RetailPackedVertexPayload {
+impl Default for PackedVertexPayload {
     fn default() -> Self {
         Self::Unavailable {
             source_layout: "packed vertex payload not installed",
@@ -353,7 +353,7 @@ pub struct MapXModelSceneCatalog {
 
     phys_preset_name_hint_n: usize,
 
-    dynent_phys_preset_n: usize,
+    phys_preset_n: usize,
 
     surface_materials: BTreeMap<MapXModelAssetKey, Vec<Option<crate::MaterialIndex>>>,
     resolved: bool,
@@ -505,12 +505,12 @@ impl MapXModelSceneCatalog {
         self.phys_preset_name_hint_n
     }
 
-    pub fn dynent_phys_preset_n(&self) -> usize {
-        self.dynent_phys_preset_n
+    pub fn phys_preset_n(&self) -> usize {
+        self.phys_preset_n
     }
 
     pub fn set_dynent_phys_preset_n(&mut self, n: usize) {
-        self.dynent_phys_preset_n = n;
+        self.phys_preset_n = n;
     }
 
     pub fn note_xmodel_phys_preset(&mut self, slot: bool, named: bool) {
@@ -1320,7 +1320,7 @@ pub fn build_iw5_xmodel_mesh(
             )),
             xsurface_base_index: 0,
             xsurface_vert_offset: 0,
-            collision: RetailXSurfaceCollisionPayload::Unavailable {
+            collision: XSurfaceCollisionPayload::Unavailable {
                 source_layout: "IW5 XSurface collision layout not retained",
             },
         });
@@ -1353,10 +1353,10 @@ fn capture_iw4_xsurface_collision(
     surface: Ptr,
     surface_index: usize,
     surface_tri_count: usize,
-) -> Result<RetailXSurfaceCollisionPayload, ModelMeshError> {
+) -> Result<XSurfaceCollisionPayload, ModelMeshError> {
     let count = stream.u32_at(surface, stream.layout(32, 48))? as usize;
     if count == 0 {
-        return Ok(RetailXSurfaceCollisionPayload::Iw4(Vec::new()));
+        return Ok(XSurfaceCollisionPayload::Iw4(Vec::new()));
     }
     let lists = resolved_ptr(stream, surface, stream.layout(36, 56))?;
     stream.slice_at(
@@ -1402,7 +1402,7 @@ fn capture_iw4_xsurface_collision(
             tree,
         });
     }
-    Ok(RetailXSurfaceCollisionPayload::Iw4(trees))
+    Ok(XSurfaceCollisionPayload::Iw4(trees))
 }
 
 fn capture_iw4_collision_tree(
@@ -1481,10 +1481,10 @@ fn capture_t5_xsurface_collision(
     surface: fastfile_t5::Ptr,
     surface_index: usize,
     surface_tri_count: usize,
-) -> Result<RetailXSurfaceCollisionPayload, ModelMeshError> {
+) -> Result<XSurfaceCollisionPayload, ModelMeshError> {
     let count = stream.u8_at(surface, 1)? as usize;
     if count == 0 {
-        return Ok(RetailXSurfaceCollisionPayload::Iw4(Vec::new()));
+        return Ok(XSurfaceCollisionPayload::Iw4(Vec::new()));
     }
     let lists = resolved_ptr_t5(stream, surface, 40)?;
     stream.slice_at(lists, 0, count * fastfile_t5::size::XRIGID_VERT_LIST)?;
@@ -1528,7 +1528,7 @@ fn capture_t5_xsurface_collision(
             tree,
         });
     }
-    Ok(RetailXSurfaceCollisionPayload::Iw4(trees))
+    Ok(XSurfaceCollisionPayload::Iw4(trees))
 }
 
 fn capture_t5_collision_tree(

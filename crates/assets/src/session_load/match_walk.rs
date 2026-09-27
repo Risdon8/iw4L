@@ -574,7 +574,7 @@ pub(super) async fn walk_prepared_match(
             stage.finish_from(&decoded);
             match decoded {
                 Ok(n) => report.push(format!(
-                    "IWD light attenuation: decoded {n} of {want} GfxLightDef images (Image_LoadFromIwi; empty payload is not a host ramp)"
+                    "IWD light attenuation: decoded {n} of {want} GfxLightDef images (empty payload is not a host ramp)"
                 )),
                 Err(error) => report.push(format!("IWD light attenuation: {error}")),
             }
@@ -636,7 +636,7 @@ pub(super) async fn walk_prepared_match(
         .map(str::to_owned)
         .collect();
     for name in &unique {
-        let bind = crate::fx_material_bind_name(name);
+        let bind = crate::material_bind_name(name);
         let twins: Vec<&str> = global
             .materials
             .iter()
@@ -748,7 +748,7 @@ pub(super) async fn walk_prepared_match(
             materials.namespace_count(crate::AssetNamespace::Iw5),
         ));
         report.push(format!(
-            "fx elem material edges after absorb: {} bound ({} unique), {} unresolved (temp={}, catalog_miss={}), {} absent of {} Material* visuals (FxElemDef+0xbc); {} decal mark arms ({} Bound slots, {} unresolved, {} temp, {} array-unpatched)",
+            "fx elem material edges after absorb: {} bound ({} unique), {} unresolved (temp={}, catalog_miss={}), {} absent of {} material visuals; {} decal mark arms ({} Bound slots, {} unresolved, {} temp, {} array-unpatched)",
             world.fx.material_visual_bound_count(),
             world.fx.material_visual_unique_bound_count(),
             world.fx.material_visual_unresolved_count(),
@@ -805,7 +805,7 @@ pub(super) async fn walk_prepared_match(
             .unique_bound_hints()
             .into_iter()
             .chain(world.fx.unique_decal_mark_hints())
-            .filter(|(index, _)| !crate::fx_color_decoded_in_catalog(&global, *index))
+            .filter(|(index, _)| !crate::color_decoded_in_catalog(&global, *index))
             .filter_map(|(index, _)| {
                 let material = global.materials.get(index)?;
                 Some(crate::MaterialKey {
@@ -837,7 +837,7 @@ pub(super) async fn walk_prepared_match(
             .fx
             .unique_bound_hints()
             .into_iter()
-            .filter(|(index, _)| !crate::fx_color_decoded_in_catalog(&global, *index))
+            .filter(|(index, _)| !crate::color_decoded_in_catalog(&global, *index))
             .map(|(index, hint)| (index, hint.to_owned()))
             .collect();
         if !nocolor.is_empty() {

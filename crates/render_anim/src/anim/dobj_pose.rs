@@ -46,7 +46,7 @@ struct HostDObjPose {
 pub enum HostDObjPoseRefuse {
     MissingDObj,
     BoneCountOverflow,
-    Retail(fx_iw4::FxGetBoneOrientationRefuse),
+    Bone(fx_iw4::BoneOrientationRefuse),
     Frame(assets::dobj::DObjBoneOrientationError),
 }
 
@@ -68,21 +68,20 @@ impl HostDObjPoseFrame {
         entity_world: Mat4,
         bone_world: &[Mat4],
     ) -> Result<(), HostDObjPoseRefuse> {
-        let entity = assets::dobj::dobj_bone_orientation(&[entity_world], 0)
+        let entity = assets::dobj::bone_orientation(&[entity_world], 0)
             .map_err(HostDObjPoseRefuse::Frame)?;
         let mut bones = Vec::with_capacity(bone_world.len());
         for matrix in bone_world {
             let world = entity_world * *matrix;
             bones.push(
-                assets::dobj::dobj_bone_orientation(&[world], 0)
-                    .map_err(HostDObjPoseRefuse::Frame)?,
+                assets::dobj::bone_orientation(&[world], 0).map_err(HostDObjPoseRefuse::Frame)?,
             );
         }
         self.by_dobj.insert(
             dobj,
             HostDObjPose {
                 current_valid,
-                centity_teleport: fx_iw4::fx_bolt_spawn_teleport_bit(dobj, next_state_eflags),
+                centity_teleport: fx_iw4::bolt_spawn_teleport_bit(dobj, next_state_eflags),
                 entity,
                 bones,
             },
@@ -101,9 +100,8 @@ impl HostDObjPoseFrame {
             .ok_or(HostDObjPoseRefuse::MissingDObj)?;
         let count =
             u8::try_from(pose.bones.len()).map_err(|_| HostDObjPoseRefuse::BoneCountOverflow)?;
-        let route =
-            fx_iw4::fx_get_bone_orientation_route(dobj, pose.current_valid, bone, Some(count))
-                .map_err(HostDObjPoseRefuse::Retail)?;
+        let route = fx_iw4::get_bone_orientation_route(dobj, pose.current_valid, bone, Some(count))
+            .map_err(HostDObjPoseRefuse::Bone)?;
         let orientation = match route {
             fx_iw4::FxGetBoneOrientationRoute::EntityPose => pose.entity,
             fx_iw4::FxGetBoneOrientationRoute::DObjBone(index) => pose.bones[index as usize],

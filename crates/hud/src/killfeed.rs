@@ -6,17 +6,17 @@ use hud_iw4::{
     GAME_MSG_WIN0_HORZ_ALIGN, GAME_MSG_WIN0_LINE_COUNT, GAME_MSG_WIN0_MSG_TIME_MS,
     GAME_MSG_WIN0_TEXT_SCALE, GAME_MSG_WIN0_TEXT_STYLE, GAME_MSG_WIN0_VERT_ALIGN, GAME_MSG_WIN0_X,
     KILLICON_DIED, game_msg_win0_line_y, gamenotify_line, killicon_stretch_uv,
-    killicon_virtual_size, obituary_mod, obituary_mod_killicon, r_normalized_text_scale,
+    killicon_virtual_size, normalized_text_scale, obituary_mod, obituary_mod_killicon,
 };
 use net::LocalPresentClient;
 
-use crate::chrome::r_text_width;
+use crate::chrome::text_width;
 use crate::draw2d::{Draw2dCmd, Draw2dList, Draw2dOp, Draw2dProvenance, tessellate_fonts};
 use crate::font_overlay::HUD_SMALL_FONT;
 use crate::gaps::{GapCause, HudGap, HudPresentationGaps};
 use crate::gpu_list::{HudTessPass, TessJob};
 use crate::images::HudImages;
-use crate::scorebar::sys_milliseconds;
+use crate::scorebar::milliseconds;
 
 #[derive(Clone, Debug)]
 enum KillfeedLine {
@@ -169,7 +169,7 @@ fn snapshot_client_name(presented: &net::PresentedSnapshot, client: i32) -> Stri
     }
 }
 
-pub(crate) fn cg_obituary(
+pub(crate) fn obituary(
     obituary: On<net::EntityObituary>,
     mut window: ResMut<KillfeedWindow>,
     weapons: Option<Res<PreparedWeapons>>,
@@ -184,7 +184,7 @@ pub(crate) fn cg_obituary(
     let victim = snapshot_client_name(&presented, payload.number);
     let attacker_team = snapshot_client_team(&presented, payload.attacker_entity_num);
     let victim_team = snapshot_client_team(&presented, payload.number);
-    let now = sys_milliseconds() as i32;
+    let now = milliseconds() as i32;
     window.lines.push_back(KillfeedLine::Obituary {
         start_ms: now,
         icon: pick.stem,
@@ -268,7 +268,7 @@ pub(crate) fn update_killfeed(
         return;
     }
 
-    let now = sys_milliseconds() as i32;
+    let now = milliseconds() as i32;
     for cmd in notifies.read() {
         if !window.seen.insert(cmd.id) {
             continue;
@@ -363,7 +363,7 @@ pub(crate) fn update_killfeed(
     let font = catalog.as_ref().and_then(|c| c.font(HUD_SMALL_FONT));
     let (nscale, font_material) = match font {
         Some(def) => (
-            r_normalized_text_scale(def.pixel_height, GAME_MSG_WIN0_TEXT_SCALE),
+            normalized_text_scale(def.pixel_height, GAME_MSG_WIN0_TEXT_SCALE),
             assets::AssetRef::bare_name(&def.material).to_owned(),
         ),
         None => (0.0, String::new()),
@@ -446,7 +446,7 @@ pub(crate) fn update_killfeed(
                     && font_tex_ok;
                 if line_names && *has_attacker {
                     if let Some(def) = font {
-                        let attacker_w = r_text_width(def, attacker) as f32 * nscale;
+                        let attacker_w = text_width(def, attacker) as f32 * nscale;
                         let applied = surface.apply_rect(
                             x_virtual,
                             y_virtual,
@@ -533,11 +533,11 @@ pub(crate) fn update_killfeed(
         }
     }
     if let Some(def) = font.filter(|_| font_tex_ok) {
-        let scale = r_normalized_text_scale(def.pixel_height, BOLD_TEXT_SCALE);
+        let scale = normalized_text_scale(def.pixel_height, BOLD_TEXT_SCALE);
         for (i, (start, text)) in window.bold.iter().enumerate() {
             let age = now.saturating_sub(*start);
             let alpha = ((BOLD_MSG_TIME_MS - age) as f32 / 500.0).clamp(0.0, 1.0);
-            let width = r_text_width(def, text) as f32 * scale;
+            let width = text_width(def, text) as f32 * scale;
             let line_h = def.pixel_height as f32 * scale;
             let applied = surface.apply_rect(
                 -width / 2.0,

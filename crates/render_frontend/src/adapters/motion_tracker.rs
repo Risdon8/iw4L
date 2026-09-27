@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use net::{CgFrameClock, LocalPresentClient, PresentedSnapshot};
+use net::{FrameClock, LocalPresentClient, PresentedSnapshot};
 use render_anim::{FpvBoltTargets, PreparedFpv};
 use render_fx::{FxCodeMeshPlan, FxWorldColorImages};
 
@@ -50,7 +50,7 @@ pub(crate) fn draw_motion_tracker(
     mut tracker: ResMut<MotionTracker>,
     presented: Res<PresentedSnapshot>,
     local: Res<LocalPresentClient>,
-    clock: Res<CgFrameClock>,
+    clock: Res<FrameClock>,
     mut sound: MessageWriter<audio::AliasCommand>,
     prepared: Res<PreparedFpv>,
     bolts: Res<FpvBoltTargets>,
@@ -86,7 +86,7 @@ pub(crate) fn draw_motion_tracker(
             ..Default::default()
         };
     }
-    let weapon = weapon_iw4::bg_get_viewmodel_weapon_index(ps);
+    let weapon = weapon_iw4::get_viewmodel_weapon_index(ps);
     let active = table.facts_of(weapon).is_some_and(|f| {
         f.motion_tracker
             || (f.inventory_type == 3

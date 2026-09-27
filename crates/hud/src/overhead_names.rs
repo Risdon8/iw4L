@@ -3,7 +3,7 @@ use crate::gpu_list::{HudTessPass, TessJob};
 use assets::MenuCatalog;
 use bevy::prelude::*;
 use hud_iw4::*;
-use net::{CEntity, CEntityRuntime, CgFrameClock, LocalPresentClient, PresentedSnapshot};
+use net::{CEntity, CEntityRuntime, FrameClock, LocalPresentClient, PresentedSnapshot};
 
 use std::collections::HashMap;
 
@@ -111,7 +111,7 @@ fn update_overhead_names(
     local: Res<LocalPresentClient>,
     posed: Res<OverheadPosedPlayerFrame>,
     players: Query<(&CEntity, &CEntityRuntime)>,
-    cg_clock: Res<CgFrameClock>,
+    cg_clock: Res<FrameClock>,
     surface: Res<crate::surface::Hud2dSurface>,
     catalog: Option<Res<MenuCatalog>>,
     cameras: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
@@ -143,7 +143,7 @@ fn update_overhead_names(
     let Some(local_meta) = snapshot.meta.for_client(local.0) else {
         return;
     };
-    if cg_is_flashbanged(
+    if is_flashbanged(
         now,
         ps.shellshock_time,
         ps.shellshock_duration,
@@ -279,7 +279,7 @@ fn update_overhead_names(
             memory.seen.remove(&ent);
             continue;
         }
-        let alpha = cg_overhead_fade_alpha(
+        let alpha = overhead_fade_alpha(
             now,
             start,
             last,
@@ -289,18 +289,17 @@ fn update_overhead_names(
         if alpha <= 0.0 {
             continue;
         }
-        let distance = cg_overhead_distance_scale(
+        let distance = overhead_distance_scale(
             eye.to_array(),
             anchor.to_array(),
             OVERHEAD_NEAR_DISTANCE_DEFAULT,
             OVERHEAD_FAR_DISTANCE_DEFAULT,
             OVERHEAD_FAR_SCALE_DEFAULT,
         );
-        let scale =
-            r_normalized_text_scale(font.pixel_height, OVERHEAD_NAME_SIZE_DEFAULT * distance);
+        let scale = normalized_text_scale(font.pixel_height, OVERHEAD_NAME_SIZE_DEFAULT * distance);
         let rank_scale =
-            r_normalized_text_scale(font.pixel_height, OVERHEAD_RANK_SIZE_DEFAULT * distance);
-        let x = (pixel.x - crate::chrome::r_text_width(font, &name) as f32 * scale * 0.5).round();
+            normalized_text_scale(font.pixel_height, OVERHEAD_RANK_SIZE_DEFAULT * distance);
+        let x = (pixel.x - crate::chrome::text_width(font, &name) as f32 * scale * 0.5).round();
         let mut color = name_color(local_meta.client_state_team, team);
         color[3] = alpha;
         let mut text_runs = vec![(name, x, pixel.y.round(), scale, color)];
@@ -310,7 +309,7 @@ fn update_overhead_names(
         {
             let text_size = font.pixel_height as f32 * scale;
             let icon_size = OVERHEAD_ICON_SIZE_DEFAULT * text_size;
-            let level_width = crate::chrome::r_text_width(font, level) as f32 * rank_scale;
+            let level_width = crate::chrome::text_width(font, level) as f32 * rank_scale;
             let icon_x = x - level_width - icon_size - 2.0 * distance;
             list.cmds.push(Draw2dCmd {
                 x: icon_x,

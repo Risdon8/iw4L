@@ -5,21 +5,20 @@ use assets::{FxDefinitions, OwnedFxVisual, PreparedWeapons, lookup_fx_color_imag
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use dpvs_iw4::pack_mark_mesh_draw_surf;
-use entity_iw4::{bg_is_left_hand_fire_event, bg_is_weapon_fire_last_shot_event};
+use entity_iw4::{is_left_hand_fire_event, is_weapon_fire_last_shot_event};
 use frame::ViewSubject;
 use fx::{
     CodeMeshStep, FxGapCause, FxMsec, FxSparkCloudInstance, FxSpriteInstance, FxSystemHost,
     MarkReceiverEnable, PlayResult, axis_from_hit_normal,
 };
 use fx_iw4::{
-    FX_ELEM_VEL_LOCAL, FX_ELEM_VEL_WORLD, FX_GLASS_SHATTER_FX_PER_FRAME, fx_elem_run_mode,
-    fx_elem_spawn_offset_mode, fx_glass_shatter_fx_fallback, fx_glass_shatter_fx_name,
-    fx_laser_from_tag_orientation, fx_tail_anchor_origin, fx_tail_sprite_axes,
-    fx_tail_sprite_full_extent,
+    FX_ELEM_VEL_LOCAL, FX_ELEM_VEL_WORLD, FX_GLASS_SHATTER_FX_PER_FRAME, elem_run_mode,
+    elem_spawn_offset_mode, glass_shatter_fx_fallback, glass_shatter_fx_name,
+    laser_from_tag_orientation, tail_anchor_origin, tail_sprite_axes, tail_sprite_full_extent,
 };
 use net::{
-    AuthorityLoadHold, CEntity, CEntitySlots, CgPlayerDrawGate, CgameActive, ClientPredictionState,
-    ClientSet, LastAdoptedSnapshot, LocalPresentClient, PendingPelletFx, PresentedSnapshot,
+    AuthorityLoadHold, CEntity, CEntitySlots, ClientPredictionState, ClientSet, GameActive,
+    LastAdoptedSnapshot, LocalPresentClient, PendingPelletFx, PlayerDrawGate, PresentedSnapshot,
     WeaponFirePing, WeaponFirePingBus,
 };
 
@@ -101,7 +100,7 @@ pub(crate) fn register_combat_fx_systems(app: &mut App) {
     app.add_message::<BulletHitFx>()
         .init_resource::<render_fx::FxModelStaging>()
         .init_resource::<crate::assemble::drawsurf::GfxGlassMeshPlan>()
-        .init_resource::<crate::assemble::drawsurf::CgGlassTable>()
+        .init_resource::<crate::assemble::drawsurf::GlassTable>()
         .add_systems(Update, latch_authority_load_hold.in_set(ClientSet::Load))
         .add_systems(
             Update,
@@ -142,13 +141,13 @@ pub(crate) fn register_combat_fx_systems(app: &mut App) {
             Update,
             tick_missile_present_state.in_set(ClientSet::Effects),
         )
-        .add_observer(cg_fire_weapon)
-        .add_observer(cg_eject_brass)
-        .add_observer(cg_explosion)
+        .add_observer(fire_weapon)
+        .add_observer(eject_brass)
+        .add_observer(explosion)
         .add_observer(stop_killcam_explosion_fx)
-        .add_observer(cg_play_fx)
-        .add_observer(cg_play_fx_bullet_hit)
-        .add_observer(cg_melee_blood);
+        .add_observer(play_fx)
+        .add_observer(play_fx_bullet_hit)
+        .add_observer(melee_blood);
 }
 
 #[derive(Default)]
@@ -179,7 +178,7 @@ fn present_tracker_light(
     let owner = presented.snapshot().and_then(|snapshot| {
         let meta = snapshot.meta.for_client(local.0)?;
         let ps = presented.player(local.0)?;
-        let weapon = weapon_iw4::bg_get_viewmodel_weapon_index(ps);
+        let weapon = weapon_iw4::get_viewmodel_weapon_index(ps);
         (meta.lifecycle == sim::ClientLifecycle::Alive
             && ps.other_flags & 0x400 == 0
             && prepared.table()?.facts_of(weapon).is_some_and(|facts| {
@@ -231,7 +230,7 @@ fn queue_tag_lasers(
     dvars: LaserDvars,
 ) {
     let push = |post_lights: &mut HostFxPostLights, target: fx::FxBoltTarget, range: f32| {
-        let Some(light) = fx_laser_from_tag_orientation(
+        let Some(light) = laser_from_tag_orientation(
             target.orientation.origin,
             target.orientation.axis[0],
             view,
@@ -278,7 +277,7 @@ fn boot_createfx_oneshots(
     mut host: ResMut<HostFxSystem>,
     mut cursor: ResMut<FxJournalCursor>,
     fx_world: FxSceneAccess,
-    cgame_active: Res<CgameActive>,
+    cgame_active: Res<GameActive>,
     adopted: Option<Res<LastAdoptedSnapshot>>,
 ) {
     if cursor.createfx_booted {
@@ -398,7 +397,7 @@ fn tick_fx_non_dependent_update(
         let scene = world.as_ref().map(|s| s as &dyn FxScene);
         for ev in pending_fx {
             let axis = axis_from_hit_normal(ev.normal);
-            let name = fx_glass_shatter_fx_name(ev.landing);
+            let name = glass_shatter_fx_name(ev.landing);
             let spawned = play_named_oriented_in_world(
                 &mut host.0,
                 &catalog.0,
@@ -409,7 +408,7 @@ fn tick_fx_non_dependent_update(
                 scene,
             );
             if spawned.is_none()
-                && let Some(fallback) = fx_glass_shatter_fx_fallback(ev.landing)
+                && let Some(fallback) = glass_shatter_fx_fallback(ev.landing)
             {
                 let _ = play_named_oriented_in_world(
                     &mut host.0,
@@ -594,7 +593,7 @@ fn generate_fx_transaction(
     }
     let mut vis_write = host.0.vis_blocker_write;
     let mut vis_read = host.0.vis_blocker_read;
-    fx_iw4::fx_vis_blocker_generate_verts(&mut vis_write, &mut vis_read);
+    fx_iw4::vis_blocker_generate_verts(&mut vis_write, &mut vis_read);
     host.0.vis_blocker_write = vis_write;
     host.0.vis_blocker_read = vis_read;
     tick_tracer_beams(&mut tracers, FxMsec(host.0.msec_now));
@@ -705,12 +704,12 @@ fn commit_fx_transaction(
     model_plan.publish_rebuild(&mut env.staged_models.0);
     let spot_cone = lighting_iw4::SpotLightConeDvars::register_defaults();
     for light in &out.spot_lights {
-        match lighting_iw4::r_add_omni_light_to_scene_allows(
+        match lighting_iw4::add_omni_light_to_scene_allows(
             world_present,
             light.radius,
             env.dlights.scene.len() as u32,
         ) {
-            Ok(()) => env.dlights.scene.push(lighting_iw4::r_spot_light_pack(
+            Ok(()) => env.dlights.scene.push(lighting_iw4::spot_light_pack(
                 light.origin,
                 light.axis[0],
                 light.radius,
@@ -724,12 +723,12 @@ fn commit_fx_transaction(
         }
     }
     for light in &out.omni_lights {
-        match lighting_iw4::r_add_omni_light_to_scene_allows(
+        match lighting_iw4::add_omni_light_to_scene_allows(
             world_present,
             light.radius,
             env.dlights.scene.len() as u32,
         ) {
-            Ok(()) => env.dlights.scene.push(lighting_iw4::r_omni_light_pack(
+            Ok(()) => env.dlights.scene.push(lighting_iw4::omni_light_pack(
                 light.origin,
                 light.radius,
                 light.color_bgr,
@@ -742,11 +741,11 @@ fn commit_fx_transaction(
     }
     let eye = cam_tf.translation.to_array();
     for light in &post_lights {
-        let Some(tess) = fx_iw4::fx_post_light_generate_verts(light, eye) else {
+        let Some(tess) = fx_iw4::post_light_generate_verts(light, eye) else {
             env.post_lights.skipped_short = env.post_lights.skipped_short.saturating_add(1);
             continue;
         };
-        match fx_code_mesh_bind(light.material_name, &color_images, &runtime) {
+        match code_mesh_bind(light.material_name, &color_images, &runtime) {
             FxCodeMeshBind::Skip(FxPresentSkip::NoColorMap) => {
                 env.post_lights.miss_material = env.post_lights.miss_material.saturating_add(1);
                 plan.miss_material = plan.miss_material.saturating_add(1);
@@ -795,7 +794,7 @@ fn commit_fx_transaction(
     let mut behind = 0u32;
     let cam_fwd = cam_tf.forward();
     for (asset_id, sprites) in &batches {
-        match fx_code_mesh_bind_asset(*asset_id, &color_images, &runtime) {
+        match code_mesh_bind_asset(*asset_id, &color_images, &runtime) {
             FxCodeMeshBind::Skip(FxPresentSkip::NoColorMap) => {
                 let n = sprites.len() as u32;
                 cursor.draw_miss_material = cursor.draw_miss_material.saturating_add(n);
@@ -859,7 +858,7 @@ fn commit_fx_transaction(
             cursor.draw_miss_material = cursor.draw_miss_material.saturating_add(1);
             continue;
         };
-        match fx_code_mesh_bind_asset(asset_id, &color_images, &runtime) {
+        match code_mesh_bind_asset(asset_id, &color_images, &runtime) {
             FxCodeMeshBind::Skip(FxPresentSkip::NoColorMap) => {
                 host.0.gaps.raise(FxGapCause::TrailCodeMeshRefused {
                     step: CodeMeshStep::Bind,
@@ -904,7 +903,7 @@ fn commit_fx_transaction(
                 let mut index_ok = true;
                 for chunk in mesh.index_pairs.chunks_exact(3) {
                     let pairs = [chunk[0], chunk[1], chunk[2]];
-                    let tris = fx_iw4::fx_trail_index_quad_tris(pairs);
+                    let tris = fx_iw4::trail_index_quad_tris(pairs);
                     let mut six = [0u32; 6];
                     let mut i = 0;
                     for tri in tris {
@@ -947,7 +946,7 @@ fn commit_fx_transaction(
         &runtime,
         &mut plan,
         &mut combat,
-        fx_code_mesh_bind_asset,
+        code_mesh_bind_asset,
     );
     *tracer_world = tracers;
 
@@ -958,7 +957,7 @@ fn commit_fx_transaction(
             spark_plan.miss_material = spark_plan.miss_material.saturating_add(1);
             continue;
         };
-        match fx_code_mesh_bind_asset(asset_id, &color_images, &runtime) {
+        match code_mesh_bind_asset(asset_id, &color_images, &runtime) {
             FxCodeMeshBind::Skip(FxPresentSkip::NoColorMap) => {
                 spark_plan.miss_material = spark_plan.miss_material.saturating_add(1);
             }
@@ -979,7 +978,7 @@ fn commit_fx_transaction(
             spark_plan.miss_material = spark_plan.miss_material.saturating_add(1);
             continue;
         };
-        match fx_code_mesh_bind_asset(asset_id, &color_images, &runtime) {
+        match code_mesh_bind_asset(asset_id, &color_images, &runtime) {
             FxCodeMeshBind::Skip(FxPresentSkip::NoColorMap) => {
                 spark_plan.miss_material = spark_plan.miss_material.saturating_add(1);
             }
@@ -1005,7 +1004,7 @@ fn commit_fx_transaction(
             spark_plan.miss_material = spark_plan.miss_material.saturating_add(1);
             continue;
         };
-        match fx_code_mesh_bind_asset(asset_id, &color_images, &runtime) {
+        match code_mesh_bind_asset(asset_id, &color_images, &runtime) {
             FxCodeMeshBind::Skip(FxPresentSkip::NoColorMap) => {
                 spark_plan.miss_material = spark_plan.miss_material.saturating_add(1);
             }
@@ -1246,7 +1245,7 @@ fn fill_fx_model_plan(
         let asset_surfaces = asset.surfaces.clone();
 
         let box_half = entry.skel.radius.and_then(|radius| {
-            crate::prepare::scene::model_lighting_cache::dobj_lighting_box_half(
+            crate::prepare::scene::model_lighting_cache::lighting_box_half(
                 &[radius * instance.scale.abs()],
                 &[anim_iw4::DOBJ_RADIUS_PARENT_ROOT],
             )
@@ -1257,7 +1256,7 @@ fn fill_fx_model_plan(
             origin: instance.origin,
             lookup_fallback,
         });
-        let quat = Quat::from_array(fx_iw4::fx_axis_to_quat(instance.axis));
+        let quat = Quat::from_array(fx_iw4::axis_to_quat(instance.axis));
         let world_from_local = Mat4::from_scale_rotation_translation(
             Vec3::splat(instance.scale),
             quat,
@@ -1670,7 +1669,7 @@ fn log_fx_impact_census(
                 elem.origin[0],
                 elem.origin[1],
                 elem.origin[2],
-                fx_elem_run_mode(elem.flags),
+                elem_run_mode(elem.flags),
                 elem.flags,
                 elem.elem_type,
                 effect.def_name,
@@ -1697,7 +1696,7 @@ fn log_fx_run_mode_census(
     let mut run_c0 = 0u32;
     let mut stored0 = 0u32;
     for elem in host.live_elems() {
-        match fx_elem_run_mode(elem.flags) {
+        match elem_run_mode(elem.flags) {
             0 => run0 += 1,
             0x40 => run40 += 1,
             0x80 => run80 += 1,
@@ -1751,7 +1750,7 @@ fn log_fx_run_mode_census(
             ))
         })
         .unwrap_or((0.0, 0.0, 0));
-    let mode = fx_elem_spawn_offset_mode(flags);
+    let mode = elem_spawn_offset_mode(flags);
     diag::info!(
         World,
         "fx_dump dust n={} inside={inside} spread={:.0}..{:.0},{:.0}..{:.0},{:.0}..{:.0} \
@@ -1763,7 +1762,7 @@ fn log_fx_run_mode_census(
         mx[1],
         mn[2],
         mx[2],
-        nearest.map(|s| fx_elem_run_mode(s.flags)).unwrap_or(0),
+        nearest.map(|s| elem_run_mode(s.flags)).unwrap_or(0),
     );
 }
 
@@ -1786,7 +1785,7 @@ fn log_fx_near_sprite(tag: &str, sprite: &FxSpriteInstance, cam: [f32; 3], cam_f
         sprite.origin[0],
         sprite.origin[1],
         sprite.origin[2],
-        fx_elem_run_mode(sprite.flags),
+        elem_run_mode(sprite.flags),
         sprite.flags,
         sprite.atlas.s0,
         sprite.atlas.ds,
@@ -1888,14 +1887,14 @@ fn fill_mark_mesh_plan(
             skip_why = Some("no_material");
             continue;
         };
-        let Some((sort_key, ordinal)) = fx_mark_mesh_bind(name, runtime) else {
+        let Some((sort_key, ordinal)) = mark_mesh_bind(name, runtime) else {
             skip_why = Some("no_ordinal");
             continue;
         };
         let sub_key = GfxMarkSubKey::from_context(&surf.context);
         let packed = pack_mark_mesh_draw_surf(
             sort_key,
-            render_material::retail_sort_band(ordinal),
+            render_material::sort_band(ordinal),
             0,
             sub_key.lmap,
             sub_key.primary_light,
@@ -1959,8 +1958,8 @@ fn fill_mark_mesh_plan(
     plan.publish_share();
 }
 
-fn fx_mark_mesh_bind(name: &str, runtime: &MaterialGeneration) -> Option<(u8, u32)> {
-    let bind = assets::fx_material_bind_name(name);
+fn mark_mesh_bind(name: &str, runtime: &MaterialGeneration) -> Option<(u8, u32)> {
+    let bind = assets::material_bind_name(name);
     let ordinal = runtime.catalog.ordinal_for_material_name(bind)?;
     let material = runtime_material_for_bind(&runtime.catalog, bind)?;
     let sort_key = material
@@ -1970,12 +1969,12 @@ fn fx_mark_mesh_bind(name: &str, runtime: &MaterialGeneration) -> Option<(u8, u3
     Some((sort_key, ordinal.get()))
 }
 
-pub(crate) fn fx_code_mesh_bind(
+pub(crate) fn code_mesh_bind(
     material_name: &str,
     color_images: &FxWorldColorImages,
     runtime: &MaterialGeneration,
 ) -> FxCodeMeshBind {
-    let bind = assets::fx_material_bind_name(material_name);
+    let bind = assets::material_bind_name(material_name);
     let color = lookup_fx_color_image(&color_images.colors, material_name).cloned();
     let Some(ordinal) = runtime.catalog.ordinal_for_material_name(bind) else {
         return FxCodeMeshBind::Skip(FxPresentSkip::NoOrdinal);
@@ -2017,7 +2016,7 @@ pub(crate) fn fx_code_mesh_bind(
     }
 }
 
-pub(crate) fn fx_code_mesh_bind_asset(
+pub(crate) fn code_mesh_bind_asset(
     asset_id: usize,
     color_images: &FxWorldColorImages,
     runtime: &MaterialGeneration,
@@ -2086,9 +2085,9 @@ fn sprite_transform(sprite: &FxSpriteInstance, cam: &Transform) -> Transform {
             scale: Vec3::new(sprite.size0 * 2.0, sprite.size0 * 2.0, 1.0),
         }
     } else if sprite.elem_type == 2 {
-        let origin = fx_tail_anchor_origin(sprite.origin, sprite.vel_dir, sprite.size1);
+        let origin = tail_anchor_origin(sprite.origin, sprite.vel_dir, sprite.size1);
         let cam_o = cam.translation.to_array();
-        let Some(axes) = fx_tail_sprite_axes(sprite.vel_dir, cam_o, origin) else {
+        let Some(axes) = tail_sprite_axes(sprite.vel_dir, cam_o, origin) else {
             return Transform {
                 translation: Vec3::from_array(origin),
                 rotation: cam.rotation,
@@ -2104,8 +2103,8 @@ fn sprite_transform(sprite: &FxSpriteInstance, cam: &Transform) -> Transform {
             translation: Vec3::from_array(origin),
             rotation: Quat::from_mat3(&mat) * spin,
             scale: Vec3::new(
-                fx_tail_sprite_full_extent(sprite.size0),
-                fx_tail_sprite_full_extent(sprite.size1),
+                tail_sprite_full_extent(sprite.size0),
+                tail_sprite_full_extent(sprite.size1),
                 1.0,
             ),
         }
@@ -2123,7 +2122,7 @@ fn sprite_transform(sprite: &FxSpriteInstance, cam: &Transform) -> Transform {
     }
 }
 
-fn cg_fire_weapon(
+fn fire_weapon(
     fire: On<net::EntityWeaponFire>,
     identities: Query<&CEntity>,
     world_bolts: Query<(
@@ -2156,7 +2155,7 @@ fn cg_fire_weapon(
         } => i32::try_from(focus).unwrap_or(0),
         _ => i32::try_from(local.0.0).unwrap_or(0),
     };
-    let gate = CgPlayerDrawGate {
+    let gate = PlayerDrawGate {
         eyes_entity_num: eyes,
         other_flags: presented
             .player(local.0)
@@ -2169,7 +2168,7 @@ fn cg_fire_weapon(
         .ok()
         .is_some_and(|identity| gate.is_player_view(identity.number()));
     combat.last_fire_player_view = Some(i64::from(player_view));
-    let last_shot = bg_is_weapon_fire_last_shot_event(fire.event.event);
+    let last_shot = is_weapon_fire_last_shot_event(fire.event.event);
     combat.last_fire_lastshot = Some(i64::from(last_shot));
     combat.last_tracer_name = combat_fx.and_then(|fx| fx.tracer_hint.clone());
     combat.last_weapon_tracer_edge = combat_fx.map(|fx| fx.tracer.edge_kind().to_owned());
@@ -2178,7 +2177,7 @@ fn cg_fire_weapon(
     let muzzle_name = combat_fx.and_then(|fx| fx.flash_present(player_view));
     combat.last_muzzle_name = muzzle_name.map(|n| n.name.to_owned());
 
-    let hand = usize::from(bg_is_left_hand_fire_event(fire.event.event));
+    let hand = usize::from(is_left_hand_fire_event(fire.event.event));
     let remote_bolts = world_bolts
         .get(fire.entity)
         .ok()
@@ -2275,7 +2274,7 @@ fn cg_fire_weapon(
                 .unwrap_or(assets::AssetNamespace::Iw4),
             alias: alias.to_owned(),
             origin_inches: (!player_view).then_some(sound_origin),
-            snd_ent: audio::snd_ent_from_number(fire.event.payload.number),
+            snd_ent: audio::ent_from_number(fire.event.payload.number),
         });
     } else {
         combat.last_fire_alias = None;
@@ -2299,7 +2298,7 @@ fn cg_fire_weapon(
     sync_combat_dump(&cursor, &mut combat);
 }
 
-fn cg_eject_brass(
+fn eject_brass(
     brass: On<net::EntityEjectBrass>,
     identities: Query<&CEntity>,
     world_bolts: Query<(
@@ -2323,8 +2322,8 @@ fn cg_eject_brass(
         .get(brass.entity)
         .ok()
         .is_some_and(|identity| identity.client() == Some(local.0));
-    let last_shot = bg_is_weapon_fire_last_shot_event(brass.event.event);
-    let hand = usize::from(bg_is_left_hand_fire_event(brass.event.event));
+    let last_shot = is_weapon_fire_last_shot_event(brass.event.event);
+    let hand = usize::from(is_left_hand_fire_event(brass.event.event));
     let target = if player_view {
         fpv_bolts.brass[hand]
     } else {
@@ -2521,7 +2520,7 @@ fn tick_missile_present_state(
     bolts.rows.retain(|entnum, _| live.contains(entnum));
 }
 
-fn cg_explosion(
+fn explosion(
     explosion: On<net::EntityExplosion>,
     weapons: Option<Res<PreparedWeapons>>,
     sound_bank: Option<Res<audio::SoundBank>>,
@@ -2615,7 +2614,7 @@ fn cg_explosion(
                 .unwrap_or(assets::AssetNamespace::Iw4),
             alias: alias.to_owned(),
             origin_inches: Some(payload.origin),
-            snd_ent: audio::snd_ent_from_number(payload.number),
+            snd_ent: audio::ent_from_number(payload.number),
         });
     } else {
         cursor.explosion_sound_gap = cursor.explosion_sound_gap.saturating_add(1);
@@ -2662,7 +2661,7 @@ struct ScriptFxRow {
     next_ms: i32,
 }
 
-fn fx_axis(forward: [f32; 3], up: [f32; 3]) -> [[f32; 3]; 3] {
+fn axis(forward: [f32; 3], up: [f32; 3]) -> [[f32; 3]; 3] {
     let forward = Vec3::from_array(forward);
     let up = Vec3::from_array(up);
     [
@@ -2715,7 +2714,7 @@ fn sync_script_fx(
             continue;
         };
         let name = catalog.0.map_fx_name(name);
-        let axis = fx_axis(fx.forward, fx.up);
+        let axis = axis(fx.forward, fx.up);
         let retriggered = row.start != fx.start_ms;
         row.start = fx.start_ms;
         let Some(start) = fx.start_ms else {
@@ -2772,7 +2771,7 @@ fn sync_script_fx(
     }
 }
 
-fn cg_play_fx(
+fn play_fx(
     play: On<net::EntityPlayFx>,
     catalog: Option<Res<PreparedFxCatalog>>,
     mut elem_infos: ResMut<PreparedFxElemInfos>,
@@ -2831,7 +2830,7 @@ fn cg_play_fx(
     }
 }
 
-fn cg_play_fx_bullet_hit(hit: On<net::EntityBulletHit>, mut hits: MessageWriter<BulletHitFx>) {
+fn play_fx_bullet_hit(hit: On<net::EntityBulletHit>, mut hits: MessageWriter<BulletHitFx>) {
     hits.write(BulletHitFx(hit.event.payload));
 }
 
@@ -2947,7 +2946,7 @@ fn drain_pellet_fx(
     }
 }
 
-fn cg_melee_blood(
+fn melee_blood(
     hit: On<net::EntityMeleeBlood>,
     identities: Query<&CEntity>,
     world_bolts: Query<&crate::adapters::anim::remote_body::RemoteFxBolts>,
@@ -2972,7 +2971,7 @@ fn cg_melee_blood(
         } => i32::try_from(focus).unwrap_or(0),
         _ => i32::try_from(local.0.0).unwrap_or(0),
     };
-    let gate = CgPlayerDrawGate {
+    let gate = PlayerDrawGate {
         eyes_entity_num: eyes,
         other_flags: presented
             .player(local.0)

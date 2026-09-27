@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use entity_iw4::{
-    EntityEventAction, EntityEventKind, UnsupportedEntityEvent, cg_entity_event_action,
-    cg_packet_entity_uses_event_ring, consume_entity_events,
+    EntityEventAction, EntityEventKind, UnsupportedEntityEvent, consume_entity_events,
+    entity_event_action, packet_entity_uses_event_ring,
 };
 use sim::{EntityEventPayload, EventSequence, Tick};
 
@@ -150,7 +150,7 @@ impl UnsupportedEntityEvents {
 
             let (name, why) = match ev_dispatch_row(event) {
                 Some(row) => (
-                    row.retail_name,
+                    row.name,
                     match row.dispatch {
                         EntityEventDispatch::Unsupported(reason) => reason,
                         EntityEventDispatch::Observer(_) => {
@@ -161,7 +161,7 @@ impl UnsupportedEntityEvents {
                 ),
                 None => (
                     "unmodelled",
-                    "not in entity_iw4::EntityEventKind::TAXONOMY: a retail table slot this build \
+                    "not in entity_iw4::EntityEventKind::TAXONOMY: a table slot this build \
                      does not model at all",
                 ),
             };
@@ -254,7 +254,7 @@ fn dispatch_entity_events(
         });
     }
     for (entity, identity, mut runtime) in runtimes.iter_mut() {
-        if !cg_packet_entity_uses_event_ring(runtime.next_state.e_type) {
+        if !packet_entity_uses_event_ring(runtime.next_state.e_type) {
             continue;
         }
 
@@ -364,7 +364,7 @@ fn dispatch_classified(
     unsupported: &mut UnsupportedEntityEvents,
 ) {
     let mut did = false;
-    match cg_entity_event_action(dispatched.event) {
+    match entity_event_action(dispatched.event) {
         Ok(EntityEventAction::None) => {}
         Ok(EntityEventAction::Sound) => {
             did = true;
@@ -458,12 +458,12 @@ fn dispatch_classified(
 }
 
 fn origin_space_without_centity(event: EntityEventKind) -> bool {
-    matches!(cg_entity_event_action(event), Ok(EntityEventAction::PlayFx))
+    matches!(entity_event_action(event), Ok(EntityEventAction::PlayFx))
         || event == EntityEventKind::SOUND_ALIAS
         || event == EntityEventKind::SOUND_ALIAS_AS_MASTER
 }
 
-fn cl_set_ads_from_reset(
+fn set_ads_from_reset(
     reset: On<net::EntityResetAds>,
     mut input: ResMut<ClientActionInput>,
     local: Res<LocalPresentClient>,
@@ -471,7 +471,7 @@ fn cl_set_ads_from_reset(
     if (*reset).event.payload.number != local.0.0 as i32 {
         return;
     }
-    input_iw4::cl_set_ads(&mut input.client, false);
+    input_iw4::set_ads(&mut input.client, false);
 }
 
 pub fn register_entity_event_dispatch(app: &mut App) {
@@ -480,7 +480,7 @@ pub fn register_entity_event_dispatch(app: &mut App) {
         .init_resource::<UnsupportedEntityEvents>()
         .init_resource::<NetIdentityGaps>()
         .init_resource::<WeaponFirePingBus>()
-        .add_observer(cl_set_ads_from_reset)
+        .add_observer(set_ads_from_reset)
         .add_systems(
             Update,
             dispatch_entity_events

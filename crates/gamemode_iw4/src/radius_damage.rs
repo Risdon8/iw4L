@@ -12,18 +12,12 @@ pub fn radius_damage_distance_to_aabb(origin: [f32; 3], center: [f32; 3], half: 
     libm::sqrtf(sum)
 }
 
-pub fn g_radius_damage_area_half_extent(radius: f32) -> f32 {
+pub fn radius_damage_area_half_extent(radius: f32) -> f32 {
     let radius = if radius < 1.0 { 1.0 } else { radius };
     radius * RADIUS_AREA_HALF_SCALE
 }
 
-pub fn g_radius_damage_amount(
-    inner: f32,
-    outer: f32,
-    radius: f32,
-    dist: f32,
-    vis_scale: f32,
-) -> i32 {
+pub fn radius_damage_amount(inner: f32, outer: f32, radius: f32, dist: f32, vis_scale: f32) -> i32 {
     let radius = if radius < 1.0 { 1.0 } else { radius };
     if !(dist * dist < radius * radius) || vis_scale <= 0.0 {
         return 0;
@@ -79,7 +73,7 @@ pub(crate) fn can_damage_hits_to_scale(hits: u32) -> f32 {
     }
 }
 
-pub fn g_can_damage_player_vis_scale(
+pub fn can_damage_player_vis_scale(
     origin: [f32; 3],
     view_height: f32,
     right: [f32; 3],

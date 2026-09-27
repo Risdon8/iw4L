@@ -1,6 +1,7 @@
 use entity_iw4::{
-    GGlassPiece, GLASS_DAMAGE_INVALID, glass_apply_damage, glass_collapse_piece, glass_is_solid,
-    glass_shatter_seed_from_hit, glass_state_from_damage, glass_weakened_collapse_time_cs,
+    GLASS_DAMAGE_INVALID, ServerGlassPiece, glass_apply_damage, glass_collapse_piece,
+    glass_is_solid, glass_shatter_seed_from_hit, glass_state_from_damage,
+    glass_weakened_collapse_time_cs,
 };
 
 use crate::identities::ScriptModelId;
@@ -45,7 +46,7 @@ pub struct DestructibleLoopSound {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WorldObjectState {
     destructible_loop_sounds: Vec<DestructibleLoopSound>,
-    glass_pieces: Vec<(GlassPieceId, GGlassPiece)>,
+    glass_pieces: Vec<(GlassPieceId, ServerGlassPiece)>,
 
     glass_native: Vec<(GlassPieceId, GlassNativeMeta)>,
 
@@ -387,7 +388,7 @@ impl WorldObjectState {
         for (id, snapshot) in &snap.glass_pieces {
             let damage = glass_damage_for_state(snapshot.state);
             if damage != 0 {
-                let mut piece = GGlassPiece::default();
+                let mut piece = ServerGlassPiece::default();
                 piece.damage = damage;
                 piece.last_state_change_time = snapshot.last_state_change_time;
                 if let Some(seed) = snapshot.shatter_seed {
@@ -410,10 +411,10 @@ impl WorldObjectState {
         }
     }
 
-    fn glass_piece(&self, id: GlassPieceId) -> GGlassPiece {
+    fn glass_piece(&self, id: GlassPieceId) -> ServerGlassPiece {
         match lookup_value(&self.glass_pieces, id) {
             Some(piece) => piece,
-            None => GGlassPiece::default(),
+            None => ServerGlassPiece::default(),
         }
     }
 

@@ -215,7 +215,7 @@ pub struct WorldScene {
 
     pub fx_glass: Option<assets::FxGlassReset>,
 
-    pub retained_retail_vertices: assets::RetailWorldVertexPayload,
+    pub retained_packed_vertices: assets::WorldVertexPayload,
 
     pub retained_vertex_layer: Vec<u8>,
     pub surface_vertex_layer: Vec<i32>,
@@ -254,7 +254,7 @@ pub struct WorldScene {
 
     pub primary_light_types: Vec<u8>,
 
-    pub primary_light_cull: Vec<lighting_iw4::ComPrimaryLightCull>,
+    pub primary_light_cull: Vec<lighting_iw4::PrimaryLightCull>,
 
     pub primary_light_pack: Vec<lighting_iw4::GfxLightPack>,
 
@@ -318,7 +318,7 @@ pub struct WorldDrawGeometry {
     pub lightmaps: Vec<Option<WorldLightmap>>,
     pub reflection_probes: Vec<Option<Image>>,
 
-    pub retail_vertices: assets::RetailWorldVertexPayload,
+    pub packed_vertices: assets::WorldVertexPayload,
 
     pub vertex_layer: Vec<u8>,
     pub surface_vertex_layer: Vec<i32>,
@@ -391,7 +391,7 @@ pub struct WorldStaticModelSurface {
     pub xsurface_plus_1: Option<u8>,
     pub xsurface_base_index: u16,
     pub xsurface_vert_offset: u16,
-    pub collision: assets::RetailXSurfaceCollisionPayload,
+    pub collision: assets::XSurfaceCollisionPayload,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -424,7 +424,7 @@ pub struct SmodelMarkSurface {
     pub index_start: u32,
     pub index_count: u32,
     pub material: Option<assets::MaterialIndex>,
-    pub collision: assets::RetailXSurfaceCollisionPayload,
+    pub collision: assets::XSurfaceCollisionPayload,
 }
 
 pub use render_scene::{WorldDynEntInstance, WorldScriptModelInstance};
@@ -704,7 +704,7 @@ impl WorldScene {
             cull: None,
             intermission_view: None,
             fx_glass: None,
-            retained_retail_vertices: assets::RetailWorldVertexPayload::Unavailable {
+            retained_packed_vertices: assets::WorldVertexPayload::Unavailable {
                 source_layout: "synthetic bounds mesh",
             },
             retained_vertex_layer: Vec::new(),
@@ -797,7 +797,7 @@ impl WorldScene {
             cull: None,
             intermission_view: None,
             fx_glass: None,
-            retained_retail_vertices: draw.retail_vertices,
+            retained_packed_vertices: draw.packed_vertices,
             retained_vertex_layer: draw.vertex_layer,
             surface_vertex_layer: draw.surface_vertex_layer,
             surface_first_vertex: draw.surface_first_vertex,
@@ -1472,7 +1472,7 @@ pub fn world_scene_from_draw(
             batches,
             lightmaps,
             reflection_probes: world.reflection_probe_images,
-            retail_vertices: draw.retail_vertices,
+            packed_vertices: draw.packed_vertices,
             vertex_layer: draw.vertex_layer,
             surface_vertex_layer: draw.surface_vertex_layer,
             surface_first_vertex: draw.surface_first_vertex,

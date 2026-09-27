@@ -278,7 +278,7 @@ pub(super) fn prepare_camera_colour(lane: CameraLane<'_>) {
             &geometry.xmodel_surface_ranges,
             &mut scratch.pack_draws,
         );
-        let work = r_draw_surf_list_work_colour(&packed);
+        let work = draw_surf_list_work_colour(&packed);
         diag::info!(
             World,
             "smodel skinned: packed={} unconsumed={}",

@@ -70,7 +70,7 @@ impl SmodelSkinnedTess {
             .ok_or(GpuSubmitRefusal::SmodelSkinnedDestMissing { placement })?;
         let m = world_from_local.to_cols_array();
         let fixed = lighting_iw4::setup_transform_unit_vec(&m);
-        lighting_iw4::r_skin_xsurface_unique_verts(dest, src, &m, &fixed)
+        lighting_iw4::skin_xsurface_unique_verts(dest, src, &m, &fixed)
             .map_err(|_| GpuSubmitRefusal::SmodelSkinnedDestMissing { placement })?;
         let dest_index_start = self.indices.len() as u32;
         self.indices.reserve(index_count_us);

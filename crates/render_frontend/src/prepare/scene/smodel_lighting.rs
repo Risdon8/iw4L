@@ -27,7 +27,7 @@ const SMODEL_LIGHTING_HOST_FLAGS_UNKNOWN: u8 = 0;
 pub struct WorldSmodelLighting {
     smodel_entry_limit: u32,
 
-    pub div_0x100_by_height: u32,
+    pub inv_height_x256: u32,
 
     pub tiles: Vec<Option<[u8; MODEL_LIGHTING_TILE_BYTES]>>,
 
@@ -74,7 +74,7 @@ impl WorldSmodelLighting {
         }
         Self {
             smodel_entry_limit: dims.smodel_entry_limit,
-            div_0x100_by_height: 0x100 / dims.image_height,
+            inv_height_x256: 0x100 / dims.image_height,
             tiles,
             packed_lighting,
             handles: vec![0; slot_count],
@@ -332,7 +332,7 @@ pub(crate) fn update_smodel_lighting(
         diag::error!(
             World,
             "smodel lighting: {deferred_patches} dirty smodel(s) want EnqueuePatch \
-             (DrawInst+0x3e bit 0x20) — modelLightingPatchList upload Missing"
+             — lighting patch upload missing"
         );
     }
 

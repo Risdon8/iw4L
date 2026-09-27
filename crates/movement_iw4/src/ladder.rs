@@ -41,13 +41,13 @@ pub struct CheckLadderContext {
     pub forwardmove: i8,
 }
 
-pub fn pm_clear_ladder_flag(ps: &mut PlayerState) {
+pub fn clear_ladder_flag(ps: &mut PlayerState) {
     if (ps.pm_flags & PMF_LADDER) != 0 {
         ps.pm_flags = (ps.pm_flags & !PMF_LADDER) | PMF_LADDER_FALL;
     }
 }
 
-pub fn pm_set_ladder_flag(ps: &mut PlayerState) {
+pub fn set_ladder_flag(ps: &mut PlayerState) {
     ps.pm_flags |= PMF_LADDER;
 }
 
@@ -65,7 +65,7 @@ fn ladder_stance_blocks_attach(ps: &PlayerState) -> bool {
     token == 1 || token == 3
 }
 
-pub fn pm_check_ladder_move(
+pub fn check_ladder_move(
     ps: &mut PlayerState,
     context: CheckLadderContext,
     backend: &mut impl LadderAttachBackend,
@@ -113,7 +113,7 @@ pub fn pm_check_ladder_move(
 
     if ps.pm_type >= 8 {
         ps.ground_entity_num = ENTITYNUM_NONE;
-        pm_clear_ladder_flag(ps);
+        clear_ladder_flag(ps);
         return;
     }
 
@@ -121,24 +121,24 @@ pub fn pm_check_ladder_move(
         || ladder_stance_blocks_attach(ps)
         || context.server_time.wrapping_sub(ps.jump_time) < LADDER_JUMP_BLOCK_MS
     {
-        pm_clear_ladder_flag(ps);
+        clear_ladder_flag(ps);
         return;
     }
 
     let Some(hit) = backend.ladder_trace(ps.origin, check_dir, tracedist) else {
-        pm_clear_ladder_flag(ps);
+        clear_ladder_flag(ps);
         return;
     };
     if hit.fraction >= 1.0
         || (hit.surface_flags & SURF_LADDER) == 0
         || (context.walking && context.forwardmove <= 0)
     {
-        pm_clear_ladder_flag(ps);
+        clear_ladder_flag(ps);
         return;
     }
 
     if (ps.pm_flags & PMF_LADDER) != 0 {
-        pm_set_ladder_flag(ps);
+        set_ladder_flag(ps);
         return;
     }
 
@@ -149,18 +149,18 @@ pub fn pm_check_ladder_move(
         -ps.v_ladder_vec[2],
     ];
     let Some(hit2) = backend.ladder_trace(ps.origin, recheck, tracedist) else {
-        pm_clear_ladder_flag(ps);
+        clear_ladder_flag(ps);
         return;
     };
     if hit2.fraction < 1.0 && (hit2.surface_flags & SURF_LADDER) != 0 {
-        pm_set_ladder_flag(ps);
+        set_ladder_flag(ps);
     } else {
-        pm_clear_ladder_flag(ps);
+        clear_ladder_flag(ps);
         let _ = fell_off_in_air;
     }
 }
 
-pub fn pm_ladder_attract_velocity(ps: &mut PlayerState) {
+pub fn ladder_attract_velocity(ps: &mut PlayerState) {
     let f_side = ps.velocity[0] * ps.v_ladder_vec[0] + ps.velocity[1] * ps.v_ladder_vec[1];
     ps.velocity[0] += -f_side * ps.v_ladder_vec[0];
     ps.velocity[1] += -f_side * ps.v_ladder_vec[1];
@@ -193,7 +193,7 @@ pub struct LadderMoveContext {
     pub player_spectate_speed_scale: f32,
 }
 
-pub fn pm_ladder_move<C: crate::CollisionBackend>(
+pub fn ladder_move<C: crate::CollisionBackend>(
     ps: &mut PlayerState,
     pml: &mut crate::Pml,
     cmd: &mut UserCmd,
@@ -202,8 +202,8 @@ pub fn pm_ladder_move<C: crate::CollisionBackend>(
     collision: &C,
 ) {
     use crate::{
-        JumpCheckContext, JumpCheckResult, jump_check, pm_accelerate, pm_air_move,
-        pm_step_slide_move, stance_surface_type,
+        JumpCheckContext, JumpCheckResult, accelerate, air_move, jump, stance_surface_type,
+        step_slide_move,
     };
 
     let gate = JumpCheckContext {
@@ -211,8 +211,8 @@ pub fn pm_ladder_move<C: crate::CollisionBackend>(
         old_buttons: context.old_buttons,
         stance_surface_type: stance_surface_type(ps) as u8,
     };
-    if let JumpCheckResult::Launched { .. } = jump_check(ps, pml, cmd, gate, context.jump) {
-        pm_air_move(
+    if let JumpCheckResult::Launched { .. } = jump::check(ps, pml, cmd, gate, context.jump) {
+        air_move(
             ps,
             pml,
             cmd,
@@ -261,7 +261,7 @@ pub fn pm_ladder_move<C: crate::CollisionBackend>(
     }
     let mut wishdir = wishvel;
     let wishspeed = normalize3(&mut wishdir);
-    pm_accelerate(ps, pml, &wishdir, wishspeed, LADDER_ACCEL);
+    accelerate(ps, pml, &wishdir, wishspeed, LADDER_ACCEL);
 
     if cmd.forwardmove == 0 {
         if ps.velocity[2] <= 0.0 {
@@ -274,10 +274,10 @@ pub fn pm_ladder_move<C: crate::CollisionBackend>(
     }
 
     if pml.walking == 0 {
-        pm_ladder_attract_velocity(ps);
+        ladder_attract_velocity(ps);
     }
 
-    pm_step_slide_move(
+    step_slide_move(
         ps,
         pml,
         collision,

@@ -13,11 +13,11 @@ pub struct DObjReuseKey {
     pub model: i32,
 }
 
-pub fn dobj_reuse_matches(cached: DObjReuseKey, current: DObjReuseKey) -> bool {
+pub fn reuse_matches(cached: DObjReuseKey, current: DObjReuseKey) -> bool {
     cached.e_type == current.e_type && cached.model == current.model
 }
 
-pub fn dobj_model_token(parts: &[&str]) -> i32 {
+pub fn model_token(parts: &[&str]) -> i32 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     for part in parts {
         part.hash(&mut hasher);

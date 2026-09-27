@@ -32,7 +32,7 @@ pub(crate) fn spawn_scorebar(root: &mut ChildSpawnerCommands) {
     ));
 }
 
-pub(crate) fn sys_milliseconds() -> u32 {
+pub(crate) fn milliseconds() -> u32 {
     use std::sync::OnceLock;
     use std::time::Instant;
     static ORIGIN: OnceLock<Instant> = OnceLock::new();
@@ -177,7 +177,7 @@ impl ExprHost for ScorebarExprHost<'_> {
     fn team_field(&self, field: &str) -> Result<Operand, hud_iw4::ExprError> {
         if field.eq_ignore_ascii_case("name") {
             Ok(Operand::Str(
-                entity_iw4::cg_get_team_name(self.client_state_team).to_owned(),
+                entity_iw4::get_team_name(self.client_state_team).to_owned(),
             ))
         } else if field.eq_ignore_ascii_case("score") {
             Ok(Operand::Int(
@@ -326,7 +326,7 @@ pub(crate) fn update_scorebar(
     }
     let now_ms = snap.tick.0.saturating_mul(sim::MATCH_TICK_MS) as i32;
     let remaining_s = snap.meta.objectives.time_left_ms(now_ms).div_euclid(1000);
-    let sys_ms = sys_milliseconds();
+    let sys_ms = milliseconds();
 
     let mut rank_scores = [0i32; 18];
     rank_scores[0] = local_meta.score;

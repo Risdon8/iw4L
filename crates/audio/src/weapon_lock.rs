@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use net::{CgFrameClock, LocalPresentClient, PresentedSnapshot};
+use net::{FrameClock, LocalPresentClient, PresentedSnapshot};
 
 use crate::{AliasCommand, PlayAlias, SND_ENT_LOCAL};
 
@@ -26,7 +26,7 @@ fn present(
     presented: Res<PresentedSnapshot>,
     local: Res<LocalPresentClient>,
     generation: Res<frame::WorldGeneration>,
-    clock: Res<CgFrameClock>,
+    clock: Res<FrameClock>,
     mut cursor: Local<LockAudio>,
     mut commands: MessageWriter<AliasCommand>,
 ) {

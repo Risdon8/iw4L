@@ -1026,7 +1026,7 @@ fn decode_entity_event_record(input: &mut WireReader<'_>) -> Result<EntityEventR
         || event.0 > entity_iw4::EntityEventKind::MANTLE.0
         || event.0 < 0
     {
-        return Err(WireError::Malformed("entity event outside retail table"));
+        return Err(WireError::Malformed("entity event outside the event table"));
     }
     Ok(EntityEventRecord {
         sequence,
@@ -2736,7 +2736,7 @@ fn decode_objectives(input: &mut WireReader<'_>) -> Result<sim::ObjectiveMatch, 
         let objective_state = sim::ObjectiveState::from_u8(input.get_u8()?)
             .ok_or(WireError::Malformed("objective state"))?;
         let origin = [input.get_f32()?, input.get_f32()?, input.get_f32()?];
-        let team = gamemode_iw4::Team::from_retail_u8(input.get_u8()?)
+        let team = gamemode_iw4::Team::from_packed_u8(input.get_u8()?)
             .ok_or(WireError::Malformed("objective team"))?;
         let icon = get_text(input)?;
         state.compass.push(sim::CompassObjective {

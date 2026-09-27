@@ -89,7 +89,7 @@ pub(crate) fn occupy_script_brush_scene(
             && runtime.next_state.solid == entity_iw4::SCRIPT_MOVER_BMODEL_SOLID
             && runtime.next_state.e_flags & entity_iw4::CG_SCRIPT_MOVER_NODRAW != 0;
         if !hidden
-            && !entity_iw4::cg_script_mover_add_bmodel(
+            && !entity_iw4::script_mover_add_bmodel(
                 runtime.next_state.e_type,
                 runtime.next_state.e_flags,
                 runtime.next_state.solid,
@@ -101,8 +101,8 @@ pub(crate) fn occupy_script_brush_scene(
         let Ok(model_index) = u32::try_from(runtime.next_state.index) else {
             continue;
         };
-        let origin = entity_iw4::bg_evaluate_trajectory(&runtime.current.pos, at_time);
-        let angles = entity_iw4::bg_evaluate_trajectory(&runtime.current.apos, at_time);
+        let origin = entity_iw4::evaluate_trajectory(&runtime.current.pos, at_time);
+        let angles = entity_iw4::evaluate_trajectory(&runtime.current.apos, at_time);
         live.push(ScriptMoverBmodelClaim {
             model_index,
             origin,

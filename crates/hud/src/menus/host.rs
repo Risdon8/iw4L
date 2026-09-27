@@ -233,7 +233,7 @@ impl ExprHost for MenuHost<'_> {
     fn team_field(&self, field: &str) -> Result<Operand, ExprError> {
         if field.eq_ignore_ascii_case("name") {
             Ok(Operand::Str(
-                entity_iw4::cg_get_team_name(self.world.team).to_owned(),
+                entity_iw4::get_team_name(self.world.team).to_owned(),
             ))
         } else if field.eq_ignore_ascii_case("score") {
             Ok(Operand::Int(

@@ -52,8 +52,8 @@ pub use prematch::{
 };
 
 pub use radius_damage::{
-    G_CAN_DAMAGE_CONTENTS_MASK, g_can_damage_player_vis_scale, g_radius_damage_amount,
-    g_radius_damage_area_half_extent, radius_damage_distance_to_aabb,
+    G_CAN_DAMAGE_CONTENTS_MASK, can_damage_player_vis_scale, radius_damage_amount,
+    radius_damage_area_half_extent, radius_damage_distance_to_aabb,
 };
 pub use score::Score;
 

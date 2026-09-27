@@ -385,7 +385,7 @@ impl ZoneLane for Iw4Lane {
         }
         map_xmodels.set_dynent_phys_preset_n(dyn_ents.phys_preset_named_n());
         report.push(format!(
-            "xmodel physPreset: slot={} named={} models={} (XModel+0x128 NameHint; DynEnt def+44 named={} is a different graph)",
+            "xmodel physPreset: slot={} named={} models={} (dyn-ent def named={} is a different graph)",
             map_xmodels.phys_preset_slot_n(),
             map_xmodels.phys_preset_name_hint_n(),
             map_xmodels.captured_model_n(),
@@ -974,7 +974,7 @@ impl ZoneLane for Iw4Lane {
         weapons.resolve_world_model_edges(&sink.world_weapons);
         let gun_named = weapons.gun_xmodel_count();
         report.push(format!(
-        "common_mp weapons: {captured} captures → {} unique catalog ids (sorted; not retail bg_weaponIndex); {gun_named} with gunXModel[0]; {} with szXAnims[IDLE]; {} with any szXAnims slot",
+        "common_mp weapons: {captured} captures → {} unique catalog ids (sorted); {gun_named} with gunXModel[0]; {} with szXAnims[IDLE]; {} with any szXAnims slot",
         weapons.len(),
         weapons.idle_anim_count(),
         weapons.sz_xanims_count()
@@ -1151,7 +1151,7 @@ impl ZoneLane for Iw4Lane {
                 let unique: std::collections::BTreeSet<String> =
                     sink.tracers.named_materials().map(str::to_owned).collect();
                 for name in unique {
-                    let bind = crate::fx_material_bind_name(&name);
+                    let bind = crate::material_bind_name(&name);
                     let twins: Vec<&str> = material_population
                         .materials
                         .iter()

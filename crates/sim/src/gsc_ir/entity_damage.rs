@@ -131,7 +131,7 @@ pub(crate) fn apply_script_blasts(world: &mut World, tick: crate::Tick) {
                 continue;
             }
             let amount =
-                gamemode_iw4::g_radius_damage_amount(blast.max, blast.min, blast.radius, dist, 1.0);
+                gamemode_iw4::radius_damage_amount(blast.max, blast.min, blast.radius, dist, 1.0);
             if amount <= 0 {
                 continue;
             }

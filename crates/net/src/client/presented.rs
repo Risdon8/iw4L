@@ -419,7 +419,7 @@ fn fire_weapon_count_in(entity_events: &[EntityEventRecord], subject: ClientId) 
 }
 
 #[derive(Resource, Clone, Copy, Debug, Default)]
-pub struct CgViewweaponAim {
+pub struct ViewweaponAim {
     pub live: bool,
     pub gun_pitch: f32,
     pub gun_yaw: f32,

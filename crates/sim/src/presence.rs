@@ -1,7 +1,7 @@
 use crate::bullet_collision::EntityCollisionCapabilities;
 use crate::gentity::{ScriptMoverGentity, apos_from_entity_state, pos_from_entity_state};
 use crate::identities::ScriptModelId;
-use entity_iw4::{CG_SCRIPT_MOVER_NODRAW, bg_evaluate_trajectory};
+use entity_iw4::{CG_SCRIPT_MOVER_NODRAW, evaluate_trajectory};
 use std::collections::BTreeMap;
 
 pub(crate) fn follow_movers(
@@ -18,8 +18,8 @@ pub(crate) fn follow_movers(
         row.hidden = mover.state.e_flags & CG_SCRIPT_MOVER_NODRAW != 0;
         row.solid = !mover.nonsolid;
         let pose = (
-            bg_evaluate_trajectory(&pos_from_entity_state(&mover.state), time_ms),
-            bg_evaluate_trajectory(&apos_from_entity_state(&mover.state), time_ms),
+            evaluate_trajectory(&pos_from_entity_state(&mover.state), time_ms),
+            evaluate_trajectory(&apos_from_entity_state(&mover.state), time_ms),
         );
         match row.followed_pose {
             None => row.followed_pose = Some(pose),

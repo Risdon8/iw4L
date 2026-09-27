@@ -126,6 +126,20 @@ impl XAnimCatalog {
         self.entries.get(self.index_by_name(ns, name)?)
     }
 
+    pub fn hint_edge(
+        &self,
+        hint: Option<&str>,
+        ns: AssetNamespace,
+    ) -> asset_core::AssetEdge<asset_core::XAnimSpace> {
+        match hint.filter(|name| !name.is_empty()) {
+            None => asset_core::AssetEdge::Absent,
+            Some(name) => match self.index_by_name(ns, name) {
+                Some(index) => asset_core::AssetEdge::bind_order(index, self.zone_of(index)),
+                None => asset_core::AssetEdge::Unresolved(asset_core::AssetEdgeReason::CatalogMiss),
+            },
+        }
+    }
+
     fn has_key(&self, key: &XAnimKey) -> bool {
         self.indices.contains_key(key)
     }

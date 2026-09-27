@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use anim_iw4::{
     DOBJ_RADIUS_PARENT_ROOT, PLAYER_ANIM_RAW_MASK, PlayerAnimValue,
-    XANIM_LEGS_PARENT_WEIGHT_WHEN_TORSO, xanim_client_anim_blend_ms,
-    xanim_client_anim_playback_rate, xanim_goal_time_from_blend_ms,
+    XANIM_LEGS_PARENT_WEIGHT_WHEN_TORSO, client_anim_blend_ms, client_anim_playback_rate,
+    goal_time_from_blend_ms,
 };
 use bevy::prelude::*;
 
@@ -360,7 +360,7 @@ fn apply_one_client_anim_rate(
     if pose_time_ms < sample.time_ms {
         sample.time_ms = 0;
     }
-    let Some(rate) = xanim_client_anim_playback_rate(
+    let Some(rate) = client_anim_playback_rate(
         origin,
         sample.origin,
         pose_time_ms,
@@ -395,7 +395,7 @@ fn apply_remote_client_anim_goals(
     new_torso_moving: bool,
     authored_blend_ms: [i32; 2],
 ) -> Result<(), String> {
-    let legs_time = xanim_goal_time_from_blend_ms(xanim_client_anim_blend_ms(
+    let legs_time = goal_time_from_blend_ms(client_anim_blend_ms(
         legs_index,
         authored_blend_ms[0],
         old_legs != 0,
@@ -403,7 +403,7 @@ fn apply_remote_client_anim_goals(
         old_legs_moving,
         new_legs_moving,
     ));
-    let torso_time = xanim_goal_time_from_blend_ms(xanim_client_anim_blend_ms(
+    let torso_time = goal_time_from_blend_ms(client_anim_blend_ms(
         torso_index,
         authored_blend_ms[1],
         old_torso != 0,
@@ -897,7 +897,7 @@ pub fn remote_dobj_reuse_key(
     parts.extend_from_slice(attachment_names);
     assets::dobj::DObjReuseKey {
         e_type,
-        model: assets::dobj::dobj_model_token(&parts),
+        model: assets::dobj::model_token(&parts),
     }
 }
 
@@ -906,7 +906,7 @@ pub fn remote_dobj_reuses(
     cached: Option<assets::dobj::DObjReuseKey>,
     next: assets::dobj::DObjReuseKey,
 ) -> bool {
-    has_dobj && cached.is_some_and(|cached| assets::dobj::dobj_reuse_matches(cached, next))
+    has_dobj && cached.is_some_and(|cached| assets::dobj::reuse_matches(cached, next))
 }
 
 pub fn select_remote_models<'a>(
@@ -1227,11 +1227,7 @@ pub fn skin_slot_need(skel: &assets::ModelSkel, skin: &[Mat4], base: usize) -> R
     skin_matrices_cover_slot(skin.len(), base, skel.bones.len())
 }
 
-pub fn dobj_attach_radii(
-    body: Option<f32>,
-    head: Option<f32>,
-    gun: Option<f32>,
-) -> (Vec<f32>, Vec<u8>) {
+pub fn attach_radii(body: Option<f32>, head: Option<f32>, gun: Option<f32>) -> (Vec<f32>, Vec<u8>) {
     let mut radii = Vec::new();
     let mut parents = Vec::new();
     if let Some(radius) = body {
@@ -1249,12 +1245,12 @@ pub fn dobj_attach_radii(
     (radii, parents)
 }
 
-pub fn dobj_radii(
+pub fn radii(
     body: &assets::BodyMeshEntry,
     head: Option<&assets::BodyMeshEntry>,
     gun: Option<&assets::WorldWeaponEntry>,
 ) -> (Vec<f32>, Vec<u8>) {
-    dobj_attach_radii(
+    attach_radii(
         body.skel.radius,
         head.and_then(|head| head.skel.radius),
         gun.and_then(|gun| gun.skel.radius),

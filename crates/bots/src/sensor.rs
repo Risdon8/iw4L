@@ -245,7 +245,7 @@ fn probe_visible(
 }
 
 fn public_objectives(snapshot: &Snapshot, bot: ClientId, team: i32) -> Vec<ModeObjective> {
-    let Some(team) = gamemode_iw4::Team::from_retail_u8(team as u8) else {
+    let Some(team) = gamemode_iw4::Team::from_packed_u8(team as u8) else {
         return Vec::new();
     };
     let feet = snapshot

@@ -3,23 +3,19 @@ use bevy::prelude::*;
 use bevy::ui::Display;
 use frame::{LifeStarted, ViewSubject};
 use hud_iw4::{
-    CG_CROSSHAIR_ALPHA_DEFAULT, CG_CROSSHAIR_ALPHA_MIN_DEFAULT, CgHipCrosshairGate,
-    SCREEN_BLEND_BLURRED, WeaponAdsCrosshairFacts, WeaponReticleFacts, cg_calc_reticle_alpha,
-    cg_calc_reticle_spread, cg_hip_crosshair_trans_scale, cg_hip_crosshair_visible,
-    cg_is_flashbanged, cg_reticle_draw_size,
+    CG_CROSSHAIR_ALPHA_DEFAULT, CG_CROSSHAIR_ALPHA_MIN_DEFAULT, HipCrosshairGate,
+    SCREEN_BLEND_BLURRED, WeaponAdsCrosshairFacts, WeaponReticleFacts, calc_reticle_alpha,
+    calc_reticle_spread, hip_crosshair_trans_scale, hip_crosshair_visible, is_flashbanged,
+    reticle_draw_size,
 };
-use movement_iw4::mantle_is_weapon_inactive;
-use net::{
-    CgFrameClock, CgViewweaponAim, ClientCmdTemplate, LocalPresentClient, PresentedSnapshot,
-};
-use playerstate_iw4::{
-    CgIsThirdPersonViewInputs, KillCamMode, PlayerState, cg_is_third_person_view,
-};
+use movement_iw4::mantle::is_weapon_inactive;
+use net::{ClientCmdTemplate, FrameClock, LocalPresentClient, PresentedSnapshot, ViewweaponAim};
+use playerstate_iw4::{KillCamMode, PlayerState, ThirdPersonViewInputs, is_third_person_view};
 use weapon_iw4::{
     AIM_SPREAD_MOVE_SPEED_THRESHOLD_DEFAULT, AimSpreadMotion, AimSpreadState, SHORT2ANGLE,
-    SpreadOverrideState, WeaponAimSpreadDecayFacts, WeaponSpreadFacts, bg_get_spread_for_weapon,
-    bg_get_viewmodel_weapon_index, bg_should_apply_view_org_bob, perk_weap_spread_multiplier,
-    pm_adjust_aim_spread_scale,
+    SpreadOverrideState, WeaponAimSpreadDecayFacts, WeaponSpreadFacts, adjust_aim_spread_scale,
+    get_spread_for_weapon, get_viewmodel_weapon_index, perk_weap_spread_multiplier,
+    should_apply_view_org_bob,
 };
 
 use crate::gaps::{GapCause, HudGap, HudPresentationGaps, ImageMiss, ReticleSlot};
@@ -118,7 +114,7 @@ fn tick_spread_latch(
         speed: ps.speed,
         move_speed_threshold: AIM_SPREAD_MOVE_SPEED_THRESHOLD_DEFAULT,
     };
-    pm_adjust_aim_spread_scale(
+    adjust_aim_spread_scale(
         &mut state,
         spread_facts,
         decay,
@@ -154,8 +150,8 @@ pub(crate) fn update_reticle(
     mut gaps: ResMut<HudPresentationGaps>,
     mut ads_latch: ResMut<ReticleAdsLatch>,
     mut spread_latch: ResMut<ReticleSpreadLatch>,
-    aim: Res<CgViewweaponAim>,
-    cg_clock: Res<CgFrameClock>,
+    aim: Res<ViewweaponAim>,
+    cg_clock: Res<FrameClock>,
     mut quads: Query<(&ReticleQuad, &mut Node, &mut ImageNode, &mut UiTransform)>,
     life: (MessageReader<LifeStarted>, Res<ViewSubject>),
 ) {
@@ -185,7 +181,7 @@ pub(crate) fn update_reticle(
     }
     ads_latch.last_frac = ps.f_weapon_pos_frac;
 
-    let viewmodel_index = bg_get_viewmodel_weapon_index(ps);
+    let viewmodel_index = get_viewmodel_weapon_index(ps);
     let Some(weapons) = weapons.as_ref() else {
         gaps.raise(GapCause::ReticleNoWeaponCatalog);
         hide_all(&mut quads);
@@ -234,10 +230,10 @@ pub(crate) fn update_reticle(
         time.delta_secs(),
     );
 
-    let mantle_inactive = mantle_is_weapon_inactive(ps, true);
+    let mantle_inactive = is_weapon_inactive(ps, true);
     let rendering_third_person = (view.in_killcam()
         && ps.kill_cam_entity != playerstate_iw4::ENTITYNUM_NONE)
-        || cg_is_third_person_view(CgIsThirdPersonViewInputs {
+        || is_third_person_view(ThirdPersonViewInputs {
             pm_type: ps.pm_type,
             other_flags: ps.other_flags,
             link_flags: ps.link_flags,
@@ -245,12 +241,12 @@ pub(crate) fn update_reticle(
             in_killcam: view.in_killcam(),
             killcam_mode: KillCamMode::Mode0,
         });
-    let gate = CgHipCrosshairGate {
+    let gate = HipCrosshairGate {
         rendering_third_person,
         e_flags: ps.e_flags,
         other_flags: ps.other_flags,
         viewmodel_weapon_index: viewmodel_index as i32,
-        flashbanged: cg_is_flashbanged(
+        flashbanged: is_flashbanged(
             cg_clock.time(),
             ps.shellshock_time,
             ps.shellshock_duration,
@@ -263,7 +259,7 @@ pub(crate) fn update_reticle(
         f_weapon_pos_frac: ps.f_weapon_pos_frac,
         cg_draw_gun: true,
 
-        bob_gate: bg_should_apply_view_org_bob(
+        bob_gate: should_apply_view_org_bob(
             false,
             ps.pm_type,
             ps.other_flags,
@@ -277,7 +273,7 @@ pub(crate) fn update_reticle(
         last_weapon_hand: ps.last_weapon_hand,
         mantle_weapon_inactive: mantle_inactive,
     };
-    if !cg_hip_crosshair_visible(&gate) {
+    if !hip_crosshair_visible(&gate) {
         hide_all(&mut quads);
         return;
     }
@@ -295,21 +291,21 @@ pub(crate) fn update_reticle(
         hide_all(&mut quads);
         return;
     };
-    let trans_scale = cg_hip_crosshair_trans_scale(
+    let trans_scale = hip_crosshair_trans_scale(
         ps.f_weapon_pos_frac,
         ads_latch.position_to_ads,
         &ads_xf,
         tan_half,
     );
-    let side_size_v = cg_reticle_draw_size(&reticle_facts, trans_scale);
-    let cone = bg_get_spread_for_weapon(
+    let side_size_v = reticle_draw_size(&reticle_facts, trans_scale);
+    let cone = get_spread_for_weapon(
         ps.view_height_current,
         ps.spread_override,
         SpreadOverrideState::from_i32(ps.spread_override_state),
         &spread_facts,
         perk_weap_spread_multiplier(ps.perks[0]),
     );
-    let gap_v = cg_calc_reticle_spread(
+    let gap_v = calc_reticle_spread(
         cone.min,
         cone.max,
         aim_spread,
@@ -320,7 +316,7 @@ pub(crate) fn update_reticle(
     );
 
     let center_size_v = assets.center_size as f32 * trans_scale;
-    let alpha = cg_calc_reticle_alpha(
+    let alpha = calc_reticle_alpha(
         1.0,
         CG_CROSSHAIR_ALPHA_DEFAULT,
         CG_CROSSHAIR_ALPHA_MIN_DEFAULT,

@@ -59,7 +59,7 @@ fn stitch_fx_color_by_asset(
     }
 }
 
-pub(crate) fn fx_world_color_images(
+pub(crate) fn world_color_images(
     scene: &WorldScene,
     exact_material_handles: &[Option<Handle<Image>>],
     tracers: Option<&PreparedTracers>,
@@ -329,7 +329,7 @@ pub fn install(
     tracers: Option<&PreparedTracers>,
     fx_catalog: Option<&PreparedFxCatalog>,
 ) {
-    let fx_images = fx_world_color_images(scene, &exact_material_handles, tracers, fx_catalog);
+    let fx_images = world_color_images(scene, &exact_material_handles, tracers, fx_catalog);
     commands.insert_resource(fx_images);
     let exact_material_views = exact_material_handles.iter().flatten().count();
     let exact_probe_views = reflection_probe_handles.iter().flatten().count();

@@ -37,7 +37,10 @@ pub(crate) fn update(
     view: Option<Res<frame::ViewSubject>>,
 ) {
     pass.use_hint = TessJob::Hide;
-    if !surface.is_ready() || input.script_menu_open || view.as_ref().is_some_and(|v| v.in_killcam()) {
+    if !surface.is_ready()
+        || input.script_menu_open
+        || view.as_ref().is_some_and(|v| v.in_killcam())
+    {
         memory.caption = None;
         return;
     }
@@ -190,7 +193,7 @@ pub(crate) fn update(
         });
         return;
     };
-    let nscale = hud_iw4::r_normalized_text_scale(font.pixel_height, item.text_scale);
+    let nscale = hud_iw4::normalized_text_scale(font.pixel_height, item.text_scale);
 
     let width = crate::chrome::ui_text_width(font, text, item.text_scale)
         - if icon.is_some() {

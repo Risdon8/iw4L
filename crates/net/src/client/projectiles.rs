@@ -74,7 +74,7 @@ impl PresentedProjectile {
     }
 
     pub fn origin_at(&self, at_time_ms: i32) -> [f32; 3] {
-        entity_iw4::bg_evaluate_trajectory(&self.pos(), at_time_ms)
+        entity_iw4::evaluate_trajectory(&self.pos(), at_time_ms)
     }
 
     pub fn velocity(&self) -> [f32; 3] {

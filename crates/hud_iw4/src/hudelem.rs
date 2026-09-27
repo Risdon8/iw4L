@@ -159,7 +159,7 @@ pub const fn unpack_rgba(dword: u32) -> [u8; 4] {
 }
 
 #[must_use]
-pub fn bg_lerp_hud_colors(elem: &HudElem, time: i32) -> [u8; 4] {
+pub fn lerp_hud_colors(elem: &HudElem, time: i32) -> [u8; 4] {
     let elapsed = time.wrapping_sub(elem.fade_start_time);
     let dur = elem.fade_time;
     if dur <= 0 || elapsed >= dur {

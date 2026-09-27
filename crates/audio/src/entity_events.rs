@@ -6,8 +6,8 @@ use bevy::prelude::*;
 use net::{CEntity, EntityEventKind, LocalPresentClient, PresentedSnapshot};
 
 use crate::{
-    Footstep, LandSound, PlayAlias, SoundBank, StepGait, WeaponSound, footstep_aliases,
-    gear_rattle_alias, land_aliases, mantle_gear_alias, snd_ent_from_number,
+    Footstep, LandSound, PlayAlias, SoundBank, StepGait, WeaponSound, ent_from_number,
+    footstep_aliases, gear_alias, gear_rattle_alias, land_aliases,
 };
 
 fn selected_alias<'a>(
@@ -73,7 +73,7 @@ fn selected_alias<'a>(
     weapons.weapon_sound_key(weapon, if player_view { player } else { world }, bank)
 }
 
-fn cg_entity_event_sound(
+fn entity_event_sound(
     sound: On<net::EntityEventSound>,
     identities: Query<&CEntity>,
     local: Res<LocalPresentClient>,
@@ -89,10 +89,7 @@ fn cg_entity_event_sound(
         return;
     }
     if event == EntityEventKind::SOUND_ALIAS_AS_MASTER {
-        diag::warn!(
-            Audio,
-            "audio: EV_SOUND_ALIAS_AS_MASTER is not ported (typed gap)"
-        );
+        diag::warn!(Audio, "audio: EV_SOUND_ALIAS_AS_MASTER is unsupported");
         return;
     }
     let Ok(identity) = identities.get(sound.entity) else {
@@ -215,12 +212,12 @@ fn play_cs_sound_alias(
         snd_ent: if local {
             None
         } else {
-            snd_ent_from_number(payload.payload.number)
+            ent_from_number(payload.payload.number)
         },
     }));
 }
 
-fn cg_movement_sound(
+fn movement_sound(
     sound: On<net::EntityMovementSound>,
     identities: Query<&CEntity>,
     local: Res<LocalPresentClient>,
@@ -261,8 +258,8 @@ fn cg_movement_sound(
         | EntityEventKind::FOOTSTEP_PRONE
         | EntityEventKind::JUMP => {}
         EntityEventKind::MANTLE => {
-            let alias = mantle_gear_alias(player_view).to_owned();
-            let fallback = player_view.then(|| mantle_gear_alias(false).to_owned());
+            let alias = gear_alias(player_view).to_owned();
+            let fallback = player_view.then(|| gear_alias(false).to_owned());
             play.write(crate::AliasCommand::Play(PlayAlias {
                 namespace: assets::AssetNamespace::Iw4,
                 alias,
@@ -299,9 +296,9 @@ fn cg_movement_sound(
 }
 
 pub(crate) fn register_entity_event_audio(app: &mut App) {
-    app.add_observer(cg_entity_event_sound)
-        .add_observer(cg_movement_sound)
-        .add_observer(cg_grenade_contact);
+    app.add_observer(entity_event_sound)
+        .add_observer(movement_sound)
+        .add_observer(grenade_contact);
 }
 
 #[derive(Clone, Debug)]
@@ -524,7 +521,7 @@ fn apply_viewmodel_notetrack(
     }
 }
 
-fn cg_grenade_contact(
+fn grenade_contact(
     contact: On<net::EntityGrenadeContact>,
     weapons: Option<Res<PreparedWeapons>>,
     bank: Option<Res<SoundBank>>,
@@ -554,6 +551,6 @@ fn cg_grenade_contact(
         namespace,
         alias: alias.to_owned(),
         origin_inches: Some(payload.origin),
-        snd_ent: snd_ent_from_number(payload.number),
+        snd_ent: ent_from_number(payload.number),
     });
 }

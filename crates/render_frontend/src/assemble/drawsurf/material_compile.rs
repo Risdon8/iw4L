@@ -175,7 +175,7 @@ fn log_catalog_generation(catalog: &RuntimeMaterialCatalog) {
         }
         diag::info!(
             World,
-            "drawsurf tech15 CodeTexture: sets={sets} with_0xD={with_tex_d} hist={hist:?} (type-4 payload; 0xD is attenuationSampler)"
+            "drawsurf tech15 CodeTexture: sets={sets} with_attenuation={with_tex_d} hist={hist:?} (type-4 payload)"
         );
     }
 }

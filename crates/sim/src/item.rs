@@ -1,11 +1,11 @@
 use crate::frame::FrameWorld;
-use anim_iw4::bg_random;
-use entity_iw4::{TR_GRAVITY, TR_STATIONARY, Trajectory, bg_evaluate_trajectory};
+use anim_iw4::random;
+use entity_iw4::{TR_GRAVITY, TR_STATIONARY, Trajectory, evaluate_trajectory};
 use math_iw4::angle_vectors;
 use playerstate_iw4::{ENTITYNUM_NONE, PM_TYPE_DEAD, PlayerState};
 use weapon_iw4::{
-    bg_ammo_table_key, bg_clip_table_key, bg_get_ammo_not_in_clip, bg_get_clip_for_hand,
-    bg_player_weapons_find_slot, bg_set_ammo_not_in_clip, bg_set_clip_for_hand,
+    ammo_table_key, clip_table_key, get_ammo_not_in_clip, get_clip_for_hand,
+    player_weapons_find_slot, set_ammo_not_in_clip, set_clip_for_hand,
 };
 
 use crate::bullet_collision::{MASK_PLAYER_SOLID, PLAYER_MAXS, PLAYER_MINS};
@@ -42,12 +42,12 @@ pub struct DroppedItem {
     pub scavenger: bool,
 }
 
-pub fn g_random(seed: &mut u32) -> f32 {
-    bg_random(seed) as f32 * (1.0 / 32768.0)
+pub fn random_unit(seed: &mut u32) -> f32 {
+    random(seed) as f32 * (1.0 / 32768.0)
 }
 
-pub fn g_crandom(seed: &mut u32) -> f32 {
-    let bits = bg_random(seed) as f32;
+pub fn random_signed(seed: &mut u32) -> f32 {
+    let bits = random(seed) as f32;
     let unit = bits * (1.0 / 32768.0);
     unit + unit - 1.0
 }
@@ -59,9 +59,9 @@ pub fn drop_item_velocity(yaw_deg: f32, seed: &mut u32) -> [f32; 3] {
         forward[1] * G_DROP_FORWARD_SPEED,
         forward[2] * G_DROP_FORWARD_SPEED,
     ];
-    velocity[2] += g_crandom(seed) * G_DROP_UP_SPEED_RAND + G_DROP_UP_SPEED_BASE;
-    velocity[0] += g_crandom(seed) * G_DROP_HORZ_SPEED_RAND;
-    velocity[1] += g_crandom(seed) * G_DROP_HORZ_SPEED_RAND;
+    velocity[2] += random_signed(seed) * G_DROP_UP_SPEED_RAND + G_DROP_UP_SPEED_BASE;
+    velocity[0] += random_signed(seed) * G_DROP_HORZ_SPEED_RAND;
+    velocity[1] += random_signed(seed) * G_DROP_HORZ_SPEED_RAND;
     velocity
 }
 
@@ -69,7 +69,7 @@ fn may_drop_weapon(world: &FrameWorld, ps: &PlayerState, weapon: u32) -> bool {
     if weapon == 0 {
         return false;
     }
-    if bg_player_weapons_find_slot(&ps.weapons, weapon as i32) < 0 {
+    if player_weapons_find_slot(&ps.weapons, weapon as i32) < 0 {
         return false;
     }
     let name = world.weapon_script_name(weapon);
@@ -85,14 +85,14 @@ fn may_drop_weapon(world: &FrameWorld, ps: &PlayerState, weapon: u32) -> bool {
     if name.contains("riotshield") {
         return true;
     }
-    let clip_key = bg_clip_table_key(facts.clip_index, weapon);
-    let clip_r = bg_get_clip_for_hand(&ps.ammoclip, clip_key, 0);
-    let clip_l = bg_get_clip_for_hand(&ps.ammoclip, clip_key, 1);
+    let clip_key = clip_table_key(facts.clip_index, weapon);
+    let clip_r = get_clip_for_hand(&ps.ammoclip, clip_key, 0);
+    let clip_l = get_clip_for_hand(&ps.ammoclip, clip_key, 1);
     if clip_r == 0 && clip_l == 0 {
         return false;
     }
-    let ammo_key = bg_ammo_table_key(facts.ammo_index, weapon);
-    let stock = bg_get_ammo_not_in_clip(&ps.ammo, ammo_key);
+    let ammo_key = ammo_table_key(facts.ammo_index, weapon);
+    let stock = get_ammo_not_in_clip(&ps.ammo, ammo_key);
     clip_r != 0 || clip_l != 0 || stock != 0
 }
 
@@ -113,12 +113,12 @@ fn ammo_from_ps(world: &FrameWorld, ps: &PlayerState, weapon: u32) -> (i32, i32,
     let Some(facts) = world.combat_facts_for(weapon) else {
         return (0, 0, 0);
     };
-    let clip_key = bg_clip_table_key(facts.clip_index, weapon);
-    let ammo_key = bg_ammo_table_key(facts.ammo_index, weapon);
+    let clip_key = clip_table_key(facts.clip_index, weapon);
+    let ammo_key = ammo_table_key(facts.ammo_index, weapon);
     (
-        bg_get_clip_for_hand(&ps.ammoclip, clip_key, 0),
-        bg_get_clip_for_hand(&ps.ammoclip, clip_key, 1),
-        bg_get_ammo_not_in_clip(&ps.ammo, ammo_key),
+        get_clip_for_hand(&ps.ammoclip, clip_key, 0),
+        get_clip_for_hand(&ps.ammoclip, clip_key, 1),
+        get_ammo_not_in_clip(&ps.ammo, ammo_key),
     )
 }
 
@@ -133,14 +133,14 @@ fn set_ammo_on_ps(
     let Some(facts) = world.combat_facts_for(weapon) else {
         return;
     };
-    let clip_key = bg_clip_table_key(facts.clip_index, weapon);
-    let ammo_key = bg_ammo_table_key(facts.ammo_index, weapon);
+    let clip_key = clip_table_key(facts.clip_index, weapon);
+    let ammo_key = ammo_table_key(facts.ammo_index, weapon);
     if clip_key != 0 {
-        let _ = bg_set_clip_for_hand(&mut ps.ammoclip, clip_key, 0, clip_r);
-        let _ = bg_set_clip_for_hand(&mut ps.ammoclip, clip_key, 1, clip_l);
+        let _ = set_clip_for_hand(&mut ps.ammoclip, clip_key, 0, clip_r);
+        let _ = set_clip_for_hand(&mut ps.ammoclip, clip_key, 1, clip_l);
     }
     if ammo_key != 0 {
-        let _ = bg_set_ammo_not_in_clip(&mut ps.ammo, ammo_key, stock);
+        let _ = set_ammo_not_in_clip(&mut ps.ammo, ammo_key, stock);
     }
 }
 
@@ -183,7 +183,7 @@ fn current_primary_weapon(world: &FrameWorld, ps: &PlayerState) -> u32 {
     if weapon == 0 {
         return 0;
     }
-    if bg_player_weapons_find_slot(&ps.weapons, weapon as i32) < 0 {
+    if player_weapons_find_slot(&ps.weapons, weapon as i32) < 0 {
         return 0;
     }
     match world.combat_facts_for(weapon) {
@@ -374,7 +374,7 @@ pub(crate) fn think_item_move(world: &mut FrameWorld, time_ms: i32, number: i32)
         tr_delta: item.state.tr_delta,
         tr_base: item.state.tr_base,
     };
-    let desired = bg_evaluate_trajectory(&traj, time_ms);
+    let desired = evaluate_trajectory(&traj, time_ms);
     let hit = world.trace_clip(
         item.origin,
         desired,
@@ -477,22 +477,17 @@ fn grab_number(world: &mut FrameWorld, walker: ClientId, number: i32) {
         return;
     };
     let picker_pm_type = ps.pm_type;
-    let already_has = bg_player_weapons_find_slot(&ps.weapons, weapon as i32) >= 0;
+    let already_has = player_weapons_find_slot(&ps.weapons, weapon as i32) >= 0;
     world.remove_dropped_item_by_number(number);
     world.free_dynamic_entity_number(item.state.number);
     let mut swapped_entnum = ENTITYNUM_NONE;
     let akimbo = gsc_give_weapon_is_akimbo(world.weapon_script_name(weapon));
     if already_has {
         let mut next = ps;
-        weapon_iw4::bg_latch_weapon_dual_wield(
-            &next.weapons,
-            &mut next.weapon_data,
-            weapon,
-            akimbo,
-        );
+        weapon_iw4::latch_weapon_dual_wield(&next.weapons, &mut next.weapon_data, weapon, akimbo);
         if next.weapon == weapon {
             next.last_weapon_hand =
-                weapon_iw4::pm_num_hands_for_held(&next.weapons, &next.weapon_data, weapon);
+                weapon_iw4::num_hands_for_held(&next.weapons, &next.weapon_data, weapon);
         }
         add_ammo_on_ps(
             world,

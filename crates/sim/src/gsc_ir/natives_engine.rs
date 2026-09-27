@@ -475,7 +475,7 @@ pub(super) fn advance_motions(world: &mut World, now: i64) {
     }
 }
 
-fn fx_name(world: &World, id: i32) -> Result<String, String> {
+fn name(world: &World, id: i32) -> Result<String, String> {
     world
         .resource::<Runtime>()
         .precached
@@ -1265,7 +1265,7 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         Ok(Value::String(tag.clone()))
     });
     registry.register(Function, "playfx", |world, _, args| {
-        let name = fx_name(world, int(args, 0)?)?;
+        let name = name(world, int(args, 0)?)?;
         let origin = vector(args, 1)?;
         let forward = optional(args, 2, vector)?.unwrap_or([0.0, 0.0, 1.0]);
         let index = crate::frame::FrameWorld::from_world(world).effect_name_index(&name);
@@ -1279,7 +1279,7 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         Ok(Value::Undefined)
     });
     registry.register(Function, "playfxontag", |world, _, args| {
-        let name = fx_name(world, int(args, 0)?)?;
+        let name = name(world, int(args, 0)?)?;
         let entity = arg(args, 1)?.clone();
         let tag = string(args, 2)?;
         let presence = runtime(world).presence_of(&entity);
@@ -1643,7 +1643,7 @@ pub(super) fn register(registry: &mut NativeRegistry) {
             precache(world, "asset", string(args, 0)?).map(Value::Int)
         });
     }
-    fn fx_entity(
+    fn entity(
         world: &mut World,
         args: &[Value],
         origin_at: usize,
@@ -1651,7 +1651,7 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         repeat_ms: i32,
         cull_distance: f32,
     ) -> Result<Value, String> {
-        let name = fx_name(world, int(args, 0)?)?;
+        let name = name(world, int(args, 0)?)?;
         let origin = vector(args, origin_at)?;
         let forward = optional(args, orient_at, vector)?.unwrap_or([0.0, 0.0, 1.0]);
         let forward = glam::Vec3::from_array(forward)
@@ -1685,7 +1685,7 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         Ok(Value::Object(id))
     }
     registry.register(Function, "spawnfx", |world, _, args| {
-        fx_entity(world, args, 1, 2, 0, 0.0)
+        entity(world, args, 1, 2, 0, 0.0)
     });
     registry.register(Function, "playloopedfx", |world, _, args| {
         let repeat = float(args, 1)?;
@@ -1693,7 +1693,7 @@ pub(super) fn register(registry: &mut NativeRegistry) {
             return Err("playloopedfx repeat delay must be positive".into());
         }
         let cull = optional(args, 3, float)?.unwrap_or(0.0);
-        fx_entity(world, args, 2, 4, (repeat * 1000.0) as i32, cull)
+        entity(world, args, 2, 4, (repeat * 1000.0) as i32, cull)
     });
     registry.register(Function, "triggerfx", |world, _, args| {
         let id = entity_id(world, arg(args, 0)?)?;

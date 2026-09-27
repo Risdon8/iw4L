@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use frame::{AppScreen, LifeStarted};
-use hud_iw4::{cg_is_flashbanged, cg_shellshock_flash_blend};
-use net::{CgFrameClock, LocalPresentClient, PresentedSnapshot};
+use hud_iw4::{is_flashbanged, shellshock_flash_blend};
+use net::{FrameClock, LocalPresentClient, PresentedSnapshot};
 
 use crate::draw2d::{Draw2dCmd, Draw2dList, Draw2dOp, Draw2dProvenance, tessellate};
 use crate::gaps::{GapCause, HudGap, HudPresentationGaps};
@@ -44,7 +44,7 @@ fn skip_rewrite(latch: &FlashWhiteoutLatch, alpha: (f32, f32), win_w: f32, win_h
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn update_flash_whiteout(
-    cg_clock: Res<CgFrameClock>,
+    cg_clock: Res<FrameClock>,
     screen: Res<AppScreen>,
     surface: Res<crate::surface::Hud2dSurface>,
     presented: Res<PresentedSnapshot>,
@@ -78,14 +78,14 @@ pub(crate) fn update_flash_whiteout(
         request_hide(&mut job, latch.packed.is_empty());
         return;
     };
-    let remaining = cg_is_flashbanged(
+    let remaining = is_flashbanged(
         cg_clock.time(),
         ps.shellshock_time,
         ps.shellshock_duration,
         shock.screen_type,
     );
     let Some((white, shot)) =
-        cg_shellshock_flash_blend(remaining, shock.white_fade_ms, shock.shot_fade_ms)
+        shellshock_flash_blend(remaining, shock.white_fade_ms, shock.shot_fade_ms)
     else {
         latch.last_start = None;
         request_hide(&mut job, latch.packed.is_empty());

@@ -12,7 +12,7 @@ use crate::font_overlay;
 use crate::gaps::{GapCause, HudPresentationGaps};
 use crate::gpu_list::{HudTessPass, TessJob};
 use crate::images::HudImages;
-use crate::scorebar::sys_milliseconds;
+use crate::scorebar::milliseconds;
 
 #[derive(Component)]
 pub(crate) struct KillcamSkipRaster;
@@ -165,7 +165,7 @@ pub(crate) fn update_killcam_skip(
     };
     let host = KillcamExprHost {
         menu: Some(menu),
-        ms: sys_milliseconds() as i32,
+        ms: milliseconds() as i32,
         seated: 1,
         game_ended,
         scores_open,

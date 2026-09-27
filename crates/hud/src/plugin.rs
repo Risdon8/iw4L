@@ -36,7 +36,7 @@ pub struct HudPlugin;
 impl Plugin for HudPlugin {
     fn build(&self, app: &mut App) {
         crate::gpu_list::register(app);
-        let _ = crate::scorebar::sys_milliseconds();
+        let _ = crate::scorebar::milliseconds();
         app.init_resource::<HudImages>()
             .init_resource::<HudPresentationGaps>()
             .init_resource::<ReticleAdsLatch>()
@@ -65,7 +65,7 @@ impl Plugin for HudPlugin {
         frame::register_ui_sound(app);
         crate::overhead_names::register(app);
         app.add_message::<LifeStarted>()
-            .add_observer(crate::killfeed::cg_obituary)
+            .add_observer(crate::killfeed::obituary)
             .add_systems(
                 Update,
                 (

@@ -10,12 +10,11 @@ use crate::authority::inbox::{
     AUTHORITY_MS, ClientActionInbox, ClientCommandInbox, MAX_REDUNDANT_CMDS,
 };
 use crate::authority::runtime::{AuthorityInputGate, AuthorityWorld, ClientShotSamples};
-use crate::client::cg_frame::{CgFrameClock, CgameActive, CgameJoinCensus};
-use crate::client::cls_frame::ClsRealtime;
 use crate::client::entities::CEntityBirthCensus;
+use crate::client::frame_clock::{FrameClock, GameActive, GameJoinCensus};
 use crate::client::input::{
-    ClientActionInput, LookState, accumulate_look, build_usercmd, com_frame_time_msec,
-    key_frame_msec, remote_control_axes,
+    ClientActionInput, LookState, accumulate_look, build_usercmd, frame_time_msec, key_frame_msec,
+    remote_control_axes,
 };
 use crate::client::predict::{ClientPrediction, CmdSeq};
 use crate::client::presented::{
@@ -23,6 +22,7 @@ use crate::client::presented::{
 };
 use crate::client::projectiles::merge_presented_projectiles;
 use crate::client::proxy::{ProxySample, RemoteProxy};
+use crate::client::realtime::ClientRealtime;
 use crate::role::RuntimeRole;
 use crate::schedule::ClientSet;
 use crate::transport::loopback_live::{ListenLoopback, ReceivedTick};
@@ -215,7 +215,7 @@ pub struct ClientCmdTemplate {
 }
 
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CgWeaponSelect {
+pub struct WeaponSelect {
     pub index: u32,
 
     pub time: i32,
@@ -228,8 +228,8 @@ pub struct CgWeaponSelect {
     pub mapped_index: u32,
 }
 
-pub fn cg_follow_held_weapon_select(
-    select: &mut CgWeaponSelect,
+pub fn follow_held_weapon_select(
+    select: &mut WeaponSelect,
     ps_weapon: u32,
     life_sequence: u32,
     cg_time: i32,
@@ -250,8 +250,8 @@ pub fn cg_follow_held_weapon_select(
     select.held_index = ps_weapon;
 }
 
-pub fn cg_cycle_weapon_select(
-    select: &mut CgWeaponSelect,
+pub fn cycle_weapon_select(
+    select: &mut WeaponSelect,
     input: &mut input_iw4::ClientInput,
     ps: &playerstate_iw4::PlayerState,
     world: &sim::SimWorld,
@@ -268,8 +268,8 @@ pub fn cg_cycle_weapon_select(
         let cancelable = world
             .weapon_combat_row(offhand)
             .unwrap_or_else(weapon_iw4::WeaponCombatFacts::none)
-            .offhand_hold_is_cancelable_at_0x681
-            .unwrap_or_else(|| panic!("offhand hold cancel flag +0x681 missing in source format"));
+            .offhand_hold_is_cancelable
+            .unwrap_or_else(|| panic!("offhand hold cancel flag missing in source format"));
         if cancelable {
             input.offhand_hold_cancel = true;
             return;
@@ -296,12 +296,12 @@ pub fn cg_cycle_weapon_select(
     };
     let target_facts = facts(target);
     let requires_ammo = target_facts
-        .select_requires_ammo_at_0x667
-        .unwrap_or_else(|| panic!("selection flag +0x667 missing in source format"));
+        .select_requires_ammo
+        .unwrap_or_else(|| panic!("selection flag missing in source format"));
     if requires_ammo {
-        let ammo_key = weapon_iw4::bg_ammo_table_key(target_facts.ammo_index, target);
-        let clip_key = weapon_iw4::bg_clip_table_key(target_facts.clip_index, target);
-        if weapon_iw4::bg_get_ammo_player_both_clips(ps, target, ammo_key, clip_key) == 0 {
+        let ammo_key = weapon_iw4::ammo_table_key(target_facts.ammo_index, target);
+        let clip_key = weapon_iw4::clip_table_key(target_facts.clip_index, target);
+        if weapon_iw4::get_ammo_player_both_clips(ps, target, ammo_key, clip_key) == 0 {
             return;
         }
     }
@@ -311,7 +311,7 @@ pub fn cg_cycle_weapon_select(
         }
         select.index = target;
         select.mapped_index = target;
-        input_iw4::cl_set_ads(input, false);
+        input_iw4::set_ads(input, false);
     }
 }
 
@@ -354,16 +354,16 @@ pub fn arm_listen_prediction(
     prediction.0.arm_from_content(&authority.0);
 }
 
-pub fn advance_cls_realtime(mut cls: ResMut<ClsRealtime>, time: Res<Time>) {
+pub fn advance_cls_realtime(mut cls: ResMut<ClientRealtime>, time: Res<Time>) {
     cls.advance_listen(time.delta_secs());
 }
 
 pub fn advance_cg_frame_clock(
-    mut clock: ResMut<CgFrameClock>,
+    mut clock: ResMut<FrameClock>,
     mut prediction: ResMut<ClientPredictionState>,
-    mut join: ResMut<CgameJoinCensus>,
+    mut join: ResMut<GameJoinCensus>,
     time: Res<Time>,
-    cgame_active: Res<CgameActive>,
+    cgame_active: Res<GameActive>,
     authority: Option<Res<crate::AuthorityClock>>,
     role: Res<RuntimeRole>,
     fixed: Res<Time<Fixed>>,
@@ -622,7 +622,7 @@ pub struct ReliableInbound<'w> {
     ack: ResMut<'w, ClientReliableAck>,
     events: MessageWriter<'w, ReliableControlEvent>,
     svc: SvcFrameWriters<'w>,
-    scores: ResMut<'w, crate::CgScores>,
+    scores: ResMut<'w, crate::Scoreboard>,
     signon: ResMut<'w, crate::SignonState>,
     bridge: Option<Res<'w, crate::MasterBridge>>,
 }
@@ -724,8 +724,8 @@ fn reliable_seq_after(a: u16, b: u16) -> bool {
 
 fn apply_weapon_switch_requests(
     mut events: MessageReader<ReliableControlEvent>,
-    mut select: ResMut<CgWeaponSelect>,
-    clock: Res<CgFrameClock>,
+    mut select: ResMut<WeaponSelect>,
+    clock: Res<FrameClock>,
 ) {
     for event in events.read() {
         if let sim::SimEvent::WeaponSwitchRequested { weapon } = event.0 {
@@ -741,13 +741,13 @@ pub fn sample_client_input(
     mut actions: ResMut<ClientActionInput>,
     mut look: ResMut<LookState>,
     mut template: ResMut<ClientCmdTemplate>,
-    mut select: ResMut<CgWeaponSelect>,
+    mut select: ResMut<WeaponSelect>,
     prediction: Res<ClientPredictionState>,
     presented: Res<PresentedSnapshot>,
     local: Res<LocalPresentClient>,
     gate: Res<AuthorityInputGate>,
-    cls: Res<ClsRealtime>,
-    clock: Res<CgFrameClock>,
+    cls: Res<ClientRealtime>,
+    clock: Res<FrameClock>,
     mut action_inbox: Option<ResMut<ClientActionInbox>>,
     mut request_ids: Option<ResMut<crate::ActionRequestIds>>,
     view: Option<Res<frame::ViewSubject>>,
@@ -761,7 +761,7 @@ pub fn sample_client_input(
         return;
     }
     actions.frame_msec = key_frame_msec(time.delta_secs());
-    actions.now_msec = com_frame_time_msec(time.elapsed_secs());
+    actions.now_msec = frame_time_msec(time.elapsed_secs());
     let ps = prediction
         .0
         .predicted_local()
@@ -837,7 +837,7 @@ pub fn sample_client_input(
         .and_then(|snapshot| snapshot.meta.for_client(local.0))
         .map(|meta| meta.life_sequence.0)
         .unwrap_or(0);
-    cg_follow_held_weapon_select(&mut select, ps_weapon, life_sequence, clock.time());
+    follow_held_weapon_select(&mut select, ps_weapon, life_sequence, clock.time());
     if let Some(ps) = ps {
         if select.index == ps.weapon {
             select.mapped_index = if prediction
@@ -889,7 +889,7 @@ pub fn sample_client_input(
             select.index = target;
             select.mapped_index = parent;
             select.time = clock.time();
-            input_iw4::cl_set_ads(&mut actions.client, false);
+            input_iw4::set_ads(&mut actions.client, false);
         }
     }
     let cycles = std::mem::take(&mut actions.client.weapon_cycles);
@@ -906,7 +906,7 @@ pub fn sample_client_input(
                     }
                 }
             }
-            cg_cycle_weapon_select(
+            cycle_weapon_select(
                 &mut select,
                 &mut actions.client,
                 ps,
@@ -1029,8 +1029,8 @@ impl BacklogStalls {
 pub fn enforce_client_work_limits(
     pending: Res<PendingClientSends>,
     mut prediction: ResMut<ClientPredictionState>,
-    cg: Res<CgFrameClock>,
-    cls: Res<ClsRealtime>,
+    cg: Res<FrameClock>,
+    cls: Res<ClientRealtime>,
     template: Res<ClientCmdTemplate>,
     mut signon: ResMut<crate::SignonState>,
     bridge: Option<Res<crate::MasterBridge>>,
@@ -1118,8 +1118,8 @@ pub fn predict_local_move(
     gate: Res<AuthorityInputGate>,
     mut pending: ResMut<PendingClientSends>,
     proxy: Res<RemoteProxyState>,
-    cls: Res<ClsRealtime>,
-    cg_clock: Res<CgFrameClock>,
+    cls: Res<ClientRealtime>,
+    cg_clock: Res<FrameClock>,
     trace: Option<ResMut<ClientPhaseTrace>>,
 ) {
     push_phase(trace, "Predict");
@@ -1172,7 +1172,7 @@ pub fn send_pending_commands(
     mut action_inbox: Option<ResMut<ClientActionInbox>>,
     reliable_ack: Res<ClientReliableAck>,
     mut pacer: ResMut<GameplaySendPacer>,
-    cls: Res<ClsRealtime>,
+    cls: Res<ClientRealtime>,
     pending: Res<PendingClientSends>,
     local: Res<LocalPresentClient>,
     trace: Option<ResMut<ClientPhaseTrace>>,
@@ -1271,7 +1271,7 @@ pub struct ClientReliableAck(pub u16);
 
 pub fn publish_presented(
     clock: Res<ClientClock>,
-    cg_clock: Res<CgFrameClock>,
+    cg_clock: Res<FrameClock>,
     mut entities: Query<&mut crate::CEntityRuntime>,
     role: Res<RuntimeRole>,
     prediction: Res<ClientPredictionState>,
@@ -1494,9 +1494,9 @@ pub fn publish_presented(
 
 pub fn reset_cgame_on_match_torn_down(
     mut torn: MessageReader<MatchTornDown>,
-    mut clock: ResMut<CgFrameClock>,
-    mut active: ResMut<CgameActive>,
-    mut join: ResMut<CgameJoinCensus>,
+    mut clock: ResMut<FrameClock>,
+    mut active: ResMut<GameActive>,
+    mut join: ResMut<GameJoinCensus>,
     mut adopted: ResMut<LastAdoptedSnapshot>,
     mut received: ResMut<ReceivedTicks>,
     (mut prediction, mut sends, mut signon, mut admission): (
@@ -1509,7 +1509,7 @@ pub fn reset_cgame_on_match_torn_down(
     mut proxy: ResMut<RemoteProxyState>,
     mut presented: ResMut<PresentedSnapshot>,
     mut present_census: ResMut<PresentLocalCensus>,
-    mut select: ResMut<CgWeaponSelect>,
+    mut select: ResMut<WeaponSelect>,
     (mut entity_events, mut pellet_fx, mut entity_event_cursor): (
         ResMut<PendingPresentedEntityEvents>,
         ResMut<PendingPelletFx>,
@@ -1519,7 +1519,7 @@ pub fn reset_cgame_on_match_torn_down(
         ResMut<ClientReliableAck>,
         Option<ResMut<ClientActionInbox>>,
         ResMut<Messages<ReliableControlEvent>>,
-        ResMut<crate::CgScores>,
+        ResMut<crate::Scoreboard>,
     ),
     mut birth: Option<ResMut<CEntityBirthCensus>>,
     mut pacer: ResMut<GameplaySendPacer>,
@@ -1542,7 +1542,7 @@ pub fn reset_cgame_on_match_torn_down(
     *proxy = RemoteProxyState::default();
     presented.clear();
     *present_census = PresentLocalCensus::default();
-    *select = CgWeaponSelect::default();
+    *select = WeaponSelect::default();
 
     *entity_events = PendingPresentedEntityEvents::default();
     pellet_fx.0.clear();
@@ -1550,7 +1550,7 @@ pub fn reset_cgame_on_match_torn_down(
 
     *reliable_ack = ClientReliableAck::default();
     events.clear();
-    *scores = crate::CgScores::default();
+    *scores = crate::Scoreboard::default();
     if let Some(actions) = actions.as_mut() {
         actions.clear();
     }
@@ -1571,10 +1571,10 @@ pub fn register_client_runtime(app: &mut App) {
         .init_resource::<crate::ClientAdmission>()
         .init_resource::<ClientPredictionState>()
         .init_resource::<ClientClock>()
-        .init_resource::<CgFrameClock>()
-        .init_resource::<CgameActive>()
-        .init_resource::<CgameJoinCensus>()
-        .init_resource::<ClsRealtime>()
+        .init_resource::<FrameClock>()
+        .init_resource::<GameActive>()
+        .init_resource::<GameJoinCensus>()
+        .init_resource::<ClientRealtime>()
         .init_resource::<ReceivedTicks>()
         .init_resource::<LastAdoptedSnapshot>()
         .init_resource::<PresentLocalCensus>()
@@ -1582,7 +1582,7 @@ pub fn register_client_runtime(app: &mut App) {
         .init_resource::<PendingPelletFx>()
         .init_resource::<PendingClientSends>()
         .init_resource::<ClientCmdTemplate>()
-        .init_resource::<CgWeaponSelect>()
+        .init_resource::<WeaponSelect>()
         .init_resource::<ClientReliableAck>()
         .init_resource::<GameplaySendPacer>()
         .add_message::<ReliableControlEvent>()
@@ -1590,7 +1590,7 @@ pub fn register_client_runtime(app: &mut App) {
         .add_message::<frame::MatchTornDown>()
         .init_resource::<RemoteProxyState>()
         .init_resource::<ClientShotSamples>()
-        .init_resource::<crate::CgScores>()
+        .init_resource::<crate::Scoreboard>()
         .add_message::<crate::SvcLocalSound>()
         .add_message::<crate::SvcCardSlotCmd>()
         .add_message::<crate::SvcOpenMenuCmd>()

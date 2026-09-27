@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 use crate::prepare::scene::world::WorldStaticModelMesh;
 
-pub use render_frame::{RetailPackedVertexRefusal, SmodelVertex};
+pub use render_frame::{PackedVertexRefusal, SmodelVertex};
 pub use render_scene::{
     AuthoredMaps, LodRampArgs, SmodelPassMaterial, runtime_maps, smodel_camera_lod,
 };
@@ -69,7 +69,7 @@ pub struct SmodelPlacement {
 
 #[derive(Resource, Clone, Debug, Default)]
 pub struct SmodelGpuPlan {
-    pub packed_vertices: assets::RetailPackedVertexPayload,
+    pub packed_vertices: assets::PackedVertexPayload,
 
     pub packed_match_surfaces: u32,
 
@@ -106,25 +106,25 @@ pub struct SmodelGpuPlan {
 impl SmodelGpuPlan {
     pub fn exact_packed_vertices(
         &self,
-    ) -> Result<&[[u8; asset_iw4::size::GFX_PACKED_VERTEX]], RetailPackedVertexRefusal> {
+    ) -> Result<&[[u8; asset_iw4::size::GFX_PACKED_VERTEX]], PackedVertexRefusal> {
         let table_stride =
             asset_iw4::vertex_decl::stream_extent(asset_iw4::vertex_decl::PACKED_VERTEX_TYPE, 0);
         if table_stride != Some(asset_iw4::size::GFX_PACKED_VERTEX as u16) {
-            return Err(RetailPackedVertexRefusal::RetailStrideMismatch { table_stride });
+            return Err(PackedVertexRefusal::StrideMismatch { table_stride });
         }
         let vertices = if let Some(share) = self.packed_share.as_ref() {
             share.as_slice()
         } else {
             match &self.packed_vertices {
-                assets::RetailPackedVertexPayload::Iw4(vertices) => vertices.as_slice(),
-                assets::RetailPackedVertexPayload::Unavailable { source_layout } => {
-                    return Err(RetailPackedVertexRefusal::ForeignLayout { source_layout });
+                assets::PackedVertexPayload::Iw4(vertices) => vertices.as_slice(),
+                assets::PackedVertexPayload::Unavailable { source_layout } => {
+                    return Err(PackedVertexRefusal::ForeignLayout { source_layout });
                 }
             }
         };
         if vertices.len() != self.decoded_vertices().len() {
-            return Err(RetailPackedVertexRefusal::VertexCountMismatch {
-                retail: vertices.len(),
+            return Err(PackedVertexRefusal::VertexCountMismatch {
+                packed: vertices.len(),
                 decoded: self.decoded_vertices().len(),
             });
         }
@@ -147,11 +147,11 @@ impl SmodelGpuPlan {
         if self.packed_share.is_none() {
             match std::mem::replace(
                 &mut self.packed_vertices,
-                assets::RetailPackedVertexPayload::Unavailable {
+                assets::PackedVertexPayload::Unavailable {
                     source_layout: "packed payload published for extract",
                 },
             ) {
-                assets::RetailPackedVertexPayload::Iw4(rows) => {
+                assets::PackedVertexPayload::Iw4(rows) => {
                     self.packed_share = Some(Arc::new(rows));
                 }
                 unavailable => self.packed_vertices = unavailable,
@@ -164,10 +164,7 @@ impl SmodelGpuPlan {
 
     pub fn packed_ok(&self) -> bool {
         self.packed_share.is_some()
-            || matches!(
-                self.packed_vertices,
-                assets::RetailPackedVertexPayload::Iw4(_)
-            )
+            || matches!(self.packed_vertices, assets::PackedVertexPayload::Iw4(_))
     }
 
     pub fn packed_row_count(&self) -> Option<usize> {
@@ -175,8 +172,8 @@ impl SmodelGpuPlan {
             return Some(share.len());
         }
         match &self.packed_vertices {
-            assets::RetailPackedVertexPayload::Iw4(rows) => Some(rows.len()),
-            assets::RetailPackedVertexPayload::Unavailable { .. } => None,
+            assets::PackedVertexPayload::Iw4(rows) => Some(rows.len()),
+            assets::PackedVertexPayload::Unavailable { .. } => None,
         }
     }
 }
@@ -276,7 +273,7 @@ pub fn pack_smodel_meshes(
 ) -> (
     SmodelGpuPlan,
     Vec<Vec<Option<assets::MaterialIndex>>>,
-    Vec<Vec<assets::RetailXSurfaceCollisionPayload>>,
+    Vec<Vec<assets::XSurfaceCollisionPayload>>,
 ) {
     let mut plan = SmodelGpuPlan::default();
     let mut vertices = Vec::new();
@@ -356,15 +353,15 @@ pub fn pack_smodel_meshes(
                     packed_row.surfaces.push((range_idx, surface.material));
                     packed_row.smc_surfs.push(src);
                     match &surface.collision {
-                        assets::RetailXSurfaceCollisionPayload::Iw4(lists)
+                        assets::XSurfaceCollisionPayload::Iw4(lists)
                             if lists.iter().all(|list| list.tree.is_some()) =>
                         {
                             mark_collision_ready = mark_collision_ready.saturating_add(1);
                         }
-                        assets::RetailXSurfaceCollisionPayload::Iw4(_) => {
+                        assets::XSurfaceCollisionPayload::Iw4(_) => {
                             mark_collision_missing = mark_collision_missing.saturating_add(1);
                         }
-                        assets::RetailXSurfaceCollisionPayload::Unavailable { .. } => {
+                        assets::XSurfaceCollisionPayload::Unavailable { .. } => {
                             mark_collision_unavailable =
                                 mark_collision_unavailable.saturating_add(1);
                         }
@@ -387,13 +384,13 @@ pub fn pack_smodel_meshes(
     plan.packed_skip_surfaces = skip_surfaces;
     plan.packed_skip_first = skip_first.clone();
     plan.packed_vertices = if packed_ok {
-        assets::RetailPackedVertexPayload::Iw4(packed)
+        assets::PackedVertexPayload::Iw4(packed)
     } else if vertices.is_empty() {
-        assets::RetailPackedVertexPayload::Unavailable {
+        assets::PackedVertexPayload::Unavailable {
             source_layout: "smodel plan has no vertices",
         }
     } else {
-        assets::RetailPackedVertexPayload::Unavailable {
+        assets::PackedVertexPayload::Unavailable {
             source_layout: "smodel packed vertex records missing or count-mismatched",
         }
     };
@@ -403,8 +400,8 @@ pub fn pack_smodel_meshes(
         "smodel packed: verts={} packed={} match_surf={} skip_surf={} first_skip={} upload={} mark_collision=ready:{} missing:{} unavailable:{}",
         vertices.len(),
         match &plan.packed_vertices {
-            assets::RetailPackedVertexPayload::Iw4(rows) => rows.len(),
-            assets::RetailPackedVertexPayload::Unavailable { .. } => 0,
+            assets::PackedVertexPayload::Iw4(rows) => rows.len(),
+            assets::PackedVertexPayload::Unavailable { .. } => 0,
         },
         match_surfaces,
         skip_surfaces,

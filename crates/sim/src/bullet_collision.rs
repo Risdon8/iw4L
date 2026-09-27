@@ -4,8 +4,7 @@ use trace_iw4::{Trace, surface_type_from_flags};
 use weapon_iw4::{
     ADVANCE_TRACE_FWD, ADVANCE_TRACE_REV, BulletPenFacts, CONTENTS_GLASS, MAX_EXTENDED_STEPS,
     MAX_PENETRATE_STEPS, PEN_THICKNESS_FLOOR, PenetrationDepthTable, REV_END_EPS,
-    RIFLE_COLLATERAL_SCALE, SURF_TYPE_FLESH, SURFACE_TYPE_NAMES, bg_advance_trace,
-    depth_surface_type,
+    RIFLE_COLLATERAL_SCALE, SURF_TYPE_FLESH, SURFACE_TYPE_NAMES, advance_trace, depth_surface_type,
 };
 
 pub const CONTENTS_SOLID: u32 = 0x0000_0001;
@@ -25,7 +24,7 @@ thread_local! {
         std::cell::RefCell::new(crate::smodel_grid::GridScratch::default());
 }
 
-pub fn dobj_contents_match_mask(contents: Option<u32>, mask: u32) -> bool {
+pub fn contents_match_mask(contents: Option<u32>, mask: u32) -> bool {
     match contents {
         Some(0) | None => true,
         Some(c) => c & mask != 0,
@@ -557,7 +556,7 @@ impl AuthorityDObjState {
         };
         leaf.state.old_time = leaf.state.time;
         leaf.state.old_cycle_count = leaf.state.cycle_count;
-        let (time, cycle) = anim_iw4::xanim_advance_leaf_time(
+        let (time, cycle) = anim_iw4::advance_leaf_time(
             leaf.state.old_time,
             leaf.state.cycle_count,
             leaf.state.rate,
@@ -605,7 +604,7 @@ impl AuthorityDObjState {
         apos: entity_iw4::Trajectory,
         at_time_ms: i32,
     ) -> Option<[f32; 3]> {
-        let angles = entity_iw4::bg_evaluate_trajectory(&apos, at_time_ms);
+        let angles = entity_iw4::evaluate_trajectory(&apos, at_time_ms);
         let origin = self.world_from_model.w_axis.truncate();
         self.world_from_model = iw_angles_to_mat4(origin, angles);
         Some(angles)
@@ -624,7 +623,7 @@ impl AuthorityDObjState {
             ));
             return;
         };
-        if !dobj_contents_match_mask(capability.contents, MASK_BULLET_WORLD) {
+        if !contents_match_mask(capability.contents, MASK_BULLET_WORLD) {
             self.current_collision = None;
             self.materialized_model_revision = Some(self.model_revision);
             self.materialized_pose_revision = Some(self.pose_revision);
@@ -1393,7 +1392,7 @@ fn bullet_trace_filtered(
         let Some(dobj_geom) = geom.collision.as_ref() else {
             continue;
         };
-        if !dobj_contents_match_mask(geom.dobj_contents, query.mask) {
+        if !contents_match_mask(geom.dobj_contents, query.mask) {
             continue;
         }
         match trace_dobj_coll_tris(dobj_geom.coll.as_ref(), geom.owner, query) {
@@ -1589,7 +1588,7 @@ fn fire_extended(
                 if glass_contents {
                     if is_open_pane(world, hit.collider) {
                         let Some(next) =
-                            bg_advance_trace(hit.end, hit.normal, dir, true, ADVANCE_TRACE_FWD)
+                            advance_trace(hit.end, hit.normal, dir, true, ADVANCE_TRACE_FWD)
                         else {
                             break;
                         };
@@ -1610,7 +1609,7 @@ fn fire_extended(
                 terminal = Some(hit.collider);
                 if glass_contents {
                     let Some(next) =
-                        bg_advance_trace(hit.end, hit.normal, dir, true, ADVANCE_TRACE_FWD)
+                        advance_trace(hit.end, hit.normal, dir, true, ADVANCE_TRACE_FWD)
                     else {
                         break;
                     };
@@ -1626,7 +1625,7 @@ fn fire_extended(
                     break;
                 }
                 multiplier *= RIFLE_COLLATERAL_SCALE;
-                let Some(next) = bg_advance_trace(hit.end, hit.normal, dir, false, 0.0) else {
+                let Some(next) = advance_trace(hit.end, hit.normal, dir, false, 0.0) else {
                     break;
                 };
                 start = next;
@@ -1687,8 +1686,7 @@ fn fire_penetrate(
                 break (startsolid_as_hit(collider, query.start, dir), true);
             }
             Decode::Hit(hit) if is_open_pane(world, hit.collider) => {
-                let Some(next) =
-                    bg_advance_trace(hit.end, hit.normal, dir, true, ADVANCE_TRACE_FWD)
+                let Some(next) = advance_trace(hit.end, hit.normal, dir, true, ADVANCE_TRACE_FWD)
                 else {
                     return (segments, None);
                 };
@@ -1722,7 +1720,7 @@ fn fire_penetrate(
             break;
         }
         let hit_world = is_world(last_hit.collider);
-        let Some(next_start) = bg_advance_trace(
+        let Some(next_start) = advance_trace(
             last_hit.end,
             last_hit.normal,
             dir,
@@ -1782,8 +1780,7 @@ fn fire_penetrate(
         };
         if let Some(hit) = &fwd_hit {
             if is_open_pane(world, hit.collider) {
-                let Some(next) =
-                    bg_advance_trace(hit.end, hit.normal, dir, true, ADVANCE_TRACE_FWD)
+                let Some(next) = advance_trace(hit.end, hit.normal, dir, true, ADVANCE_TRACE_FWD)
                 else {
                     break;
                 };
@@ -1799,7 +1796,7 @@ fn fire_penetrate(
         let mut rev_start = fwd_hit.as_ref().map(|h| h.end).unwrap_or(query.end);
         let rev_end = vec3_mad(entry_pos, REV_END_EPS, rev_dir);
         if let Some(hit) = &fwd_hit {
-            if let Some(nudged) = bg_advance_trace(
+            if let Some(nudged) = advance_trace(
                 hit.end,
                 scale3(hit.normal, -1.0),
                 rev_dir,
@@ -2078,7 +2075,7 @@ fn note_glass_hit(world: &TraceWorld<'_>, collider: ColliderId, end: [f32; 3]) {
 fn collider_hit_kind(collider: ColliderId, startsolid: bool) -> (i32, u16) {
     match collider {
         ColliderId::World { glass_encoded, .. } if !startsolid => {
-            trace_iw4::cm_brush_sweep_hit_kind(glass_encoded)
+            trace_iw4::brush_sweep_hit_kind(glass_encoded)
         }
         ColliderId::World { .. } => (trace_iw4::HITTYPE_ENTITY, trace_iw4::ENTITYNUM_WORLD),
         ColliderId::Player { .. }
@@ -2608,7 +2605,7 @@ pub const COLLISION_COVERAGE: &[CollisionCoverageRow] = &[
     CollisionCoverageRow {
         id: "static_model_collision",
         support: CoverageSupport::Supported,
-        note: "CM_PointTraceStaticModels linear walk of captured cStaticModel_s collTris (XModelTraceLine); cm_world.sectors open",
+        note: "linear walk of captured static-model collision triangles; world sectors open",
     },
     CollisionCoverageRow {
         id: "dynamic_entities",

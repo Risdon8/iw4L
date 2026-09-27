@@ -49,8 +49,8 @@ pub use bullet_collision::{
     LinkedBrushCollisionBrush, MASK_BULLET_WORLD, MASK_PLAYER_SOLID, MASK_SHOT, PLAYER_MAXS,
     PLAYER_MINS, PlayerCollisionPose, ScriptModelPlayAnim, ShotSampleProvenance, ShotSampleQuality,
     TraceInvalidReason, TraceOutcome, bullet_trace, bullet_trace_segments,
-    bullet_trace_segments_with_entity_models, bullet_trace_with_entity_models,
-    dobj_contents_match_mask, glass_piece_from_hit, lagcomp_rewind_ticks,
+    bullet_trace_segments_with_entity_models, bullet_trace_with_entity_models, contents_match_mask,
+    glass_piece_from_hit, lagcomp_rewind_ticks,
 };
 pub use carrier::{SimWorld, StepReason, step, try_step};
 pub use clipmap_iw4::{

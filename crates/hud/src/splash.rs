@@ -6,7 +6,7 @@ use bevy::ui::{Display, FocusPolicy};
 use hud_iw4::{
     ExprError, ExprHost, Operand, SPLASH_COL_DESCRIPTION, SPLASH_COL_DURATION, SPLASH_COL_MATERIAL,
     SPLASH_COL_MENU, SPLASH_COL_TEXT, SPLASH_SLOT_COUNT, SPLASH_TABLE_NAME, SplashSlot,
-    cg_activate_splash, item_run_script_lerp, splash_duration_ms, splash_has_icon,
+    activate_splash, item_run_script_lerp, splash_duration_ms, splash_has_icon,
     splash_replace_optional,
 };
 
@@ -15,7 +15,7 @@ use crate::draw2d::{Draw2dOp, tessellate_fonts};
 use crate::gaps::{GapCause, HudGap, HudPresentationGaps};
 use crate::gpu_list::{HudTessPass, TessJob};
 use crate::images::HudImages;
-use crate::scorebar::sys_milliseconds;
+use crate::scorebar::milliseconds;
 
 #[derive(Resource, Default)]
 pub struct PendingSplash {
@@ -268,7 +268,7 @@ fn activate_pending(
         return Some(key);
     };
     let duration_ms = splash_duration_ms(table.cell(row, SPLASH_COL_DURATION));
-    let (index, slot) = cg_activate_splash(0, row, duration_ms, pending.optional_number, now_ms);
+    let (index, slot) = activate_splash(0, row, duration_ms, pending.optional_number, now_ms);
     slots.slots[index] = slot;
     None
 }
@@ -302,7 +302,7 @@ pub(crate) fn update_splash(
     for cmd in received.read().filter(|cmd| cmd.slot == 0) {
         pending.queued.push_back((cmd.key.clone(), cmd.optional));
     }
-    let now_ms = sys_milliseconds() as i32;
+    let now_ms = milliseconds() as i32;
     expire_slots(&mut slots, now_ms);
     if pending.key.is_none() && !slots.slots.iter().any(|s| s.live()) {
         if let Some((key, optional)) = pending.queued.pop_front() {

@@ -5,15 +5,14 @@ use bevy::prelude::*;
 use frame::UiPlaySound;
 use hud_iw4::{
     HE_TYPE_MATERIAL, HE_TYPE_PLAYERNAME, HE_TYPE_TEXT, HE_TYPE_VALUE, HE_TYPE_WAYPOINT, HudElem,
-    KEY_UNBOUND, WAYPOINT_CONSTANT_SIZE, WAYPOINT_HIDE_OFFSCREEN, bg_lerp_hud_colors,
-    copy_in_use_prefix, hud_elem_glow_color, hud_elem_placement, hud_elem_screen_align,
-    hudelem_font_ui_enum, hudelem_text_scale, replace_directive, ui_get_font_handle,
-    unbound_directive,
+    KEY_UNBOUND, WAYPOINT_CONSTANT_SIZE, WAYPOINT_HIDE_OFFSCREEN, copy_in_use_prefix,
+    hud_elem_glow_color, hud_elem_placement, hud_elem_screen_align, hudelem_font_ui_enum,
+    hudelem_text_scale, lerp_hud_colors, replace_directive, ui_get_font_handle, unbound_directive,
 };
-use net::{CEntity, CEntityRuntime, CgFrameClock, LocalPresentClient, PresentedSnapshot};
+use net::{CEntity, CEntityRuntime, FrameClock, LocalPresentClient, PresentedSnapshot};
 use sim::{ClientLifecycle, SnapshotMeta};
 
-use crate::chrome::r_text_width;
+use crate::chrome::text_width;
 use crate::draw2d::{Draw2dCmd, Draw2dList, Draw2dOp, Draw2dProvenance, tessellate_fonts};
 use crate::font_overlay;
 use crate::gaps::{GapCause, HudPresentationGaps};
@@ -220,7 +219,7 @@ pub(crate) fn update_hud_elems(
     catalog: Option<Res<MenuCatalog>>,
     strings: Option<Res<PreparedLocalizedStrings>>,
     input: Res<frame::HudInputView>,
-    cg_clock: Res<CgFrameClock>,
+    cg_clock: Res<FrameClock>,
     presented: Res<PresentedSnapshot>,
     local: Res<LocalPresentClient>,
     mut hud_images: ResMut<HudImages>,
@@ -274,7 +273,7 @@ pub(crate) fn update_hud_elems(
     let mut layers: [Vec<Draw2dCmd>; 2] = Default::default();
     let mut fonts = HashMap::new();
     for (index, elem) in elems.iter().enumerate() {
-        let color = bg_lerp_hud_colors(elem, cg_time);
+        let color = lerp_hud_colors(elem, cg_time);
         if color[3] == 0 {
             continue;
         }
@@ -378,10 +377,10 @@ pub(crate) fn update_hud_elems(
                 alias: alias.to_owned(),
             });
         }
-        let nscale = hud_iw4::r_normalized_text_scale(font.pixel_height, text_scale);
+        let nscale = hud_iw4::normalized_text_scale(font.pixel_height, text_scale);
         let (horz_align, vert_align) = hud_elem_screen_align(elem.align_screen);
         let glyph = surface.apply_rect(0.0, 0.0, nscale, nscale, horz_align, vert_align);
-        let text_width = r_text_width(font, &text) as f32 * glyph.w;
+        let text_width = text_width(font, &text) as f32 * glyph.w;
         let placed =
             hud_elem_placement(surface.placement(), elem, cg_time, text_width, font_height);
         cmds.push(Draw2dCmd {
@@ -423,7 +422,7 @@ pub(crate) fn update_hud_elems(
         _ => None,
     }) {
         any_fx = true;
-        if hud_iw4::fx_decay_tick_count(fx.fx.decay_duration).is_none() {
+        if hud_iw4::decay_tick_count(fx.fx.decay_duration).is_none() {
             gaps.raise(GapCause::TextDecodeFxDecayTooShort {
                 fx_decay_duration: fx.fx.decay_duration,
             });

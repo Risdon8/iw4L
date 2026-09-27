@@ -68,7 +68,7 @@ fn adopt(
     runtime.set_object_field(
         object,
         "angles",
-        Value::Vector(entity_iw4::bg_evaluate_trajectory(&projectile.apos, now)),
+        Value::Vector(entity_iw4::evaluate_trajectory(&projectile.apos, now)),
     );
     runtime.missiles.insert(projectile.id, object);
     Ok(object)
@@ -387,7 +387,7 @@ fn settle_projectiles(world: &mut World, notes: &[WeaponNote]) {
                 runtime.set_object_field(
                     object,
                     "angles",
-                    Value::Vector(entity_iw4::bg_evaluate_trajectory(&projectile.apos, now)),
+                    Value::Vector(entity_iw4::evaluate_trajectory(&projectile.apos, now)),
                 );
                 drop(runtime);
                 if stuck {

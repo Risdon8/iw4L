@@ -57,7 +57,7 @@ pub struct RemoteBodyDrawPlan {
 
     pub revisions: SourceRevisions,
 
-    pub(crate) packed_vertices: assets::RetailPackedVertexPayload,
+    pub(crate) packed_vertices: assets::PackedVertexPayload,
 
     pub last_packed_id: Option<u64>,
     pub last_draw_id: Option<u64>,
@@ -75,7 +75,7 @@ impl RemoteBodyDrawPlan {
         self.surface_ranges.clear();
         self.materials.clear();
         self.draws.clear();
-        self.packed_vertices = assets::RetailPackedVertexPayload::Unavailable {
+        self.packed_vertices = assets::PackedVertexPayload::Unavailable {
             source_layout: BODY_PACKED_UNAVAILABLE,
         };
         self.last_packed_id = None;
@@ -118,7 +118,7 @@ pub struct ScriptModelDrawPlan {
     pub revision: u64,
     pub generation: u64,
     pub revisions: SourceRevisions,
-    pub(crate) packed_vertices: assets::RetailPackedVertexPayload,
+    pub(crate) packed_vertices: assets::PackedVertexPayload,
 }
 
 impl ScriptModelDrawPlan {
@@ -151,7 +151,7 @@ pub struct MissileDrawPlan {
     pub revision: u64,
     pub generation: u64,
     pub revisions: SourceRevisions,
-    pub(crate) packed_vertices: assets::RetailPackedVertexPayload,
+    pub(crate) packed_vertices: assets::PackedVertexPayload,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -178,7 +178,7 @@ pub struct ItemDrawPlan {
     pub revision: u64,
     pub generation: u64,
     pub revisions: SourceRevisions,
-    pub(crate) packed_vertices: assets::RetailPackedVertexPayload,
+    pub(crate) packed_vertices: assets::PackedVertexPayload,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -207,7 +207,7 @@ pub struct DynEntDrawPlan {
     pub revision: u64,
     pub generation: u64,
     pub revisions: SourceRevisions,
-    pub(crate) packed_vertices: assets::RetailPackedVertexPayload,
+    pub(crate) packed_vertices: assets::PackedVertexPayload,
 }
 
 impl DynEntDrawPlan {
@@ -278,7 +278,7 @@ pub struct FpvDrawPlan {
     /// once; a frame that still answers this generation publishes vertices.
     pub rig_generation: u64,
 
-    pub(crate) packed_vertices: assets::RetailPackedVertexPayload,
+    pub(crate) packed_vertices: assets::PackedVertexPayload,
 }
 
 impl FpvDrawPlan {
@@ -293,11 +293,11 @@ impl FpvDrawPlan {
 
     /// The rows this frame skinned into. `None` once the plan has nothing
     /// packed to write — an empty plan, or a composition whose models never
-    /// carried retail packed vertices.
+    /// carried packed vertices.
     pub fn packed_rows_mut(&mut self) -> Option<&mut [[u8; asset_iw4::size::GFX_PACKED_VERTEX]]> {
         match &mut self.packed_vertices {
-            assets::RetailPackedVertexPayload::Iw4(rows) => Some(rows.as_mut_slice()),
-            assets::RetailPackedVertexPayload::Unavailable { .. } => None,
+            assets::PackedVertexPayload::Iw4(rows) => Some(rows.as_mut_slice()),
+            assets::PackedVertexPayload::Unavailable { .. } => None,
         }
     }
 
@@ -479,7 +479,7 @@ macro_rules! published_rows {
                 &self.surface_ranges
             }
 
-            pub fn packed_vertices(&self) -> &assets::RetailPackedVertexPayload {
+            pub fn packed_vertices(&self) -> &assets::PackedVertexPayload {
                 &self.packed_vertices
             }
         }
@@ -509,7 +509,7 @@ impl FpvDrawPlan {
         &self.surface_ranges
     }
 
-    pub fn packed_vertices(&self) -> &assets::RetailPackedVertexPayload {
+    pub fn packed_vertices(&self) -> &assets::PackedVertexPayload {
         &self.packed_vertices
     }
 }
@@ -527,7 +527,7 @@ impl MissileDrawPlan {
         self.indices.clear();
         self.surface_ranges.clear();
         self.materials.clear();
-        self.packed_vertices = assets::RetailPackedVertexPayload::Unavailable {
+        self.packed_vertices = assets::PackedVertexPayload::Unavailable {
             source_layout: crate::XMODEL_PACKED_UNAVAILABLE,
         };
     }
@@ -555,7 +555,7 @@ impl MissileDrawPlan {
             std::mem::swap(&mut self.vertices, &mut staged.vertices);
             self.packed_vertices = std::mem::replace(
                 &mut staged.packed_vertices,
-                assets::RetailPackedVertexPayload::Unavailable {
+                assets::PackedVertexPayload::Unavailable {
                     source_layout: crate::XMODEL_PACKED_UNAVAILABLE,
                 },
             );

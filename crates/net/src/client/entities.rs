@@ -115,7 +115,7 @@ pub fn sync_client_entities(
     mut commands: Commands,
     adopted: Res<LastAdoptedSnapshot>,
     proxy: Option<Res<crate::RemoteProxyState>>,
-    clock: Option<Res<crate::CgFrameClock>>,
+    clock: Option<Res<crate::FrameClock>>,
     local: Option<Res<crate::LocalPresentClient>>,
     mut selected_tick: Local<Option<(sim::Tick, bool)>>,
     mut slots: ResMut<CEntitySlots>,

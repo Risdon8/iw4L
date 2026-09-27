@@ -31,9 +31,9 @@ pub use stream::{
 };
 pub use zone::{
     BLOCK_STACK_CAP, BlockType, ClipMapGeometry, ComWorldGeometry, FxEffectDefGeometry,
-    FxImpactTableGeometry, FxWorldGeometry, GGlassDataGeometry, GfxImageGeometry,
-    GfxLightDefGeometry, GfxLightGridGeometry, GfxLightmapPair, GfxSunEffectsGeometry,
-    GfxWorldGeometry, MAX_LIGHTMAP_PAGES, MAX_XFILE_COUNT, MapEntsGeometry, MaterialGeometry,
+    FxImpactTableGeometry, FxWorldGeometry, GfxImageGeometry, GfxLightDefGeometry,
+    GfxLightGridGeometry, GfxLightmapPair, GfxSunEffectsGeometry, GfxWorldGeometry,
+    GlassDataGeometry, MAX_LIGHTMAP_PAGES, MAX_XFILE_COUNT, MapEntsGeometry, MaterialGeometry,
     PTR_SIZE, PhysPresetGeometry, Ptr, Result, ShaderGeometry, TECHNIQUE_ARGUMENT_CAP,
     TECHNIQUE_PASS_ROW_CAP, TechniqueArgumentGeometry, TechniqueGraphGeometry,
     TechniquePassGeometry, TechniqueSetGeometry, TracerDefGeometry, VertexDeclGeometry,

@@ -8,14 +8,13 @@ use hud_iw4::{
     COMPASS_FRIENDLY_WIDTH_DEFAULT, COMPASS_MAX_RANGE_DEFAULT_MP, COMPASS_PLAYER_HEIGHT_DEFAULT,
     COMPASS_PLAYER_WIDTH_DEFAULT, COMPASS_RADAR_LINE_IMAGE, COMPASS_RADAR_PING_FADE_TIME_DEFAULT,
     COMPASS_RADAR_UPDATE_TIME_DEFAULT, COMPASS_SIZE_DEFAULT, CompassMapBounds, CompassMapUvWindow,
-    RADARJAM_DIST_MAX, RADARJAM_DIST_MIN, cg_compass_fade_alpha, cg_compass_friendly_size,
-    cg_compass_player_size, cg_compass_sound_ping_fade, cg_compass_up_yaw_vector,
-    cg_radar_jam_intensity, cg_radar_jam_nearest_distance, cg_world_pos_to_compass_partial,
-    compass_clamp_offset, compass_map_bounds_from_minimap_corners, compass_partial_map_uv,
-    radar_contact_trail_visible, radar_line, radar_line_texture_center_s,
-    radar_lines_surround_point,
+    RADARJAM_DIST_MAX, RADARJAM_DIST_MIN, compass_clamp_offset, compass_fade_alpha,
+    compass_friendly_size, compass_map_bounds_from_minimap_corners, compass_partial_map_uv,
+    compass_player_size, compass_sound_ping_fade, compass_up_yaw_vector,
+    radar_contact_trail_visible, radar_jam_intensity, radar_jam_nearest_distance, radar_line,
+    radar_line_texture_center_s, radar_lines_surround_point, world_pos_to_compass_partial,
 };
-use net::{CgFrameClock, LocalPresentClient, PresentedSnapshot, WeaponFirePingBus};
+use net::{FrameClock, LocalPresentClient, PresentedSnapshot, WeaponFirePingBus};
 use sim::ClientId;
 
 use crate::draw2d::{Draw2dCmd, Draw2dList, Draw2dOp, Draw2dProvenance};
@@ -101,7 +100,7 @@ pub(crate) fn update_compass(
     surface: Res<crate::surface::Hud2dSurface>,
     presented: Res<PresentedSnapshot>,
     local: Res<LocalPresentClient>,
-    cg_clock: Res<CgFrameClock>,
+    cg_clock: Res<FrameClock>,
     compass: Option<Res<assets::SessionCompass>>,
     catalog: Option<Res<MenuCatalog>>,
     mut hud_images: ResMut<HudImages>,
@@ -121,7 +120,7 @@ pub(crate) fn update_compass(
         cg_clock.time(),
         &mut latch,
     );
-    let killed_by_showing = (crate::scorebar::sys_milliseconds() as i32)
+    let killed_by_showing = (crate::scorebar::milliseconds() as i32)
         .wrapping_sub(local_vars.int("ui_show_killedBy"))
         < 4000;
     let ui_active = hud_input.is_some_and(|i| i.script_menu_open);
@@ -159,12 +158,12 @@ pub(crate) fn update_compass(
     }
     let map_rotation = -(ps.viewangles[1] - drawable.north_yaw);
 
-    let [player_w, player_h] = cg_compass_player_size(
+    let [player_w, player_h] = compass_player_size(
         COMPASS_PLAYER_WIDTH_DEFAULT,
         COMPASS_PLAYER_HEIGHT_DEFAULT,
         COMPASS_SIZE_DEFAULT,
     );
-    let [ping_w, ping_h] = cg_compass_friendly_size(
+    let [ping_w, ping_h] = compass_friendly_size(
         COMPASS_FRIENDLY_WIDTH_DEFAULT,
         COMPASS_FRIENDLY_HEIGHT_DEFAULT,
         COMPASS_SIZE_DEFAULT,
@@ -178,7 +177,7 @@ pub(crate) fn update_compass(
         }
     });
 
-    let north = cg_compass_up_yaw_vector(ps.viewangles[1]);
+    let north = compass_up_yaw_vector(ps.viewangles[1]);
     let player_xy = [ps.origin[0], ps.origin[1]];
     let local_team = presented
         .snapshot()
@@ -202,10 +201,10 @@ pub(crate) fn update_compass(
                 Some(other.origin)
             })
         });
-        let dist = cg_radar_jam_nearest_distance(ps.origin, jammers);
-        cg_compass_fade_alpha(
+        let dist = radar_jam_nearest_distance(ps.origin, jammers);
+        compass_fade_alpha(
             1.0,
-            cg_radar_jam_intensity(dist, RADARJAM_DIST_MIN, RADARJAM_DIST_MAX, false),
+            radar_jam_intensity(dist, RADARJAM_DIST_MIN, RADARJAM_DIST_MAX, false),
         )
     };
     let map_item = items.map.1;
@@ -234,11 +233,11 @@ pub(crate) fn update_compass(
             continue;
         }
         let Some(alpha) =
-            cg_compass_sound_ping_fade(cg_clock.time(), actor.begin_fade_ms, actor.fade_seconds)
+            compass_sound_ping_fade(cg_clock.time(), actor.begin_fade_ms, actor.fade_seconds)
         else {
             continue;
         };
-        let offset = cg_world_pos_to_compass_partial(
+        let offset = world_pos_to_compass_partial(
             north,
             player_xy,
             actor.last_pos,
@@ -283,7 +282,7 @@ pub(crate) fn update_compass(
             .map(|m| m.client_state_team)
             .unwrap_or(0);
         let team =
-            gamemode_iw4::Team::from_retail_u8(team as u8).unwrap_or(gamemode_iw4::Team::Free);
+            gamemode_iw4::Team::from_packed_u8(team as u8).unwrap_or(gamemode_iw4::Team::Free);
         let objectives = snapshot
             .meta
             .objectives
@@ -292,7 +291,7 @@ pub(crate) fn update_compass(
             .filter(|o| o.shows_to(team) && !o.icon.is_empty());
         let size = map_item.rect.h * COMPASS_SIZE_DEFAULT;
         for objective in objectives {
-            let offset = cg_world_pos_to_compass_partial(
+            let offset = world_pos_to_compass_partial(
                 north,
                 player_xy,
                 [objective.origin[0], objective.origin[1]],
@@ -355,7 +354,7 @@ pub(crate) fn update_compass(
             let Some(other) = presented.alive_player(*id) else {
                 continue;
             };
-            let offset = cg_world_pos_to_compass_partial(
+            let offset = world_pos_to_compass_partial(
                 north,
                 player_xy,
                 [other.origin[0], other.origin[1]],
@@ -615,7 +614,7 @@ fn take_fire_pings(
     }
     latch.last_time = Some(cg_time_ms);
     latch.actors.retain(|_, actor| {
-        cg_compass_sound_ping_fade(cg_time_ms, actor.begin_fade_ms, actor.fade_seconds).is_some()
+        compass_sound_ping_fade(cg_time_ms, actor.begin_fade_ms, actor.fade_seconds).is_some()
     });
     let n = bus.pings.len() as i32;
     for ping in bus.pings.drain(..) {

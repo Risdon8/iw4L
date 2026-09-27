@@ -1,4 +1,4 @@
-use entity_iw4::cg_adjust_position_for_mover;
+use entity_iw4::adjust_position_for_mover;
 use movement_iw4::PMF_SPRINTING;
 use playerstate_iw4::{PlayerState, UserCmd, buttons, eflags, other_flags};
 use sim::{AdoptReport, ClientId, SimWorld, Snapshot, Tick, TickInput};
@@ -520,7 +520,7 @@ impl ClientPrediction {
                     .unwrap_or(0);
 
                 let e_type = snapshot_ground_e_type(snapshot, ground);
-                let post = cg_adjust_position_for_mover(post, ground, e_type, None, 0, 0);
+                let post = adjust_position_for_mover(post, ground, e_type, None, 0, 0);
                 self.predicted_error.begin(pre, post);
             }
         }

@@ -16,9 +16,9 @@ mod start;
 mod voice;
 
 pub use aliases::{
-    StepGait, footstep_aliases, gear_rattle_alias, land_aliases, mantle_gear_alias,
-    quiet_surface_alias, select_cg_fire_alias, select_fire_alias, step_prefix,
-    surface_alias_candidates, world_surface_alias,
+    StepGait, footstep_aliases, gear_alias, gear_rattle_alias, land_aliases, quiet_surface_alias,
+    select_cg_fire_alias, select_fire_alias, step_prefix, surface_alias_candidates,
+    world_surface_alias,
 };
 pub use ambient::{
     MAX_ACTIVE_MAP_EMITTERS, MIN_AUDIBLE_EMITTER_GAIN, MapAmbient, MapAmbientBooted, MapEmitter,
@@ -30,7 +30,7 @@ pub use frontend::FrontendAudio;
 pub use match_set::{AudioReady, AudioSilent};
 pub use messages::{
     AliasCommand, BoundWeaponSound, Footstep, LandSound, PlayAlias, SND_ENT_LOCAL,
-    ViewmodelNotetracks, WeaponSound, snd_ent_from_number,
+    ViewmodelNotetracks, WeaponSound, ent_from_number,
 };
 pub use pcm::{LivePan, LoopingPcmAudio, PcmAudio, decode_audio_bytes};
 pub use playback::{

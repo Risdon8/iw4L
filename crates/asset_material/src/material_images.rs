@@ -1959,7 +1959,7 @@ fn decode_blocks(
     Ok(out)
 }
 
-pub fn retail_lit_color(albedo_rgb: [f32; 3], lighting: [f32; 3]) -> [f32; 3] {
+pub fn lit_color(albedo_rgb: [f32; 3], lighting: [f32; 3]) -> [f32; 3] {
     let albedo = lighting_iw4::lit_albedo(albedo_rgb, [1.0, 1.0, 1.0]);
     lighting_iw4::lit_fragment_color(albedo, lighting, [0.0, 0.0, 0.0])
 }
@@ -2048,7 +2048,7 @@ pub fn decode_dxt5nm_xy(rgba: [f32; 4]) -> [f32; 2] {
     ]
 }
 
-pub fn retail_lightmap_bake(
+pub fn lightmap_bake(
     page0_rgb: [f32; 3],
     page1_rgb: [f32; 3],
     lm_dir: [f32; 2],

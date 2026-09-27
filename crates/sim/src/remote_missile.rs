@@ -99,7 +99,7 @@ pub(crate) fn advance(world: &mut FrameWorld, tick: Tick) {
             tr_delta: velocity,
             tr_base: projectile.origin,
         };
-        projectile.apos = entity_iw4::g_fire_missile_apos(dir);
+        projectile.apos = entity_iw4::fire_missile_apos(dir);
         world.client_meta_mut(id).remote_missile = Some(link);
     }
 }

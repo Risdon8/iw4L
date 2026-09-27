@@ -1,5 +1,5 @@
 use entity_iw4::{
-    ET_PLAYER, ET_PLAYER_CORPSE, EntityState, TR_INTERPOLATE, Trajectory, bg_evaluate_trajectory,
+    ET_PLAYER, ET_PLAYER_CORPSE, EntityState, TR_INTERPOLATE, Trajectory, evaluate_trajectory,
 };
 use playerstate_iw4::{AnimPair, PLAYER_CORPSE_ENTITY_BASE, PlayerState, eflags, other_flags};
 use sim::{ClientId, PlayerCorpseSlot};
@@ -56,7 +56,7 @@ impl CEntityRuntime {
     }
 
     pub fn adopted_origin(&self) -> [f32; 3] {
-        bg_evaluate_trajectory(&self.current.pos, self.pose_time_ms)
+        evaluate_trajectory(&self.current.pos, self.pose_time_ms)
     }
 
     pub fn present_pose(&mut self, at_time_ms: i32) {
@@ -75,10 +75,10 @@ impl CEntityRuntime {
             return;
         }
         let fraction = ((at_time_ms - previous_time) as f32 / span as f32).clamp(0.0, 1.0);
-        let old_origin = bg_evaluate_trajectory(&previous.pos, previous_time);
-        let old_angles = bg_evaluate_trajectory(&previous.apos, previous_time);
+        let old_origin = evaluate_trajectory(&previous.pos, previous_time);
+        let old_angles = evaluate_trajectory(&previous.apos, previous_time);
         let origin = self.adopted_origin();
-        let angles = bg_evaluate_trajectory(&self.current.apos, self.pose_time_ms);
+        let angles = evaluate_trajectory(&self.current.apos, self.pose_time_ms);
         for axis in 0..3 {
             self.origin[axis] = old_origin[axis] + fraction * (origin[axis] - old_origin[axis]);
             self.angles[axis] = old_angles[axis]
@@ -93,13 +93,13 @@ impl CEntityRuntime {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CgPlayerDrawGate {
+pub struct PlayerDrawGate {
     pub eyes_entity_num: i32,
     pub other_flags: u32,
     pub rendering_third_person: bool,
 }
 
-impl CgPlayerDrawGate {
+impl PlayerDrawGate {
     pub const SELF_ENTITY_MASK: u32 = other_flags::PLAYER | other_flags::DEAD_KILLCAM_TPV;
 
     pub fn is_player_view(self, number: u16) -> bool {
@@ -140,7 +140,7 @@ impl RemoteBodySubmitKind {
 pub fn remote_body_submit_kind(
     number: u16,
     runtime: &CEntityRuntime,
-    gate: CgPlayerDrawGate,
+    gate: PlayerDrawGate,
 ) -> RemoteBodySubmitKind {
     if !runtime.in_next_snap() {
         return RemoteBodySubmitKind::NotInSnap;
@@ -168,7 +168,7 @@ pub fn remote_body_submit_kind(
     }
 }
 
-pub fn remote_body_submits(number: u16, runtime: &CEntityRuntime, gate: CgPlayerDrawGate) -> bool {
+pub fn remote_body_submits(number: u16, runtime: &CEntityRuntime, gate: PlayerDrawGate) -> bool {
     remote_body_submit_kind(number, runtime, gate).submits()
 }
 
@@ -220,8 +220,8 @@ pub fn reset_entity(rt: &mut CEntityRuntime, next: EntityState, at_time_ms: i32,
 
 fn sample_pose(rt: &mut CEntityRuntime, at_time_ms: i32) {
     rt.pose_time_ms = at_time_ms;
-    rt.origin = bg_evaluate_trajectory(&rt.current.pos, at_time_ms);
-    rt.angles = bg_evaluate_trajectory(&rt.current.apos, at_time_ms);
+    rt.origin = evaluate_trajectory(&rt.current.pos, at_time_ms);
+    rt.angles = evaluate_trajectory(&rt.current.apos, at_time_ms);
 }
 
 fn write_reset_cursor(rt: &mut CEntityRuntime, next: &EntityState, new_entity: bool) {

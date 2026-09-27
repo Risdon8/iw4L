@@ -1,8 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use anim_iw4::{
-    DOBJ_COMPUTE_BOUNDS_MODEL_LIMIT, DOBJ_RADIUS_PARENT_ROOT, dobj_compute_bounds_radius,
-};
+use anim_iw4::{DOBJ_COMPUTE_BOUNDS_MODEL_LIMIT, DOBJ_RADIUS_PARENT_ROOT, compute_bounds_radius};
 use assets::FpvMeshCatalog;
 use bevy::prelude::*;
 use lighting_iw4::{
@@ -283,11 +281,11 @@ impl WorldModelLightingCache {
     }
 }
 
-pub(crate) fn dobj_lighting_box_half(radii: &[f32], parents: &[u8]) -> Option<[f32; 3]> {
+pub(crate) fn lighting_box_half(radii: &[f32], parents: &[u8]) -> Option<[f32; 3]> {
     if radii.is_empty() || radii.len() > DOBJ_COMPUTE_BOUNDS_MODEL_LIMIT {
         return None;
     }
-    Some(lighting_query_box_half(dobj_compute_bounds_radius(
+    Some(lighting_query_box_half(compute_bounds_radius(
         radii, parents,
     )))
 }
@@ -301,7 +299,7 @@ pub(crate) fn fpv_dobj_lighting_box_half(
     let gun = catalog.get_at(gun_index.order())?;
     let r_hands = hands.skel.radius?;
     let r_gun = gun.skel.radius?;
-    dobj_lighting_box_half(&[r_hands, r_gun], &[DOBJ_RADIUS_PARENT_ROOT, 0])
+    lighting_box_half(&[r_hands, r_gun], &[DOBJ_RADIUS_PARENT_ROOT, 0])
 }
 
 pub fn viewmodel_lighting_origin(

@@ -260,7 +260,7 @@ pub(crate) fn finish_damage(
     let Some(ps) = world.player_mut(id) else {
         return Finish::Hurt;
     };
-    movement_iw4::pm_update_damage_timer(ps, amount, dir);
+    movement_iw4::update_damage_timer(ps, amount, dir);
     ps.health = (ps.health - amount.max(0)).max(0);
     ps.damage_count = ps.damage_count.saturating_add(1);
     ps.damage_event = ps.damage_event.wrapping_add(1);
@@ -582,16 +582,16 @@ pub(crate) fn ammo_clip(world: &FrameWorld, id: ClientId, weapon: u32) -> i32 {
     let (Some(ps), Some(facts)) = (world.player(id), world.combat_facts_for(weapon)) else {
         return 0;
     };
-    let key = weapon_iw4::bg_clip_table_key(facts.clip_index, weapon);
-    weapon_iw4::bg_get_clip_for_hand(&ps.ammoclip, key, 0)
+    let key = weapon_iw4::clip_table_key(facts.clip_index, weapon);
+    weapon_iw4::get_clip_for_hand(&ps.ammoclip, key, 0)
 }
 
 pub(crate) fn ammo_stock(world: &FrameWorld, id: ClientId, weapon: u32) -> i32 {
     let (Some(ps), Some(facts)) = (world.player(id), world.combat_facts_for(weapon)) else {
         return 0;
     };
-    let key = weapon_iw4::bg_ammo_table_key(facts.ammo_index, weapon);
-    weapon_iw4::bg_get_ammo_not_in_clip(&ps.ammo, key)
+    let key = weapon_iw4::ammo_table_key(facts.ammo_index, weapon);
+    weapon_iw4::get_ammo_not_in_clip(&ps.ammo, key)
 }
 
 pub(crate) fn set_ammo_clip(world: &mut FrameWorld, id: ClientId, weapon: u32, count: i32) {
@@ -599,9 +599,9 @@ pub(crate) fn set_ammo_clip(world: &mut FrameWorld, id: ClientId, weapon: u32, c
         return;
     };
     let count = count.clamp(0, facts.clip_size.max(0));
-    let key = weapon_iw4::bg_clip_table_key(facts.clip_index, weapon);
+    let key = weapon_iw4::clip_table_key(facts.clip_index, weapon);
     if let Some(ps) = world.player_mut(id) {
-        let _ = weapon_iw4::bg_set_clip_for_hand(&mut ps.ammoclip, key, 0, count);
+        let _ = weapon_iw4::set_clip_for_hand(&mut ps.ammoclip, key, 0, count);
     }
     let stock = ammo_stock(world, id, weapon);
     world.client_meta_mut(id).set_ammo(weapon, count, stock);
@@ -612,9 +612,9 @@ pub(crate) fn set_ammo_stock(world: &mut FrameWorld, id: ClientId, weapon: u32, 
         return;
     };
     let count = count.clamp(0, facts.max_ammo.max(0));
-    let key = weapon_iw4::bg_ammo_table_key(facts.ammo_index, weapon);
+    let key = weapon_iw4::ammo_table_key(facts.ammo_index, weapon);
     if let Some(ps) = world.player_mut(id) {
-        let _ = weapon_iw4::bg_set_ammo_not_in_clip(&mut ps.ammo, key, count);
+        let _ = weapon_iw4::set_ammo_not_in_clip(&mut ps.ammo, key, count);
     }
     let clip = ammo_clip(world, id, weapon);
     world.client_meta_mut(id).set_ammo(weapon, clip, count);

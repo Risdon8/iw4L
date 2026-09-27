@@ -13,8 +13,8 @@ use fastfile_t5::{GfxWorldGeometry, ZonePtr, ZoneStream};
 
 use crate::world_draw::{
     CameraRangeKind, CameraSurfRange, CameraSurfRanges, DpvsWorldData, OwnedPortal,
-    RetailWorldVertexPayload, SurfaceDrawFields, WorldBatch, WorldDraw, WorldLightmap,
-    WorldLightmapGap, WorldPrimaryLight, WorldReflectionProbe,
+    SurfaceDrawFields, WorldBatch, WorldDraw, WorldLightmap, WorldLightmapGap, WorldPrimaryLight,
+    WorldReflectionProbe, WorldVertexPayload,
 };
 use crate::world_mesh::{
     WorldMeshError, WorldMeshStats, normalize_or_up, unpack_color, unpack_unit_vec,
@@ -98,7 +98,7 @@ pub fn build_t5_world_draw(
         return Err(WorldMeshError::NoGeometry);
     };
 
-    let mut retail_vertices = Vec::with_capacity(geometry.vertex_count);
+    let mut packed_vertices = Vec::with_capacity(geometry.vertex_count);
     let mut positions = Vec::with_capacity(geometry.vertex_count);
     let mut normals = Vec::with_capacity(geometry.vertex_count);
     let mut tangents = Vec::with_capacity(geometry.vertex_count);
@@ -110,11 +110,11 @@ pub fn build_t5_world_draw(
 
     for i in 0..geometry.vertex_count {
         let v = vertices.at(i * iw4_sz::GFX_WORLD_VERTEX);
-        let mut retail = [0u8; fastfile_t5::size::GFX_WORLD_VERTEX];
-        for (offset, byte) in retail.iter_mut().enumerate() {
+        let mut packed = [0u8; fastfile_t5::size::GFX_WORLD_VERTEX];
+        for (offset, byte) in packed.iter_mut().enumerate() {
             *byte = s.u8_at(v, offset).map_err(|_| WorldMeshError::NoGeometry)?;
         }
-        retail_vertices.push(retail);
+        packed_vertices.push(packed);
         let xyz = [
             s.f32_at(v, 0).map_err(|_| WorldMeshError::NoGeometry)?,
             s.f32_at(v, 4).map_err(|_| WorldMeshError::NoGeometry)?,
@@ -411,7 +411,7 @@ pub fn build_t5_world_draw(
             batches,
             lightmap,
             stats,
-            retail_vertices: RetailWorldVertexPayload::T5(retail_vertices),
+            packed_vertices: WorldVertexPayload::T5(packed_vertices),
             vertex_layer,
             surface_vertex_layer,
             surface_first_vertex,

@@ -2,7 +2,7 @@ use assets::AssetNamespace;
 use bevy::{audio::Volume, prelude::*};
 use frame::{AppScreen, LifeEnded, MatchTornDown};
 use hud_iw4::shellshock_remaining_ms;
-use net::{CgFrameClock, LocalPresentClient, PresentedSnapshot};
+use net::{FrameClock, LocalPresentClient, PresentedSnapshot};
 
 use crate::{
     PlayAlias, SND_ENT_LOCAL,
@@ -20,7 +20,7 @@ pub(crate) fn update_shellshock_tinnitus(
     mut torn: MessageReader<MatchTornDown>,
     mut died: MessageReader<LifeEnded>,
     screen: Option<Res<AppScreen>>,
-    cg_clock: Option<Res<CgFrameClock>>,
+    cg_clock: Option<Res<FrameClock>>,
     presented: Option<Res<PresentedSnapshot>>,
     local: Option<Res<LocalPresentClient>>,
     bank: Option<Res<SoundBank>>,

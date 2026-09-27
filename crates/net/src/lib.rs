@@ -32,13 +32,11 @@ pub use authority::runtime::{
     authority_should_tick,
 };
 pub use client::centity_runtime::{
-    CEntityDobjHandle, CEntityFxHandle, CEntityRuntime, CgPlayerDrawGate, CurrentLerpState,
-    EFLAGS_DEAD, EFLAGS_TELEPORT, RemoteBodySubmitKind, RemotePoseSample,
+    CEntityDobjHandle, CEntityFxHandle, CEntityRuntime, CurrentLerpState, EFLAGS_DEAD,
+    EFLAGS_TELEPORT, PlayerDrawGate, RemoteBodySubmitKind, RemotePoseSample,
     corpse_slot_to_entity_state, player_state_to_entity_state, remote_body_submit_kind,
     remote_body_submits, remote_pose_sample,
 };
-pub use client::cg_frame::{CgFrameClock, CgameActive, CgameJoinCensus};
-pub use client::cls_frame::ClsRealtime;
 pub use client::entities::{
     CEntity, CEntityBirthCensus, CEntitySlots, CLIENT_ENTITY_SLOT_COUNT, register_client_entities,
     sync_client_entities,
@@ -54,9 +52,10 @@ pub use client::entity_event_registry::{
     EV_DISPATCH_REGISTRY, EntityEventDispatch, EntityEventRow, ev_dispatch_row,
 };
 pub use client::frame_census::{ClientPhaseCensus, HUD_STAGE_N, UpdatePhaseCensus};
+pub use client::frame_clock::{FrameClock, GameActive, GameJoinCensus};
 pub use client::input::{
     ClientActionInput, KEY_FRAME_MSEC_MAX, LookState, accumulate_look, build_usercmd,
-    com_frame_time_msec, idle_usercmd, key_frame_msec, look_angles_from_degrees,
+    frame_time_msec, idle_usercmd, key_frame_msec, look_angles_from_degrees,
 };
 pub use client::predict::{
     AckMatch, ClientPrediction, CmdSeq, DEFAULT_HISTORY_CAP, MAX_UNACKED_SNAPSHOTS, MoveHistory,
@@ -64,8 +63,8 @@ pub use client::predict::{
 };
 pub use client::predicted_error::PredictedError;
 pub use client::presented::{
-    CgViewweaponAim, FpvEventCues, FpvHandRecord, FpvRawHandSample, LocalPresentClient,
-    PresentLocalCensus, PresentedSnapshot,
+    FpvEventCues, FpvHandRecord, FpvRawHandSample, LocalPresentClient, PresentLocalCensus,
+    PresentedSnapshot, ViewweaponAim,
 };
 pub use client::projectiles::{PresentedProjectile, count_throw_rows, merge_presented_projectiles};
 pub use client::proxy::{
@@ -73,14 +72,16 @@ pub use client::proxy::{
     PresentationSampleOutcome, PresentationSampleProvenance, PresentationSampleTime, ProxyMode,
     ProxyPolicyRevision, ProxySample, ProxyStarvationReason, RemoteProxy,
 };
+pub use client::realtime::ClientRealtime;
 pub use client::runtime::{
-    CgWeaponSelect, ClientClock, ClientCmdTemplate, ClientPhaseTrace, ClientPredictionState,
-    ClientReliableAck, ClockTick, LastAdoptedSnapshot, PendingClientSends, PendingPelletFx,
+    ClientClock, ClientCmdTemplate, ClientPhaseTrace, ClientPredictionState, ClientReliableAck,
+    ClockTick, LastAdoptedSnapshot, PendingClientSends, PendingPelletFx,
     PendingPresentedEntityEvents, ReceivedTicks, ReliableControlEvent, RemoteProxyState,
-    advance_cg_frame_clock, advance_cls_realtime, arm_listen_prediction, cg_cycle_weapon_select,
-    cg_follow_held_weapon_select, listen_prediction_needs_content, predict_local_move,
-    publish_presented, receive_ticks, reconcile_prediction, register_client_runtime,
-    register_listen_prediction_arm, sample_client_input, send_pending_commands,
+    WeaponSelect, advance_cg_frame_clock, advance_cls_realtime, arm_listen_prediction,
+    cycle_weapon_select, follow_held_weapon_select, listen_prediction_needs_content,
+    predict_local_move, publish_presented, receive_ticks, reconcile_prediction,
+    register_client_runtime, register_listen_prediction_arm, sample_client_input,
+    send_pending_commands,
 };
 pub use entity_iw4::{EntityEventKind, LOCAL_SOUND_ENTITY};
 pub use gaps::{NetGap, NetGapCause, NetIdentityGaps, ScriptNotify};
@@ -121,7 +122,7 @@ pub use svc_playercard::{
     SvcOpenMenu, SvcOpenMenuCmd,
 };
 pub use svc_scores::{
-    CgScores, PendingScoreboard, SCORES_REQUEST_MS, SVC_SCORES, format_scoreboard_cmd,
+    PendingScoreboard, SCORES_REQUEST_MS, SVC_SCORES, Scoreboard, format_scoreboard_cmd,
     format_scoreboard_from_snapshot, parse_scoreboard_cmd,
 };
 pub use svc_sound::{PendingSvcSounds, SVC_PLAY_LOCAL, SVC_STOP_LOCAL, SvcLocalSound, SvcSound};

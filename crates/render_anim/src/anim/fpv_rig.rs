@@ -12,7 +12,7 @@ use crate::anim::fpv_pose::{
 };
 use crate::anim::xmodel_pose::{FpvSurfOwner, SkinLayout, build_skin_layout, skin_packed_into};
 use crate::draw::FpvSurfaceDraw;
-use anim_iw4::dobj_surface_hidden;
+use anim_iw4::surface_hidden;
 use assets::{AnimInstance, FpvAssembly, FpvClipTracks, FpvMeshCatalog, FpvPartRole, PartBits};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -124,7 +124,7 @@ impl PreparedFpvModel {
             hide.is_some_and(|words| {
                 skel.surface_part_bits
                     .get(surface)
-                    .is_some_and(|bits| dobj_surface_hidden(bits, words, 0))
+                    .is_some_and(|bits| surface_hidden(bits, words, 0))
             })
         };
         let admitted = |surface: usize| match admission.verdict(catalog_entry, surface) {

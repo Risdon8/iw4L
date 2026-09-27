@@ -125,7 +125,7 @@ fn execute(
     }
     if name == "scr_fog_fraction" {
         return Err(
-            "scr_fog_fraction is initialized to 1 by retail art script but has no fog consumer",
+            "scr_fog_fraction is initialized to 1 by the art script but has no fog consumer",
         );
     }
     let v = values(&cmd.args)?;
@@ -235,7 +235,7 @@ pub(crate) fn route(
     mut commands: MessageReader<ConsoleCommand>,
     mut dvars: ResMut<FogDvars>,
     mut map: Option<ResMut<MapFrameFog>>,
-    clock: Option<Res<net::CgFrameClock>>,
+    clock: Option<Res<net::FrameClock>>,
     prepared: Res<PreparedSceneView>,
     mut console: ResMut<ConsoleState>,
     settings: Res<ConsoleSettings>,

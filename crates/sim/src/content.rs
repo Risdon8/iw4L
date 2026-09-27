@@ -74,12 +74,12 @@ fn hash_combat(h: &mut Digest, combat: &[WeaponCombatFacts]) {
         h.i32(row.inventory_type);
         h.i32(row.weap_class);
         h.i32(row.player_anim_type);
-        h.byte(match row.select_requires_ammo_at_0x667 {
+        h.byte(match row.select_requires_ammo {
             None => 0,
             Some(false) => 1,
             Some(true) => 2,
         });
-        h.byte(match row.offhand_hold_is_cancelable_at_0x681 {
+        h.byte(match row.offhand_hold_is_cancelable {
             None => 0,
             Some(false) => 1,
             Some(true) => 2,

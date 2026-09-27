@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
-pub struct ClsRealtime {
+pub struct ClientRealtime {
     realtime: i32,
 
     frametime: i32,
@@ -11,7 +11,7 @@ pub struct ClsRealtime {
     frac_ms: f32,
 }
 
-impl ClsRealtime {
+impl ClientRealtime {
     pub fn realtime(&self) -> i32 {
         self.realtime
     }

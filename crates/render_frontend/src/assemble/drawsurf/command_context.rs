@@ -10,8 +10,8 @@ use super::material_runtime::{RuntimeCodeSources, RuntimeImageId};
 use crate::prepare::scene::camera::FpvLens;
 use crate::prepare::scene::model_lighting_atlas::WorldModelLightingAtlas;
 use crate::prepare::scene::view_parms::PreparedSceneView;
-use hud_iw4::{GfxCmdBufSource2d, gfx_scene_def_float_time, r_begin_view};
-use net::CgFrameClock;
+use hud_iw4::{GfxCmdBufSource2d, begin_view, gfx_scene_def_float_time};
+use net::FrameClock;
 
 pub use crate::prepare::scene::view_parms::{host_clip_from_view, pack_live_view_parms};
 
@@ -843,7 +843,7 @@ pub(crate) fn update_command_context_code_sources(
     t5_tree_scatter: Option<Res<MapT5TreeScatter>>,
     outdoor: Option<Res<MapOutdoor>>,
     lighting: Option<Res<WorldModelLightingAtlas>>,
-    cg_clock: Option<Res<CgFrameClock>>,
+    cg_clock: Option<Res<FrameClock>>,
     prepared: Res<PreparedSceneView>,
     cameras: Query<&Camera, With<FpvLens>>,
     scene: Option<Res<crate::prepare::scene::world::WorldScene>>,
@@ -891,7 +891,7 @@ pub(crate) fn update_command_context_code_sources(
         } else {
             0
         };
-    let begun = r_begin_view(
+    let begun = begin_view(
         &mut source,
         &gfx_scene_def_float_time(float_time),
         &prepared.parms,

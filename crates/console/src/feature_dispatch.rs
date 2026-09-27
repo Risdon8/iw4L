@@ -1289,7 +1289,7 @@ pub fn register_feature_commands(registry: &mut crate::ConsoleRegistry, maps: &[
         ("stoprecord", "stoprecord — finish the open demo"),
         (
             "clip",
-            "clip — save last ≤45s available to this client as iw4l-artifacts/clips/<ULID>/{clip.iw4ldemo, dump.txt} (ours; always-on ring; not a retail command)",
+            "clip — save last ≤45s available to this client as iw4l-artifacts/clips/<ULID>/{clip.iw4ldemo, dump.txt} (always-on ring)",
         ),
         (
             "map_restart",
@@ -1303,10 +1303,7 @@ pub fn register_feature_commands(registry: &mut crate::ConsoleRegistry, maps: &[
             "demo",
             "demo <name> — tear down the current occupancy, then play iw4l-artifacts/demos/<name>.iw4ldemo or clips/<name>/clip.iw4ldemo",
         ),
-        (
-            "play",
-            "play <name> — launcher alias of demo (not a retail command string)",
-        ),
+        ("play", "play <name> — launcher alias of demo"),
         (
             "exit",
             "exit — quit the process, abandoning unfinished screenshots",
@@ -1317,7 +1314,7 @@ pub fn register_feature_commands(registry: &mut crate::ConsoleRegistry, maps: &[
         ),
         (
             "finish_run",
-            "finish_run — finish the run's screenshots, then quit (not a retail command string)",
+            "finish_run — finish the run's screenshots, then quit",
         ),
         ("ui", "ui [0|1] — hide/show game UI; console Overlay stays"),
         (

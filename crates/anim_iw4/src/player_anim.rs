@@ -283,7 +283,7 @@ pub fn anim_cond_value_names(index: u8) -> &'static [&'static str] {
     }
 }
 
-pub fn bg_random(seed: &mut u32) -> u32 {
+pub fn random(seed: &mut u32) -> u32 {
     let next = seed.wrapping_mul(0x343fd).wrapping_add(0x269ec3);
     *seed = next;
     next >> 17

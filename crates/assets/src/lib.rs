@@ -207,11 +207,11 @@ pub use asset_iw4::{
     GFXS1_POLYGON_OFFSET_SHADOWMAP_LEVEL, GFXS1_POLYGON_OFFSET_SHIFT, POLYGON_OFFSET_BIAS_TO_D3D,
     R_POLYGON_OFFSET_BIAS_DEFAULT, R_POLYGON_OFFSET_SCALE_DEFAULT, S_DEPTH_TEST_TABLE,
     SM_POLYGON_OFFSET_BIAS_DEFAULT, SM_POLYGON_OFFSET_SCALE_DEFAULT, SND_CURVE_DEFAULT_ASSET_NAME,
-    SND_ENTCHANNEL_FILE, SndAliasFlags, SndAliasSampleKind, d3d_depth_bias_to_wgpu_constant,
-    depth_state_from_state_bits, depth_test_enable, depth_write_enable, polygon_offset_d3d,
-    polygon_offset_d3d_defaults, polygon_offset_level, polygon_offset_wgpu_defaults,
+    SND_ENTCHANNEL_FILE, SndAliasFlags, SndAliasSampleKind, attenuate,
+    d3d_depth_bias_to_wgpu_constant, depth_state_from_state_bits, depth_test_enable,
+    depth_write_enable, polygon_offset_d3d, polygon_offset_d3d_defaults, polygon_offset_level,
+    polygon_offset_wgpu_defaults,
     size::{WEAP_ANIM_IDLE, WEAPON_ANIM_COUNT, weap_anim},
-    snd_attenuate,
 };
 pub use asset_world::{
     FilmVision, FilmVisionParseError, MaterialSortTrigger, SurfaceCastsSunShadow, WorldCapture,
@@ -259,7 +259,7 @@ pub use dobj::{
 pub use dyn_ents::{
     DYNENT_DRAW_BRUSH, DYNENT_DRAW_MODEL, DynEntCatalog, DynEntDef, DynEntDefScalars,
     DynEntDrawType, DynEntProps, DynEntType, OwnedPhysPreset, PhysPresetCatalog,
-    RETAIL_DYN_ENT_PROPS, build_dyn_ent_catalog, parse_dyn_ent_def_scalars, retail_dyn_ent_props,
+    RETAIL_DYN_ENT_PROPS, build_dyn_ent_catalog, dyn_ent_props, parse_dyn_ent_def_scalars,
 };
 pub use ent_channel::{EntChannel, parse_ent_channel_file};
 pub use fastfile_iw4::GlyphCapture;
@@ -270,9 +270,9 @@ pub use fpv_catalog::{
 pub use fx_catalog::{
     FxBankSound, FxCatalog, FxChildEdge, FxDefinitions, FxElemMaterial, FxElemMaterialReason,
     FxElemModelEdge, FxName, OwnedFxEffectDef, OwnedFxElemDef, OwnedFxSparkFountainDef,
-    OwnedFxTrailDef, OwnedFxVisual, alias_fx_color_map_stubs, elem_type as fx_elem_type,
-    fx_body_namespace, fx_color_decoded_in_catalog, fx_material_bind_name, insert_fx_color_image,
-    lookup_fx_color_image,
+    OwnedFxTrailDef, OwnedFxVisual, alias_fx_color_map_stubs, body_namespace,
+    color_decoded_in_catalog, elem_type as fx_elem_type, insert_fx_color_image,
+    lookup_fx_color_image, material_bind_name,
 };
 pub use fx_model_catalog::{FxModelCatalog, FxModelEntry};
 pub use glass_catalog::{FxGlassReset, GlassZoneCensus, build_fx_glass_reset, build_glass_census};
@@ -344,8 +344,8 @@ pub use material_images::{
     decode_dxt5nm_xy, decode_in_zone_builtin_images, decode_map_preview,
     decode_material_color_maps, decode_menu_background, decode_reflection_probe_cubemap,
     decode_ui_image, decode_ui_image_from_main, decode_zone_image_rgba, game_main_for_zone,
-    iwd_entry_reads, iwd_read_cost, last_image_working_set, mip_cache_cost, retail_lightmap_bake,
-    retail_lit_color, sampler_from_iw4, shared_payload_copy_cost, shared_variant_census,
+    iwd_entry_reads, iwd_read_cost, last_image_working_set, lightmap_bake, lit_color,
+    mip_cache_cost, sampler_from_iw4, shared_payload_copy_cost, shared_variant_census,
 };
 pub use menu_catalog::{
     CapturedStringTable, FontDef, HUD_CHROME_MENUS, HudMaterialPlan, HudMaterialTextureBinding,
@@ -368,10 +368,10 @@ pub use model_lighting::{
 pub use model_mesh::{
     MapXModelAssetKey, MapXModelMaterialCensus, MapXModelSceneAsset, MapXModelSceneCatalog,
     ModelColorCensus, ModelKind, ModelMesh, ModelMeshError, ModelSurfaceDraw,
-    OwnedXRigidVertListCollision, OwnedXSurfaceCollisionTree, PreparedMapModels,
-    RetailPackedVertexPayload, RetailXSurfaceCollisionPayload, ScriptModelMetadata,
-    ScriptModelSceneInstance, StaticModelDraw, StaticModelDrawError, StaticModelInstance,
-    StaticModelPlacement, SurfaceColorCensus, VertexColorStats, build_iw5_static_model_instances,
+    OwnedXRigidVertListCollision, OwnedXSurfaceCollisionTree, PackedVertexPayload,
+    PreparedMapModels, ScriptModelMetadata, ScriptModelSceneInstance, StaticModelDraw,
+    StaticModelDrawError, StaticModelInstance, StaticModelPlacement, SurfaceColorCensus,
+    VertexColorStats, XSurfaceCollisionPayload, build_iw5_static_model_instances,
     build_iw5_xmodel_mesh, build_static_model_instances, build_t5_static_model_instances,
     build_t5_xmodel_mesh, build_xmodel_mesh, census_mesh_vertex_colors, census_model_mesh,
     census_rgba_f32, census_skel_vertex_colors, format_vertex_color_stats, model_kind,
@@ -380,7 +380,7 @@ pub use model_skel::{
     BoneBind, BoneCollision, FpvSkel, ModelLodSelector, ModelSkel, VertSkin, capture_body_skel,
     capture_body_skel_iw5, capture_body_skel_t5, capture_fpv_skel, capture_fpv_skel_iw5,
     capture_fpv_skel_t5, capture_world_weapon_skel, capture_xmodel_skel, capture_xmodel_skel_iw5,
-    capture_xmodel_skel_t5, dobj_has_lod_for_dist, lod_surface_range, t5_lod, xmodel_lod_for_dist,
+    capture_xmodel_skel_t5, has_lod_for_dist, lod_surface_range, t5_lod, xmodel_lod_for_dist,
 };
 pub use penetration::{
     LochitTableError, PenTableError, capture_lochit_table, capture_pen_table,
@@ -424,7 +424,7 @@ pub use soldiers::{
 pub use sound_catalog::{
     CapturedAlias, CapturedSndCurve, CapturedSound, LoadedSoundEdge, LoadedSoundEdgeReason,
     LoadedSoundPcm, MSS_PCM, PickLoadedOutcome, PickedSound, SoundAliasKey, SoundCatalog,
-    lerp_range, pick_weighted_variant_index, snd_advance_lcg, snd_unit_random,
+    advance_lcg, lerp_range, pick_weighted_variant_index, unit_random,
 };
 pub use sound_load::{
     LoadedSoundBank, SoundSources, compose_sound_bank, gather_sound_sources, load_mp_sound_bank,
@@ -486,9 +486,9 @@ pub use weapon_catalog::{
 };
 pub use world_draw::{
     CapturedLightDef, DpvsWorldData, GfxBrushModelBounds, GfxBrushModelSurfs, OwnedPortal,
-    ResolvedLightDef, RetailWorldVertexPayload, SunEffectsCapture, WorldBatch, WorldDraw,
-    WorldLightRegionHull, WorldLightmap, WorldLightmapGap, WorldPrimaryLight, WorldReflectionProbe,
-    WorldShadowGeometry, brush_model_vertex_centroid, build_world_draw,
+    ResolvedLightDef, SunEffectsCapture, WorldBatch, WorldDraw, WorldLightRegionHull,
+    WorldLightmap, WorldLightmapGap, WorldPrimaryLight, WorldReflectionProbe, WorldShadowGeometry,
+    WorldVertexPayload, brush_model_vertex_centroid, build_world_draw,
 };
 pub(crate) use world_draw::{
     capture_light_defs, resolve_named_light_def, resolve_outdoor_image,

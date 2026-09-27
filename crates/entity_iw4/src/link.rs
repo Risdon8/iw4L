@@ -1,16 +1,16 @@
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct SvLinkBounds {
+pub struct LinkBounds {
     pub mid: [f32; 3],
 
     pub half: [f32; 3],
 }
 
-pub fn sv_link_entity_world_bounds(
+pub fn link_entity_world_bounds(
     origin: [f32; 3],
     box_mid: [f32; 3],
     box_half: [f32; 3],
-) -> SvLinkBounds {
-    SvLinkBounds {
+) -> LinkBounds {
+    LinkBounds {
         mid: [
             origin[0] + box_mid[0],
             origin[1] + box_mid[1],
@@ -20,6 +20,6 @@ pub fn sv_link_entity_world_bounds(
     }
 }
 
-pub fn sv_link_entity_needs_rotated_radius(snapped_angles: [f32; 3], box_half: [f32; 3]) -> bool {
+pub fn link_entity_needs_rotated_radius(snapped_angles: [f32; 3], box_half: [f32; 3]) -> bool {
     box_half != [0.0, 0.0, 0.0] && snapped_angles != [0.0, 0.0, 0.0]
 }

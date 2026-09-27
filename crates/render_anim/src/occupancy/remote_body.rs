@@ -2,16 +2,16 @@ use crate::anim::remote_body::{
     AdvancedRemoteTree, CpuBodyGeom, CpuSurfMeta, PendingGunSkin, PreparedRemoteKits,
     RemoteBodySkinnedItem, RemoteBodySkinnedQueue, RemoteBodyTrees, RemoteModelLods,
     RemoteSkinModels, RemoteSkinPoseHashes, SkinAfterPose, WorldGunGap, advance_remote_tree,
-    bind_remote_skin_models, clone_corpse_tree_from_victim, commit_assembled_body, dobj_radii,
+    bind_remote_skin_models, clone_corpse_tree_from_victim, commit_assembled_body,
     ensure_remote_dobj, hash_skin_matrices, occupy_lod_byte, occupy_remote_kit_dobj, packed_anim,
-    pose_remote_dobj, push_cached_surfaces, remote_player_controller, select_remote_lods,
+    pose_remote_dobj, push_cached_surfaces, radii, remote_player_controller, select_remote_lods,
     select_remote_models, skin_after_pose, skin_slot_need, skip_frozen_corpse_dobj,
     take_unique_geom, validate_remote_tracks, zero_anim,
 };
 use crate::anim::scene_submission::{AnimDObjSceneSkels, AnimDObjSceneSubmission, AnimSceneSubmit};
 use crate::anim::xmodel_pose::{build_skin_layout, skin_packed_into, stream_lod_surface_rigid};
-use crate::dobj_lighting_box_half;
 use crate::gaps::{RenderGap, RenderGapCause, RenderPresentationGaps};
+use crate::lighting_box_half;
 use crate::{
     RemoteBodyDrawPlan, append_remote_body_cpu_blob, finish_remote_body_draw_plan,
     install_body_packed_session, push_remote_body_cpu_draw, take_body_packed_session,
@@ -24,7 +24,7 @@ use bevy::tasks::ComputeTaskPool;
 use entity_iw4::{ET_PLAYER, ET_PLAYER_CORPSE};
 use frame::{ModelLightingSeated, ViewSubject, WorkerCmdSet};
 use net::{
-    CEntity, CEntityRuntime, CgFrameClock, CgPlayerDrawGate, ClientSet, LocalPresentClient,
+    CEntity, CEntityRuntime, ClientSet, FrameClock, LocalPresentClient, PlayerDrawGate,
     PresentedPublished, PresentedSnapshot, remote_body_submits, remote_pose_sample,
 };
 use render_scene::HostGfxScene;
@@ -206,7 +206,7 @@ fn occupy_remote_scene_ents(
         }) => i32::try_from(*focus).unwrap_or(0),
         _ => i32::try_from(local.0.0).unwrap_or(0),
     };
-    let gate = CgPlayerDrawGate {
+    let gate = PlayerDrawGate {
         eyes_entity_num: eyes,
         other_flags: presented
             .player(local.0)
@@ -320,7 +320,7 @@ fn sync_remote_bodies(
         }) => i32::try_from(*focus).unwrap_or(0),
         _ => i32::try_from(local.0.0).unwrap_or(0),
     };
-    let gate = CgPlayerDrawGate {
+    let gate = PlayerDrawGate {
         eyes_entity_num: eyes,
         other_flags: presented
             .player(local.0)
@@ -489,7 +489,7 @@ fn pose_remote_bodies(
         ResMut<crate::anim::dobj_pose::HostDObjPoseFrame>,
         ResMut<crate::anim::dobj_pose::PosedPlayerFrame>,
         Res<HostGfxScene>,
-        Option<Res<CgFrameClock>>,
+        Option<Res<FrameClock>>,
     ),
     mut roots: Query<
         (
@@ -933,7 +933,7 @@ fn publish_remote_dobj(
         Some(fx::FxBoltTarget {
             dobj: persist_key,
             bone,
-            centity_teleport: fx_iw4::fx_bolt_spawn_teleport_bit(
+            centity_teleport: fx_iw4::bolt_spawn_teleport_bit(
                 persist_key,
                 runtime.next_state.e_flags,
             ),
@@ -1180,7 +1180,7 @@ fn assemble_meshes(job: PendingBodySkin<'_>) -> Result<AssembledMeshes, String> 
             true,
         )?;
     }
-    let (radii, radius_parents) = dobj_radii(
+    let (radii, radius_parents) = radii(
         job.body,
         job.head.map(|(head, _)| head),
         job.gun.as_ref().map(|gun| gun.entry),
@@ -1206,7 +1206,7 @@ fn enqueue_remote_body_lighting(
         return;
     }
     for item in submit.iter() {
-        let box_half = dobj_lighting_box_half(&item.radii, &item.radius_parents);
+        let box_half = lighting_box_half(&item.radii, &item.radius_parents);
         let lookup_fallback = atpoint.fallback(item.origin, box_half);
         let client = u16::try_from(item.client).unwrap_or(u16::MAX);
         binds.by_client.insert(

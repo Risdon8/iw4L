@@ -101,8 +101,8 @@ pub(crate) fn validated_facts(
         knife_model: f.knife_model,
         quick_raise_time_ms: f.quick_raise_time_ms,
         quick_drop_time_ms: f.quick_drop_time_ms,
-        select_requires_ammo_at_0x667: f.select_requires_ammo_at_0x667,
-        offhand_hold_is_cancelable_at_0x681: f.offhand_hold_is_cancelable_at_0x681,
+        select_requires_ammo: f.select_requires_ammo,
+        offhand_hold_is_cancelable: f.offhand_hold_is_cancelable,
         ads_gun_kick_reduced_kick_bullets: f.kick.ads_gun_kick_reduced_kick_bullets,
         hip_gun_kick_reduced_kick_bullets: f.kick.hip_gun_kick_reduced_kick_bullets,
         location_damage: bake_location_damage(

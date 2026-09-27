@@ -47,7 +47,7 @@ pub(crate) fn hudelem_pulse_sound(
     }
     let birth_time = elem.fx_birth_time.min(cg_time);
     let last_played_time = latch.slot(elem.sound_id)?;
-    hud_iw4::cl_play_text_fx_pulse_sounds(
+    hud_iw4::play_text_fx_pulse_sounds(
         cg_time,
         hud_iw4::seh_print_strlen(text),
         birth_time,

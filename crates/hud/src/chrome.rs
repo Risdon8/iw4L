@@ -1,7 +1,7 @@
 use assets::{FontDef, LocalizeCatalog, MenuCatalog, MenuDef, MenuItem, MenuRect};
 use hud_iw4::{
     ExprError, ExprHost, item_text_origin, item_text_paint_scale, next_letter,
-    r_normalized_text_scale, ui_get_font_handle, ui_text_height, window_paint_scale_rect,
+    normalized_text_scale, ui_get_font_handle, ui_text_height, window_paint_scale_rect,
 };
 
 use crate::draw2d::{Draw2dCmd, Draw2dList, Draw2dOp, Draw2dProvenance};
@@ -41,7 +41,7 @@ pub(crate) enum ChromeGapKind {
     FloatExpTarget,
     MaterialExp,
     OwnerDraw,
-    RetailFont,
+    AssetFont,
     Localize,
     TextExp,
 }
@@ -392,12 +392,12 @@ fn paint_text(
         item.text_scale,
     );
     let Some(font) = assets.catalog.and_then(|c| c.font(font_name)) else {
-        frame.coverage.gap(index, ChromeGapKind::RetailFont);
+        frame.coverage.gap(index, ChromeGapKind::AssetFont);
         return;
     };
 
     let draw_text_scale = item_text_paint_scale(item.text_scale, anim.scale);
-    let scale = r_normalized_text_scale(font.pixel_height, draw_text_scale);
+    let scale = normalized_text_scale(font.pixel_height, draw_text_scale);
     let wrap_width = (style.rect.w.abs() - item.text_align_x.max(0.0)).max(1.0);
     let lines = menu_text_lines(
         &resolved.text,
@@ -524,7 +524,7 @@ pub(crate) fn push_owner_text(
         args.item.text_scale,
     );
     let Some(font) = args.assets.catalog.and_then(|c| c.font(font_name)) else {
-        return Err(ChromeGapKind::RetailFont);
+        return Err(ChromeGapKind::AssetFont);
     };
     let measured_w = ui_text_width(font, text, args.item.text_scale);
     let measured_h = ui_text_height(args.item.text_scale);
@@ -559,7 +559,7 @@ pub(crate) fn push_owner_text_right_of_rect(
         args.item.text_scale,
     );
     let Some(font) = args.assets.catalog.and_then(|c| c.font(font_name)) else {
-        return Err(ChromeGapKind::RetailFont);
+        return Err(ChromeGapKind::AssetFont);
     };
     let width = ui_text_width(font, text, args.item.text_scale).trunc();
     let x = args.rect.x + args.rect.w - width - right_inset;
@@ -579,7 +579,7 @@ fn push_owner_text_run(
     frame: &mut ChromeFrame,
 ) {
     let draw_text_scale = item_text_paint_scale(args.item.text_scale, args.anim.scale);
-    let scale = r_normalized_text_scale(font.pixel_height, draw_text_scale);
+    let scale = normalized_text_scale(font.pixel_height, draw_text_scale);
     let applied = args.surface.apply_rect(
         x,
         y,
@@ -710,10 +710,10 @@ fn resolve_text(
 }
 
 pub(crate) fn ui_text_width(font: &FontDef, text: &str, text_scale: f32) -> f32 {
-    r_text_width(font, text) as f32 * r_normalized_text_scale(font.pixel_height, text_scale)
+    text_width(font, text) as f32 * normalized_text_scale(font.pixel_height, text_scale)
 }
 
-pub(crate) fn r_text_width(font: &FontDef, text: &str) -> i32 {
+pub(crate) fn text_width(font: &FontDef, text: &str) -> i32 {
     let mut width = 0i32;
     let mut max_width = 0i32;
     let mut chars = text.chars().peekable();

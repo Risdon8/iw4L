@@ -10,7 +10,7 @@ use crate::world::{ClientId, Tick};
 use crate::world_objects::glass_piece_is_solid;
 use anim_iw4::{ANIM_ET_FIREWEAPON, ANIM_ET_RELOAD};
 use entity_iw4::glass_add_damage;
-use movement_iw4::{Pml, mantle_is_weapon_inactive, pm_is_in_air};
+use movement_iw4::{Pml, is_in_air, mantle::is_weapon_inactive};
 use playerstate_iw4::{ENTITYNUM_NONE, PlayerState, mantle_flags};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -19,11 +19,11 @@ use weapon_iw4::{
     FireWeaponKind, MELEE_TRACE_OFFSETS, MeleeChargeState, OFFHAND_INV_SLOTS, OffhandCmd,
     OffhandInvRow, PLAYER_MELEE_HEIGHT_DEFAULT, PLAYER_MELEE_RANGE_DEFAULT,
     PLAYER_MELEE_WIDTH_DEFAULT, SpreadOverrideState, WeaponCmd, WeaponHandState, WeaponTickEvent,
-    bg_ammo_row_present, bg_ammo_table_key, bg_clip_row_present, bg_clip_table_key,
-    bg_get_ammo_not_in_clip, bg_get_clip_for_hand, bg_get_spread_for_weapon,
-    bg_set_ammo_not_in_clip, bg_set_clip_for_hand, fire_weapon_kind, fire_weapon_spread_degrees,
-    melee_trace_count, melee_trace_end, pm_add_aim_spread_fire, pm_adjust_aim_spread_scale,
-    pm_begin_reload_event, pm_num_hands_for_held, pm_reload_insert_event, pm_weapon_hands,
+    add_aim_spread_fire, adjust_aim_spread_scale, ammo_row_present, ammo_table_key,
+    begin_reload_event, clip_row_present, clip_table_key, fire_weapon_kind,
+    fire_weapon_spread_degrees, get_ammo_not_in_clip, get_clip_for_hand, get_spread_for_weapon,
+    melee_trace_count, melee_trace_end, num_hands_for_held, reload_insert_event,
+    set_ammo_not_in_clip, set_clip_for_hand, weapon_hands,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -165,19 +165,19 @@ pub(crate) fn advance_weapon_command(
                     .is_some_and(|f| f.alternate_weapon == target)
             {
                 if let Some(facts) = world.combat_facts_for(target) {
-                    let ammo = weapon_iw4::bg_ammo_table_key(facts.ammo_index, target);
-                    let clip = weapon_iw4::bg_clip_table_key(facts.clip_index, target);
+                    let ammo = weapon_iw4::ammo_table_key(facts.ammo_index, target);
+                    let clip = weapon_iw4::clip_table_key(facts.clip_index, target);
                     let (initial_clip, _, initial_stock) = weapon_iw4::spawn_clip_stock(&facts, 0);
-                    if !bg_ammo_row_present(&ps.ammo, ammo) {
-                        bg_set_ammo_not_in_clip(&mut ps.ammo, ammo, initial_stock);
+                    if !ammo_row_present(&ps.ammo, ammo) {
+                        set_ammo_not_in_clip(&mut ps.ammo, ammo, initial_stock);
                     }
-                    if !bg_clip_row_present(&ps.ammoclip, clip) {
-                        bg_set_clip_for_hand(&mut ps.ammoclip, clip, 0, initial_clip);
+                    if !clip_row_present(&ps.ammoclip, clip) {
+                        set_clip_for_hand(&mut ps.ammoclip, clip, 0, initial_clip);
                     }
                     world.client_meta_mut(*id).set_ammo(
                         target,
-                        bg_get_clip_for_hand(&ps.ammoclip, clip, 0),
-                        bg_get_ammo_not_in_clip(&ps.ammo, ammo),
+                        get_clip_for_hand(&ps.ammoclip, clip, 0),
+                        get_ammo_not_in_clip(&ps.ammo, ammo),
                     );
                     *world.player_mut(*id).expect("present player") = ps;
                 }
@@ -225,7 +225,7 @@ pub(crate) fn advance_weapon_command(
                 speed: ps.speed,
                 move_speed_threshold: AIM_SPREAD_MOVE_SPEED_THRESHOLD_DEFAULT,
             };
-            pm_adjust_aim_spread_scale(
+            adjust_aim_spread_scale(
                 &mut state,
                 &facts.spread_facts(),
                 &facts.aim_spread_decay_facts(),
@@ -250,23 +250,23 @@ pub(crate) fn advance_weapon_command(
         } else {
             facts_weapon
         };
-        let last_hand = pm_num_hands_for_held(&ps.weapons, &ps.weapon_data, ammo_weapon);
+        let last_hand = num_hands_for_held(&ps.weapons, &ps.weapon_data, ammo_weapon);
         let (meta_clip, meta_stock) = meta.ammo_for(ammo_weapon);
-        let ammo_index = weapon_iw4::bg_ammo_table_key(facts.ammo_index, ammo_weapon);
-        let clip_index = weapon_iw4::bg_clip_table_key(facts.clip_index, ammo_weapon);
+        let ammo_index = weapon_iw4::ammo_table_key(facts.ammo_index, ammo_weapon);
+        let clip_index = weapon_iw4::clip_table_key(facts.clip_index, ammo_weapon);
 
-        let stock = if bg_ammo_row_present(&ps.ammo, ammo_index) {
-            bg_get_ammo_not_in_clip(&ps.ammo, ammo_index)
+        let stock = if ammo_row_present(&ps.ammo, ammo_index) {
+            get_ammo_not_in_clip(&ps.ammo, ammo_index)
         } else {
             meta_stock
         };
-        let clip0 = if bg_clip_row_present(&ps.ammoclip, clip_index) {
-            bg_get_clip_for_hand(&ps.ammoclip, clip_index, 0)
+        let clip0 = if clip_row_present(&ps.ammoclip, clip_index) {
+            get_clip_for_hand(&ps.ammoclip, clip_index, 0)
         } else {
             meta_clip
         };
-        let clip1 = if bg_clip_row_present(&ps.ammoclip, clip_index) {
-            bg_get_clip_for_hand(&ps.ammoclip, clip_index, 1)
+        let clip1 = if clip_row_present(&ps.ammoclip, clip_index) {
+            get_clip_for_hand(&ps.ammoclip, clip_index, 1)
         } else {
             0
         };
@@ -356,7 +356,7 @@ pub(crate) fn advance_weapon_command(
                     previous_velocity: [0.0; 3],
                     holdrand: 0,
                 };
-                pm_is_in_air(&ps, &pml)
+                is_in_air(&ps, &pml)
             },
             melee_charge: MeleeChargeState {
                 pm_flags: ps.pm_flags,
@@ -367,7 +367,7 @@ pub(crate) fn advance_weapon_command(
                 melee_charge_time: ps.melee_charge_time,
             },
 
-            mantle_weapon_inactive: mantle_is_weapon_inactive(&ps, true),
+            mantle_weapon_inactive: is_weapon_inactive(&ps, true),
             mantle_quick_raise: (ps.mantle_flags & mantle_flags::QUICK) != 0,
             cmd_weapon_owned: {
                 let w = if cmd.weapon != 0 {
@@ -439,8 +439,8 @@ pub(crate) fn advance_weapon_command(
                         fire_delay_ms: combat.map(|f| f.fire_delay_ms).unwrap_or(0),
                         fuse_time_ms: eq.map(|e| e.fuse_time_ms).unwrap_or(0),
                         cook_off_hold: eq.map(|e| e.cook_off_hold).unwrap_or(false),
-                        offhand_hold_is_cancelable_at_0x681: combat
-                            .and_then(|f| f.offhand_hold_is_cancelable_at_0x681),
+                        offhand_hold_is_cancelable: combat
+                            .and_then(|f| f.offhand_hold_is_cancelable),
                         weap_type: combat.map(|f| f.weap_type).unwrap_or(0),
                     };
                 }
@@ -466,7 +466,7 @@ pub(crate) fn advance_weapon_command(
             },
         };
         let clip_before = hands[0].clip;
-        let events = pm_weapon_hands(&mut hands, &facts, &mut wcmd, last_hand);
+        let events = weapon_hands(&mut hands, &facts, &mut wcmd, last_hand);
         let hand0 = hands[0];
 
         if let Some(ps_mut) = world.player_mut(*id) {
@@ -529,18 +529,13 @@ pub(crate) fn advance_weapon_command(
         if ammo_index != 0 || clip_index != 0 {
             if let Some(ps_mut) = world.player_mut(*id) {
                 if ammo_index != 0 {
-                    let _ = bg_set_ammo_not_in_clip(&mut ps_mut.ammo, ammo_index, hands[0].stock);
+                    let _ = set_ammo_not_in_clip(&mut ps_mut.ammo, ammo_index, hands[0].stock);
                 }
                 if clip_index != 0 {
-                    let _ =
-                        bg_set_clip_for_hand(&mut ps_mut.ammoclip, clip_index, 0, hands[0].clip);
+                    let _ = set_clip_for_hand(&mut ps_mut.ammoclip, clip_index, 0, hands[0].clip);
                     if last_hand >= 1 {
-                        let _ = bg_set_clip_for_hand(
-                            &mut ps_mut.ammoclip,
-                            clip_index,
-                            1,
-                            hands[1].clip,
-                        );
+                        let _ =
+                            set_clip_for_hand(&mut ps_mut.ammoclip, clip_index, 1, hands[1].clip);
                     }
                 }
             }
@@ -609,7 +604,7 @@ pub(crate) fn advance_weapon_command(
                     world.push_entity_event(
                         tick,
                         EventAudience::All,
-                        entity_iw4::cg_predicted_weapon_fire_event(_hand_i as i32, last_shot),
+                        entity_iw4::predicted_weapon_fire_event(_hand_i as i32, last_shot),
                         crate::EntityEventPayload {
                             number: id.0 as i32,
                             weapon,
@@ -624,7 +619,7 @@ pub(crate) fn advance_weapon_command(
                         .push(crate::equipment::WeaponNote::Fired { owner: *id });
 
                     if let Some(ps_mut) = world.player_mut(*id) {
-                        pm_add_aim_spread_fire(
+                        add_aim_spread_fire(
                             &mut ps_mut.aim_spread_scale,
                             ps.f_weapon_pos_frac,
                             facts.hip_spread_fire_add,
@@ -636,7 +631,7 @@ pub(crate) fn advance_weapon_command(
                         .unwrap_or(ps.aim_spread_scale);
                     let ads_frac = ps.f_weapon_pos_frac.clamp(0.0, 1.0);
                     let override_state = SpreadOverrideState::from_i32(ps.spread_override_state);
-                    let cone = bg_get_spread_for_weapon(
+                    let cone = get_spread_for_weapon(
                         ps.view_height_current,
                         ps.spread_override,
                         override_state,
@@ -747,7 +742,7 @@ pub(crate) fn advance_weapon_command(
                 WeaponTickEvent::ReloadStarted => {
                     apply_weapon_anim_event(world, *id, ANIM_ET_RELOAD);
                     let hand = &hands[_hand_i as usize];
-                    let event = pm_begin_reload_event(&facts, hand.clip);
+                    let event = begin_reload_event(&facts, hand.clip);
                     if let Some(ps) = world.player_mut(*id) {
                         movement_iw4::add_predictable_event(
                             ps,
@@ -762,7 +757,7 @@ pub(crate) fn advance_weapon_command(
                 }
                 WeaponTickEvent::ReloadInsert => {
                     let hand = &hands[_hand_i as usize];
-                    let event = pm_reload_insert_event(&facts, hand.clip);
+                    let event = reload_insert_event(&facts, hand.clip);
                     if let Some(ps) = world.player_mut(*id) {
                         movement_iw4::add_predictable_event(ps, event, 0);
                     }
@@ -1019,11 +1014,11 @@ pub(crate) fn phase_trace(
             .iter()
             .filter(|s| {
                 bullet_process_on_hit(s.collider)
-                    && entity_iw4::bg_bullet_hit_event(facts.impact_type, false).is_some()
+                    && entity_iw4::bullet_hit_event(facts.impact_type, false).is_some()
             })
             .count() as u32;
         let (bone_center, bone_half_size, xmodel_contents, model_key) =
-            dobj_hit_dump(terminal, &query.entities.rows);
+            hit_dump(terminal, &query.entities.rows);
         output.shot_verdicts.push(ShotCollisionVerdict {
             shot_id: em.shot_id,
             pellet: em.pellet,
@@ -1092,7 +1087,7 @@ pub(crate) fn phase_trace(
                         crate::DamageOutcome::Died(_)
                     );
                 }
-                flesh_flags = fx_iw4::fx_flesh_hit_flags(head, fatal) as u8;
+                flesh_flags = fx_iw4::flesh_hit_flags(head, fatal) as u8;
             }
             let payload = crate::EntityEventPayload {
                 number: em.attacker.0 as i32,
@@ -1125,14 +1120,13 @@ pub(crate) fn phase_trace(
                 _ => None,
             };
             if bullet_process_on_hit(segment.collider) {
-                if let Some(world_event) = entity_iw4::bg_bullet_hit_event(facts.impact_type, false)
-                {
+                if let Some(world_event) = entity_iw4::bullet_hit_event(facts.impact_type, false) {
                     let world_audience =
                         victim.map_or(EventAudience::All, EventAudience::AllExcept);
                     world.push_entity_event(tick, world_audience, world_event, payload);
                     if let Some(victim) = victim
                         && let Some(local_event) =
-                            entity_iw4::bg_bullet_hit_event(facts.impact_type, true)
+                            entity_iw4::bullet_hit_event(facts.impact_type, true)
                     {
                         world.push_entity_event(
                             tick,
@@ -1141,7 +1135,7 @@ pub(crate) fn phase_trace(
                             payload,
                         );
                     }
-                } else if fx_iw4::fx_impact_table_row(facts.impact_type, false).is_some() {
+                } else if fx_iw4::impact_table_row(facts.impact_type, false).is_some() {
                     world.push_pellet_fx(crate::PelletFxRecord {
                         attacker: em.attacker.0 as i32,
                         weapon: em.weapon,
@@ -1222,7 +1216,7 @@ pub(crate) fn phase_trace(
                             at_time_ms,
                             segment.end,
                             em.direction,
-                            &mut || crate::item::g_random(&mut holdrand),
+                            &mut || crate::item::random_unit(&mut holdrand),
                         );
                         *world.stuck_holdrand_mut() = holdrand;
                     }
@@ -1369,7 +1363,7 @@ fn fire_weapon_melee(
                     at_time_ms,
                     segment.end,
                     forward,
-                    &mut || crate::item::g_random(&mut holdrand),
+                    &mut || crate::item::random_unit(&mut holdrand),
                 );
                 *world.stuck_holdrand_mut() = holdrand;
             }
@@ -1393,7 +1387,7 @@ fn entity_collision_epoch(
         .map(|row| row.epoch)
 }
 
-fn dobj_hit_dump(
+fn hit_dump(
     terminal: Option<ColliderId>,
     rows: &[EntityCollisionTraceGeom],
 ) -> (
@@ -1490,19 +1484,19 @@ pub(crate) fn bullet_process_on_hit(collider: Option<ColliderId>) -> bool {
 }
 
 fn spend_ps_offhand_round(ps: &mut PlayerState, weapon: u32, facts: weapon_iw4::WeaponCombatFacts) {
-    let clip_key = bg_clip_table_key(facts.clip_index, weapon);
-    if clip_key != 0 && bg_clip_row_present(&ps.ammoclip, clip_key) {
-        let clip = bg_get_clip_for_hand(&ps.ammoclip, clip_key, 0);
+    let clip_key = clip_table_key(facts.clip_index, weapon);
+    if clip_key != 0 && clip_row_present(&ps.ammoclip, clip_key) {
+        let clip = get_clip_for_hand(&ps.ammoclip, clip_key, 0);
         if clip > 0 {
-            let _ = bg_set_clip_for_hand(&mut ps.ammoclip, clip_key, 0, clip - 1);
+            let _ = set_clip_for_hand(&mut ps.ammoclip, clip_key, 0, clip - 1);
             return;
         }
     }
-    let ammo_key = bg_ammo_table_key(facts.ammo_index, weapon);
-    if ammo_key != 0 && bg_ammo_row_present(&ps.ammo, ammo_key) {
-        let stock = bg_get_ammo_not_in_clip(&ps.ammo, ammo_key);
+    let ammo_key = ammo_table_key(facts.ammo_index, weapon);
+    if ammo_key != 0 && ammo_row_present(&ps.ammo, ammo_key) {
+        let stock = get_ammo_not_in_clip(&ps.ammo, ammo_key);
         if stock > 0 {
-            let _ = bg_set_ammo_not_in_clip(&mut ps.ammo, ammo_key, stock - 1);
+            let _ = set_ammo_not_in_clip(&mut ps.ammo, ammo_key, stock - 1);
         }
     }
 }

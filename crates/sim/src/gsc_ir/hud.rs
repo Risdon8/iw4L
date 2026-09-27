@@ -6,8 +6,8 @@ use crate::frame::FrameWorld;
 use bevy_ecs::prelude::World;
 use hud_iw4::{
     HE_TYPE_MATERIAL, HE_TYPE_PLAYERNAME, HE_TYPE_TEXT, HE_TYPE_VALUE, HE_TYPE_WAYPOINT, HudElem,
-    align_org, align_screen, bg_lerp_hud_colors, color_rgba, flags, hud_elem_lerp_font_scale,
-    hud_elem_movement_frac, hud_elem_scale_frac, unpack_rgba,
+    align_org, align_screen, color_rgba, flags, hud_elem_lerp_font_scale, hud_elem_movement_frac,
+    hud_elem_scale_frac, lerp_hud_colors, unpack_rgba,
 };
 use playerstate_iw4::ENTITYNUM_NONE;
 
@@ -587,7 +587,7 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         let ms = seconds_ms(float(args, 0)?);
         let now = now_ms(world);
         edit(world, slot, |s| {
-            s.elem.from_color_rgba = pack(bg_lerp_hud_colors(&s.elem, now));
+            s.elem.from_color_rgba = pack(lerp_hud_colors(&s.elem, now));
             s.elem.fade_start_time = now;
             s.elem.fade_time = ms;
         });

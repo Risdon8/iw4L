@@ -106,7 +106,7 @@ pub struct HostFxPostLights {
 
 impl HostFxPostLights {
     pub fn add(&mut self, light: FxPostLight) {
-        if !fx_iw4::fx_post_light_add_allows(self.queued.len() as u32) {
+        if !fx_iw4::post_light_add_allows(self.queued.len() as u32) {
             self.cap_full = self.cap_full.saturating_add(1);
             return;
         }

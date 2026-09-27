@@ -6,8 +6,7 @@ use bevy_ecs::schedule::{IntoScheduleConfigs, Schedule};
 use movement_iw4::{
     ANGLE2SHORT, AirMoveContext, CmdScaleWalkContext, CollisionBackend, GroundTraceInput,
     JumpLaunchContext, MoveBounds, PmoveSingleContext, SHORT2ANGLE, SprintContext, ViewAngleClamp,
-    WalkMoveContext, bg_get_max_sprint_time, consume_player_events, pm_footsteps_anim_move_type,
-    pm_move,
+    WalkMoveContext, consume_player_events, footsteps_anim_move_type, get_max_sprint_time, pmove,
 };
 use trace_iw4::{HITTYPE_ENTITY, Trace};
 
@@ -308,8 +307,8 @@ fn run_players_system(ecs: &mut World) {
                 weapon != 0 && {
                     let mut allow = f.ads_allow_facts();
 
-                    allow.clip_index = weapon_iw4::bg_clip_table_key(allow.clip_index, weapon);
-                    weapon_iw4::pm_is_ads_allowed(
+                    allow.clip_index = weapon_iw4::clip_table_key(allow.clip_index, weapon);
+                    weapon_iw4::is_ads_allowed(
                         &ps,
                         &allow,
                         &ps.ammoclip,
@@ -372,7 +371,7 @@ fn run_players_system(ecs: &mut World) {
                 linked_brushes: &linked_brushes,
             };
             let script = world.player_anim_script();
-            let mantle = world.mantle_xanims();
+            let mantle = world.xanims();
             let applied_mt = Cell::new(None);
             let (walking, linked_bounds, anim_movetype, view_w, primary, moved_from, moved_to) = {
                 let ps = world
@@ -383,7 +382,7 @@ fn run_players_system(ecs: &mut World) {
                     ps.pm_flags &= !playerstate_iw4::pm_flags::SHELLSHOCKED;
                 }
                 let moved_from = ps.origin;
-                let result = pm_move(
+                let result = pmove(
                     ps,
                     &mut cmd,
                     context,
@@ -392,7 +391,7 @@ fn run_players_system(ecs: &mut World) {
                     mantle.as_ref(),
                 );
                 let pml = result.pml;
-                let anim_movetype = pm_footsteps_anim_move_type(
+                let anim_movetype = footsteps_anim_move_type(
                     ps,
                     cmd.forwardmove,
                     cmd.rightmove,
@@ -1077,10 +1076,10 @@ fn apply_configuration_change(
         reject(world, Reason::InvalidTarget);
         return;
     }
-    let old_ammo_key = weapon_iw4::bg_ammo_table_key(old.ammo_index, from);
-    let old_clip_key = weapon_iw4::bg_clip_table_key(old.clip_index, from);
-    let new_ammo_key = weapon_iw4::bg_ammo_table_key(new.ammo_index, to);
-    let new_clip_key = weapon_iw4::bg_clip_table_key(new.clip_index, to);
+    let old_ammo_key = weapon_iw4::ammo_table_key(old.ammo_index, from);
+    let old_clip_key = weapon_iw4::clip_table_key(old.clip_index, from);
+    let new_ammo_key = weapon_iw4::ammo_table_key(new.ammo_index, to);
+    let new_clip_key = weapon_iw4::clip_table_key(new.clip_index, to);
     let another_owns = |key: i32, clip: bool| {
         ps.weapons
             .iter()
@@ -1088,21 +1087,21 @@ fn apply_configuration_change(
             .any(|&weapon| {
                 world.combat_facts_for(weapon as u32).is_some_and(|facts| {
                     key == if clip {
-                        weapon_iw4::bg_clip_table_key(facts.clip_index, weapon as u32)
+                        weapon_iw4::clip_table_key(facts.clip_index, weapon as u32)
                     } else {
-                        weapon_iw4::bg_ammo_table_key(facts.ammo_index, weapon as u32)
+                        weapon_iw4::ammo_table_key(facts.ammo_index, weapon as u32)
                     }
                 })
             })
     };
-    let clip0 = weapon_iw4::bg_get_clip_for_hand(&ps.ammoclip, old_clip_key, 0);
-    let raw_clip1 = weapon_iw4::bg_get_clip_for_hand(&ps.ammoclip, old_clip_key, 1);
+    let clip0 = weapon_iw4::get_clip_for_hand(&ps.ammoclip, old_clip_key, 0);
+    let raw_clip1 = weapon_iw4::get_clip_for_hand(&ps.ammoclip, old_clip_key, 1);
     let clip1 = if ps.last_weapon_hand >= 1 {
         raw_clip1
     } else {
         0
     };
-    let stock = weapon_iw4::bg_get_ammo_not_in_clip(&ps.ammo, old_ammo_key);
+    let stock = weapon_iw4::get_ammo_not_in_clip(&ps.ammo, old_ammo_key);
     let akimbo = gsc_give_weapon_is_akimbo(world.weapon_script_name(to));
     let (next_clip0, next_clip1, next_stock) =
         configuration_change_ammo(clip0, clip1, stock, new.clip_size, new.max_ammo, akimbo);
@@ -1123,10 +1122,10 @@ fn apply_configuration_change(
     let mut next = ps;
     next.weapons[slot] = to as i32;
     next.weapon_data[slot * 5..slot * 5 + 5].fill(0);
-    weapon_iw4::bg_latch_weapon_dual_wield(&next.weapons, &mut next.weapon_data, to, akimbo);
+    weapon_iw4::latch_weapon_dual_wield(&next.weapons, &mut next.weapon_data, to, akimbo);
     next.weapon = to;
     next.weapon_primary = to;
-    next.last_weapon_hand = weapon_iw4::pm_num_hands_for_held(&next.weapons, &next.weapon_data, to);
+    next.last_weapon_hand = weapon_iw4::num_hands_for_held(&next.weapons, &next.weapon_data, to);
     if old_ammo_key != new_ammo_key {
         for row in next.ammo.chunks_exact_mut(8) {
             if row[..4] == old_ammo_key.to_le_bytes() {
@@ -1141,9 +1140,9 @@ fn apply_configuration_change(
             }
         }
     }
-    if !weapon_iw4::bg_set_ammo_not_in_clip(&mut next.ammo, new_ammo_key, next_stock)
-        || !weapon_iw4::bg_set_clip_for_hand(&mut next.ammoclip, new_clip_key, 0, next_clip0)
-        || !weapon_iw4::bg_set_clip_for_hand(&mut next.ammoclip, new_clip_key, 1, next_clip1)
+    if !weapon_iw4::set_ammo_not_in_clip(&mut next.ammo, new_ammo_key, next_stock)
+        || !weapon_iw4::set_clip_for_hand(&mut next.ammoclip, new_clip_key, 0, next_clip0)
+        || !weapon_iw4::set_clip_for_hand(&mut next.ammoclip, new_clip_key, 1, next_clip1)
     {
         reject(world, Reason::AmmoTableFull);
         return;
@@ -1158,16 +1157,16 @@ fn apply_configuration_change(
                 && old_alt.weap_type == new_alt.weap_type
                 && old_alt.weap_class == new_alt.weap_class =>
         {
-            let old_key = weapon_iw4::bg_ammo_table_key(old_alt.ammo_index, old.alternate_weapon);
-            let old_clip = weapon_iw4::bg_clip_table_key(old_alt.clip_index, old.alternate_weapon);
-            let new_key = weapon_iw4::bg_ammo_table_key(new_alt.ammo_index, new.alternate_weapon);
-            let new_clip = weapon_iw4::bg_clip_table_key(new_alt.clip_index, new.alternate_weapon);
+            let old_key = weapon_iw4::ammo_table_key(old_alt.ammo_index, old.alternate_weapon);
+            let old_clip = weapon_iw4::clip_table_key(old_alt.clip_index, old.alternate_weapon);
+            let new_key = weapon_iw4::ammo_table_key(new_alt.ammo_index, new.alternate_weapon);
+            let new_clip = weapon_iw4::clip_table_key(new_alt.clip_index, new.alternate_weapon);
             if old_key != old_ammo_key
                 && old_clip != old_clip_key
                 && new_key != new_ammo_key
                 && new_clip != new_clip_key
-                && weapon_iw4::bg_ammo_row_present(&ps.ammo, old_key)
-                && weapon_iw4::bg_clip_row_present(&ps.ammoclip, old_clip)
+                && weapon_iw4::ammo_row_present(&ps.ammo, old_key)
+                && weapon_iw4::clip_row_present(&ps.ammoclip, old_clip)
             {
                 let shared = ps
                     .weapons
@@ -1179,8 +1178,8 @@ fn apply_configuration_change(
                             .map_or(0, |f| f.alternate_weapon);
                         [w as u32, alt].into_iter().filter(|&w| w != 0).any(|w| {
                             world.combat_facts_for(w).is_some_and(|f| {
-                                let ammo = weapon_iw4::bg_ammo_table_key(f.ammo_index, w);
-                                let clip = weapon_iw4::bg_clip_table_key(f.clip_index, w);
+                                let ammo = weapon_iw4::ammo_table_key(f.ammo_index, w);
+                                let clip = weapon_iw4::clip_table_key(f.clip_index, w);
                                 (old_key != new_key && (ammo == old_key || ammo == new_key))
                                     || (old_clip != new_clip
                                         && (clip == old_clip || clip == new_clip))
@@ -1192,9 +1191,9 @@ fn apply_configuration_change(
                     return;
                 }
                 let (clip, _, stock) = configuration_change_ammo(
-                    weapon_iw4::bg_get_clip_for_hand(&ps.ammoclip, old_clip, 0),
+                    weapon_iw4::get_clip_for_hand(&ps.ammoclip, old_clip, 0),
                     0,
-                    weapon_iw4::bg_get_ammo_not_in_clip(&ps.ammo, old_key),
+                    weapon_iw4::get_ammo_not_in_clip(&ps.ammo, old_key),
                     new_alt.clip_size,
                     new_alt.max_ammo,
                     false,
@@ -1213,8 +1212,8 @@ fn apply_configuration_change(
                         }
                     }
                 }
-                if !weapon_iw4::bg_set_ammo_not_in_clip(&mut next.ammo, new_key, stock)
-                    || !weapon_iw4::bg_set_clip_for_hand(&mut next.ammoclip, new_clip, 0, clip)
+                if !weapon_iw4::set_ammo_not_in_clip(&mut next.ammo, new_key, stock)
+                    || !weapon_iw4::set_clip_for_hand(&mut next.ammoclip, new_clip, 0, clip)
                 {
                     reject(world, Reason::AmmoTableFull);
                     return;
@@ -1379,16 +1378,16 @@ fn apply_give_weapon(
             (&mut next.ammoclip[..], 12, true),
         ] {
             let key = if clip {
-                weapon_iw4::bg_clip_table_key(outgoing_facts.clip_index, outgoing)
+                weapon_iw4::clip_table_key(outgoing_facts.clip_index, outgoing)
             } else {
-                weapon_iw4::bg_ammo_table_key(outgoing_facts.ammo_index, outgoing)
+                weapon_iw4::ammo_table_key(outgoing_facts.ammo_index, outgoing)
             };
             let owned = next.weapons.iter().filter(|&&w| w > 0).any(|&w| {
                 world.combat_facts_for(w as u32).is_some_and(|f| {
                     key == if clip {
-                        weapon_iw4::bg_clip_table_key(f.clip_index, w as u32)
+                        weapon_iw4::clip_table_key(f.clip_index, w as u32)
                     } else {
-                        weapon_iw4::bg_ammo_table_key(f.ammo_index, w as u32)
+                        weapon_iw4::ammo_table_key(f.ammo_index, w as u32)
                     }
                 })
             });
@@ -1819,7 +1818,7 @@ fn pmove_context(
     shellshock_affects_movement: bool,
 ) -> PmoveSingleContext {
     let player_sprint_time = 4.0_f32;
-    let weapon_max_sprint_time = bg_get_max_sprint_time(weapon_scales.2, player_sprint_time);
+    let weapon_max_sprint_time = get_max_sprint_time(weapon_scales.2, player_sprint_time);
 
     let air = AirMoveContext {
         player_spectate_speed_scale: 1.0,
@@ -1900,15 +1899,15 @@ pub(crate) fn seed_ps_ammo_tables(
     dual: bool,
     stock: i32,
 ) {
-    let ammo_index = weapon_iw4::bg_ammo_table_key(facts.ammo_index, weapon);
-    let clip_index = weapon_iw4::bg_clip_table_key(facts.clip_index, weapon);
+    let ammo_index = weapon_iw4::ammo_table_key(facts.ammo_index, weapon);
+    let clip_index = weapon_iw4::clip_table_key(facts.clip_index, weapon);
     if ammo_index != 0 {
-        let _ = weapon_iw4::bg_set_ammo_not_in_clip(&mut ps.ammo, ammo_index, stock);
+        let _ = weapon_iw4::set_ammo_not_in_clip(&mut ps.ammo, ammo_index, stock);
     }
     if clip_index != 0 {
-        let _ = weapon_iw4::bg_set_clip_for_hand(&mut ps.ammoclip, clip_index, 0, clip);
+        let _ = weapon_iw4::set_clip_for_hand(&mut ps.ammoclip, clip_index, 0, clip);
         if dual {
-            let _ = weapon_iw4::bg_set_clip_for_hand(&mut ps.ammoclip, clip_index, 1, clip_alt);
+            let _ = weapon_iw4::set_clip_for_hand(&mut ps.ammoclip, clip_index, 1, clip_alt);
         }
     }
 }
@@ -1919,7 +1918,7 @@ pub(crate) fn arm_held_weapon(
     facts: &weapon_iw4::WeaponCombatFacts,
 ) -> (i32, i32) {
     ps.weapon_primary = weapon;
-    let last_hand = weapon_iw4::pm_num_hands_for_held(&ps.weapons, &ps.weapon_data, weapon);
+    let last_hand = weapon_iw4::num_hands_for_held(&ps.weapons, &ps.weapon_data, weapon);
     ps.last_weapon_hand = last_hand;
     let (clip0, clip1, stock) = weapon_iw4::spawn_clip_stock(facts, last_hand);
     let hand = weapon_iw4::spawn_weapon_hand(weapon, facts);

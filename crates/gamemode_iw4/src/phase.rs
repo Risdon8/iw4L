@@ -8,7 +8,7 @@ pub enum Team {
 }
 
 impl Team {
-    pub fn from_retail_u8(raw: u8) -> Option<Self> {
+    pub fn from_packed_u8(raw: u8) -> Option<Self> {
         match raw {
             0 => Some(Self::Free),
             1 => Some(Self::Axis),

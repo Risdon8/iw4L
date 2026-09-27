@@ -36,10 +36,7 @@ pub fn xmodel_lod_for_dist(num_lods: u8, lod_dist: [f32; 4], dist: f32) -> Optio
     None
 }
 
-pub fn dobj_has_lod_for_dist(
-    submodels: impl IntoIterator<Item = (u8, [f32; 4])>,
-    dist: f32,
-) -> bool {
+pub fn has_lod_for_dist(submodels: impl IntoIterator<Item = (u8, [f32; 4])>, dist: f32) -> bool {
     let mut saw = false;
     for (num_lods, lod_dist) in submodels {
         saw = true;

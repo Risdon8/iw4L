@@ -387,9 +387,9 @@ pub fn present_list(input: PresentInput<'_>) -> usize {
 }
 
 fn pack_quad_verts(quad: &Draw2dQuad) -> [HudTessVertex; 4] {
-    let color = u32::from_le_bytes(hud_iw4::r_convert_color_to_bytes(quad.color));
+    let color = u32::from_le_bytes(hud_iw4::convert_color_to_bytes(quad.color));
     core::array::from_fn(|n| {
-        HudTessVertex::from(hud_iw4::rb_set_vertex_2d(
+        HudTessVertex::from(hud_iw4::set_vertex_2d(
             quad.xy[n][0],
             quad.xy[n][1],
             quad.st[n][0],

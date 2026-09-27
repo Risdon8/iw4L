@@ -11,7 +11,7 @@ pub mod weapon_select;
 
 pub use adjust_angles::{
     AdjustAnglesInput, CL_ANGLESPEEDKEY_DEFAULT, CL_PITCHSPEED_DEFAULT, CL_YAWSPEED_DEFAULT,
-    cl_adjust_angles,
+    adjust_angles,
 };
 pub use names::{
     HOLD_PAIR_LIMIT, INPUT_COMMAND_NAMES, SCRIPT_KEYNUM, command_id_from_name, command_id_lookup,
@@ -258,7 +258,7 @@ impl Default for ClientInput {
     }
 }
 
-pub fn cl_set_ads(client: &mut ClientInput, ads: bool) {
+pub fn set_ads(client: &mut ClientInput, ads: bool) {
     client.using_ads = ads;
 }
 
@@ -274,13 +274,7 @@ fn apply_pair(btn: &mut Kbutton, cmd_id: u32, key: i32, now_msec: i32, frame_mse
     }
 }
 
-pub fn cl_input_cmd(
-    client: &mut ClientInput,
-    cmd_id: u32,
-    key: i32,
-    now_msec: i32,
-    frame_msec: u32,
-) {
+pub fn input_cmd(client: &mut ClientInput, cmd_id: u32, key: i32, now_msec: i32, frame_msec: u32) {
     match cmd_id {
         1 | 2 => apply_pair(&mut client.kb.attack, cmd_id, key, now_msec, frame_msec),
         3 | 4 => apply_pair(&mut client.kb.melee, cmd_id, key, now_msec, frame_msec),
@@ -333,12 +327,12 @@ pub fn cl_input_cmd(
         72 | 73 => panic!("togglecrouch/toggleprone latch xor not this slice"),
         74 | 75 => panic!("goprone/gocrouch not this slice"),
         76 => client.using_ads = !client.using_ads,
-        77 => cl_set_ads(client, false),
+        77 => set_ads(client, false),
         _ => panic!("bind-id not in the 1..77 table"),
     }
 }
 
-pub fn cl_key_event(
+pub fn key_event(
     client: &mut ClientInput,
     key_num: usize,
     down: bool,
@@ -353,14 +347,14 @@ pub fn cl_key_event(
         client.keys[key_num].repeats = client.keys[key_num].repeats.saturating_add(1);
         let id = client.keys[key_num].binding;
         if id != 0 {
-            cl_input_cmd(client, id, key_num as i32, now_msec, frame_msec);
+            input_cmd(client, id, key_num as i32, now_msec, frame_msec);
         }
     } else {
         client.keys[key_num].down = 0;
         client.keys[key_num].repeats = 0;
         let id = client.keys[key_num].binding;
         if let Some(up_id) = key_up_command_id(id) {
-            cl_input_cmd(client, up_id, key_num as i32, now_msec, frame_msec);
+            input_cmd(client, up_id, key_num as i32, now_msec, frame_msec);
         }
     }
 }

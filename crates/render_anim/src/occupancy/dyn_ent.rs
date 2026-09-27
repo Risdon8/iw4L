@@ -8,7 +8,7 @@ use dpvs_iw4::{
 
 use crate::anim::body_frustum::AdmittedCellVis;
 use crate::anim::xmodel_pose::PosedModelSurface;
-use crate::dobj_lighting_box_half;
+use crate::lighting_box_half;
 use crate::occupancy::dyn_ent_phys;
 use crate::occupancy::script_model::{DObjLodView, pose_script_dobj_with_materials};
 use crate::{
@@ -643,7 +643,7 @@ fn append_dynent_draws(
         }
         let box_half = row
             .radius
-            .and_then(|radius| dobj_lighting_box_half(&[radius], &[DOBJ_RADIUS_PARENT_ROOT]));
+            .and_then(|radius| lighting_box_half(&[radius], &[DOBJ_RADIUS_PARENT_ROOT]));
         let lookup_fallback = atpoint.fallback(row.lighting_origin, box_half);
         let pending_lighting = (!row.camera_hidden).then(|| {
             lighting_requests.request(ModelLightingRequest {

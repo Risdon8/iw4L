@@ -588,7 +588,7 @@ pub(crate) fn spawn_world(
                 .collect();
             diag::info!(
                 World,
-                "drawsurf primary lights missing falloff_width: {} (retail always writes const 5 from the def image width; None is a retention gap)",
+                "drawsurf primary lights missing falloff_width: {} (the def image width always yields 5; None is a retention gap)",
                 if width_none.is_empty() {
                     "none".to_owned()
                 } else {
@@ -621,7 +621,7 @@ pub(crate) fn spawn_world(
                 .count();
             diag::info!(
                 World,
-                "sceneLightIndex sources: GfxSurface+22 nz={}/{} DrawInst+0x3d nz={}/{} (engine-lit / authored smodel; FPV is AtPoint lightingInfo.lo)",
+                "scene light index sources: surface nz={}/{} static model nz={}/{}",
                 surf_nz,
                 surf_lights.len(),
                 smodel_nz,

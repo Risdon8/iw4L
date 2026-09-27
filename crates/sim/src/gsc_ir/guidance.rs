@@ -184,7 +184,7 @@ pub(super) fn advance(world: &mut World) {
                 tr_delta: delta,
                 tr_base: origin.to_array(),
             };
-            projectile.apos = entity_iw4::g_fire_missile_apos(dir.to_array());
+            projectile.apos = entity_iw4::fire_missile_apos(dir.to_array());
         }
         world
             .resource_mut::<Runtime>()

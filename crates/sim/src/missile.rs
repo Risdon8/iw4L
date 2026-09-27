@@ -3,7 +3,7 @@ use crate::equipment::{GrenadeLaunchKind, ProjectileState, spawn_grenade_project
 use crate::frame::FrameWorld;
 use crate::identities::MatchRng;
 use entity_iw4::{
-    TR_LINEAR, Trajectory, g_fire_grenade_no_draw_ms, g_fire_missile_apos, truncated_tr_delta,
+    TR_LINEAR, Trajectory, fire_grenade_no_draw_ms, fire_missile_apos, truncated_tr_delta,
 };
 use math_iw4::vec3_length;
 use weapon_iw4::{FireWeaponKind, ROCKET_SPREAD_PLANE, fire_weapon_kind};
@@ -160,9 +160,9 @@ fn fire_missile(world: &mut FrameWorld, tick: crate::Tick, shot: &AcceptedShot) 
         origin: shot.origin,
         velocity,
         pos,
-        apos: g_fire_missile_apos(dir),
+        apos: fire_missile_apos(dir),
         entnum,
-        launch_time: time_ms + g_fire_grenade_no_draw_ms(raw_speed),
+        launch_time: time_ms + fire_grenade_no_draw_ms(raw_speed),
         spawn_time_ms: time_ms,
         detonate_at_ms: None,
         cleanup_at_ms: time_ms.saturating_add(crate::equipment::ROCKET_CLEANUP_MS),

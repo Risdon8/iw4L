@@ -100,7 +100,7 @@ pub struct ClassLoadoutCatalog {
 impl Default for ClassLoadoutCatalog {
     fn default() -> Self {
         let guns = |row| {
-            retail_cac_roster(row)
+            cac_roster(row)
                 .iter()
                 .map(|value| frame::CacWeaponOffer {
                     key: format!("iw4:weapon/{value}"),
@@ -110,7 +110,7 @@ impl Default for ClassLoadoutCatalog {
                 .collect()
         };
         let collect = |row| {
-            retail_cac_roster(row)
+            cac_roster(row)
                 .iter()
                 .map(|value| (*value).to_owned())
                 .collect()
@@ -508,7 +508,7 @@ impl ClassPickerFolder {
     }
 }
 
-fn retail_cac_roster(row: ClassEditRow) -> &'static [&'static str] {
+fn cac_roster(row: ClassEditRow) -> &'static [&'static str] {
     match row {
         ClassEditRow::Primary => &[
             "m4_mp",
@@ -608,7 +608,7 @@ fn retail_cac_roster(row: ClassEditRow) -> &'static [&'static str] {
 pub fn picker_icon_stems() -> Vec<&'static str> {
     let mut stems = Vec::new();
     for row in ClassEditRow::ALL {
-        for opt in retail_cac_roster(row) {
+        for opt in cac_roster(row) {
             if row.perk_slot().is_some() {
                 stems.push(crate::class_icons::cac_material_iwd_stem(opt));
             } else if let Some(stem) = cac_weapon_image(opt) {

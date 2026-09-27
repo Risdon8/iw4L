@@ -41,7 +41,7 @@ pub const CG_CAMERA_PULLBACK_CLIPMASK: u32 = 0x0281_0011;
 pub const LINK_FLAGS_FORCE_THIRD_PERSON: u32 = 4;
 
 #[derive(Clone, Copy, Debug)]
-pub struct CgIsThirdPersonViewInputs {
+pub struct ThirdPersonViewInputs {
     pub pm_type: i32,
     pub other_flags: u32,
     pub link_flags: u32,
@@ -51,7 +51,7 @@ pub struct CgIsThirdPersonViewInputs {
     pub killcam_mode: KillCamMode,
 }
 
-pub fn cg_is_third_person_view(i: CgIsThirdPersonViewInputs) -> bool {
+pub fn is_third_person_view(i: ThirdPersonViewInputs) -> bool {
     let mut tpv = i.pm_type > 7
         || (i.other_flags & 2) != 0
         || (i.cg_third_person

@@ -115,11 +115,11 @@ pub fn clear_host_gfx_scene(
 }
 
 pub fn scene_quat_from_angles(angles: [f32; 3]) -> [f32; 4] {
-    fx_iw4::fx_axis_to_quat(math_iw4::angles_to_axis(angles))
+    fx_iw4::axis_to_quat(math_iw4::angles_to_axis(angles))
 }
 
 pub fn scene_quat_from_viewmodel_axes(gun_angles: [f32; 3], view_angles: [f32; 3]) -> [f32; 4] {
-    fx_iw4::fx_axis_to_quat(fx_iw4::fx_mat3_mul(
+    fx_iw4::axis_to_quat(fx_iw4::mat3_mul(
         math_iw4::angles_to_axis(gun_angles),
         math_iw4::angles_to_axis(view_angles),
     ))

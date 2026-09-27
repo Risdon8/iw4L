@@ -6,7 +6,7 @@ use bevy::render::view::Msaa;
 use crate::assemble::drawsurf::RuntimeLightmapHandles;
 use crate::prepare::scene::camera::{FlyCamera, FpvLens, transform_from_iw_view};
 use crate::prepare::scene::world::{SMODEL_LIGHTING_MAX_CLIENT_VIEWS, WorldScene};
-use hud_iw4::{CG_FOV_DEFAULT, cg_horizontal_to_vertical_fov_deg};
+use hud_iw4::{CG_FOV_DEFAULT, horizontal_to_vertical_fov_deg};
 
 pub(crate) const CAMERA_NEAR_INCHES: f32 = 2.0;
 
@@ -310,7 +310,7 @@ pub fn place(
         Msaa::Off,
         Transform::IDENTITY,
         Projection::Perspective(PerspectiveProjection {
-            fov: cg_horizontal_to_vertical_fov_deg(CG_FOV_DEFAULT).to_radians(),
+            fov: horizontal_to_vertical_fov_deg(CG_FOV_DEFAULT).to_radians(),
             near,
             far,
             ..default()

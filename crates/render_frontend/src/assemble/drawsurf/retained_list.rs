@@ -288,7 +288,7 @@ pub struct FxDrawLane {
     pub glass_mesh_skipped_no_ordinal: u32,
 }
 
-fn fx_item_uses_distortion_lane(mat_sort_key: u8, world_distortion_key: Option<u32>) -> bool {
+fn item_uses_distortion_lane(mat_sort_key: u8, world_distortion_key: Option<u32>) -> bool {
     world_distortion_key == Some(u32::from(material_sort_key_row(mat_sort_key)))
 }
 
@@ -470,7 +470,7 @@ fn xmodel_lane_layout_hash(
     id
 }
 
-fn fx_lane_layout_hash(
+fn lane_layout_hash(
     fx: Option<&FxCodeMeshPlan>,
     particle_cloud: Option<&FxParticleCloudPlan>,
     mark_mesh: Option<&GfxMarkMeshPlan>,
@@ -730,8 +730,8 @@ fn smodel_drawsurf_key(
         object_id,
         reflection_probe_index,
         scene_light_index,
-        surf_type: lighting_iw4::r_smodel_surf_type(stream),
-        material_sorted_index: render_material::retail_sort_band(material_sorted_index),
+        surf_type: lighting_iw4::smodel_surf_type(stream),
+        material_sorted_index: render_material::sort_band(material_sorted_index),
         primary_sort_key: material_sort_key_row(sort_key),
         ..Default::default()
     })
@@ -1003,9 +1003,8 @@ fn materialize_world_runs(items: &mut Vec<RetainedDrawItem>, table: &mut Vec<u16
         let run_off = table.len() as u32;
         for offset in 0..run {
             table.push(
-                surf.checked_add(offset).unwrap_or_else(|| {
-                    panic!("world draw run exceeds the u16 retail surface domain")
-                }),
+                surf.checked_add(offset)
+                    .unwrap_or_else(|| panic!("world draw run exceeds the u16 surface domain")),
             );
         }
         item.kind = RetainedDrawKind::World {
@@ -1033,7 +1032,7 @@ fn packed_lighting_dword_nonzero(bytes: Option<[u8; 4]>) -> bool {
     bytes.is_some_and(|b| u32::from_le_bytes(b) != 0)
 }
 
-fn smodel_lodinfo_plus_0x29(mesh: &SmodelMeshSurfaces, lod: usize) -> u8 {
+fn smodel_lod_smc_flag(mesh: &SmodelMeshSurfaces, lod: usize) -> u8 {
     mesh.lod_smc_rows
         .and_then(|rows| rows.get(lod).copied())
         .or_else(|| (lod == 0).then_some(mesh.lod_smc).flatten())
@@ -1058,7 +1057,7 @@ fn smodel_lod_is_rigid(mesh: &SmodelMeshSurfaces, lod: usize) -> Option<bool> {
     for byte in bytes {
         raw.push((*byte)?);
     }
-    Some(lighting_iw4::r_smodel_lod_is_rigid(&raw))
+    Some(lighting_iw4::smodel_lod_is_rigid(&raw))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1232,7 +1231,7 @@ fn push_smodel_surf_bucket(
     let Some(lod_is_rigid) = lod_is_rigid else {
         return (None, false);
     };
-    let bucket = lighting_iw4::r_add_static_model_surf_to_bucket(
+    let bucket = lighting_iw4::add_static_model_surf_to_bucket(
         lod,
         smc_enable,
         lighting_nonzero,
@@ -1240,8 +1239,8 @@ fn push_smodel_surf_bucket(
         cache_index,
         lod_is_rigid,
     );
-    let payload = lighting_iw4::r_smodel_bucket_store_payload(bucket, smodel_index, cache_index);
-    let Some(push) = lighting_iw4::r_smodel_surf_bucket_push(lists, bucket, payload) else {
+    let payload = lighting_iw4::smodel_bucket_store_payload(bucket, smodel_index, cache_index);
+    let Some(push) = lighting_iw4::smodel_surf_bucket_push(lists, bucket, payload) else {
         return (None, false);
     };
     let Some(queue) = usize::try_from(bucket)
@@ -1321,7 +1320,7 @@ fn expand_smodel_destination(
         let Some(source_path) = source_path else {
             continue;
         };
-        let stream = lighting_iw4::r_smodel_dest_path(source_path, false);
+        let stream = lighting_iw4::smodel_dest_path(source_path, false);
         let pretess_range = None;
         let cache_index = matches!(
             stream,
@@ -1703,7 +1702,7 @@ fn consume_smodel_bucket_tail(
     let mut mask = 0u32;
     for (bucket, count) in lists.count.iter().enumerate() {
         if *count > 0
-            && let Some(bucket_mask) = lighting_iw4::r_smodel_bucket_mask(bucket as u8)
+            && let Some(bucket_mask) = lighting_iw4::smodel_bucket_mask(bucket as u8)
         {
             mask |= bucket_mask;
         }
@@ -1908,7 +1907,7 @@ pub(crate) fn rebuild_fx_draw_lane(
         .and_then(|scene| scene.cull.as_ref())
         .and_then(|cull| cull.sort_key_distortion);
     let lane = &mut *lane;
-    let layout = fx_lane_layout_hash(
+    let layout = lane_layout_hash(
         fx.as_deref(),
         particle_cloud.as_deref(),
         mark_mesh.as_deref(),
@@ -1962,7 +1961,7 @@ pub(crate) fn rebuild_fx_draw_lane(
             };
             let key = pack_code_mesh_draw_surf(
                 mat.sort_key,
-                render_material::retail_sort_band(material_sorted_index),
+                render_material::sort_band(material_sorted_index),
                 i as u16,
             )
             .packed;
@@ -2012,7 +2011,7 @@ pub(crate) fn rebuild_fx_draw_lane(
             };
             let key = pack_particle_cloud_draw_surf(
                 mat.sort_key,
-                render_material::retail_sort_band(material_sorted_index),
+                render_material::sort_band(material_sorted_index),
                 i as u16,
             )
             .packed;
@@ -2099,7 +2098,7 @@ pub(crate) fn rebuild_fx_draw_lane(
             };
             let key = pack_mark_mesh_draw_surf(
                 mat.sort_key,
-                render_material::retail_sort_band(material_sorted_index),
+                render_material::sort_band(material_sorted_index),
                 i as u16,
                 sub_key.lmap,
                 sub_key.primary_light,
@@ -2139,7 +2138,7 @@ pub(crate) fn rebuild_fx_draw_lane(
             };
             let key = pack_glass_mesh_draw_surf(
                 mat.sort_key,
-                render_material::retail_sort_band(material_sorted_index),
+                render_material::sort_band(material_sorted_index),
                 i as u16,
                 draw.reflection_probe_index,
             )
@@ -2161,7 +2160,7 @@ pub(crate) fn rebuild_fx_draw_lane(
                 },
                 &runtime.catalog,
             );
-            let distortion = if fx_item_uses_distortion_lane(mat.sort_key, distortion_key) {
+            let distortion = if item_uses_distortion_lane(mat.sort_key, distortion_key) {
                 Some(&mut lane.distortion)
             } else {
                 None
@@ -2278,7 +2277,7 @@ fn emit_smodel_static_lane(
             i32::from(lod),
             smc_on,
             packed_lighting_dword_nonzero(packed_lighting),
-            smodel_lodinfo_plus_0x29(mesh, lod_i),
+            smodel_lod_smc_flag(mesh, lod_i),
             cache_index,
             smodel_index,
             smodel_lod_is_rigid(mesh, lod_i),
@@ -2299,7 +2298,7 @@ fn emit_smodel_static_lane(
         } else if full
             && let Some(mask) = bucket
                 .and_then(|bucket| u8::try_from(bucket).ok())
-                .and_then(lighting_iw4::r_smodel_bucket_mask)
+                .and_then(lighting_iw4::smodel_bucket_mask)
         {
             let consumed = consume_smodel_buckets(
                 &mut list.smodel_surf_lists,
@@ -2895,7 +2894,7 @@ fn emit_smodel_sun_shadow_one(
         i32::from(lod),
         false,
         packed_lighting_dword_nonzero(packed),
-        smodel_lodinfo_plus_0x29(mesh, lod_i),
+        smodel_lod_smc_flag(mesh, lod_i),
         smodel_cache_index_u16(buckets.cache, placement.lighting_slot, lod_i),
         smodel_index,
         smodel_lod_is_rigid(mesh, lod_i),
@@ -2917,7 +2916,7 @@ fn emit_smodel_sun_shadow_one(
     } else if full
         && let Some(mask) = bucket
             .and_then(|bucket| u8::try_from(bucket).ok())
-            .and_then(lighting_iw4::r_smodel_bucket_mask)
+            .and_then(lighting_iw4::smodel_bucket_mask)
     {
         let consumed = consume_smodel_buckets(
             &mut plan.smodel_surf_lists,

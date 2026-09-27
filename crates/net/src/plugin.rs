@@ -46,7 +46,7 @@ impl Plugin for NetPlugin {
             .init_resource::<PresentedSnapshot>()
             .init_resource::<LocalPresentClient>()
             .init_resource::<crate::MasterMatchStart>()
-            .init_resource::<crate::client::presented::CgViewweaponAim>();
+            .init_resource::<crate::client::presented::ViewweaponAim>();
         {
             configure_authority_sets(app);
             app.init_resource::<AuthorityClock>()

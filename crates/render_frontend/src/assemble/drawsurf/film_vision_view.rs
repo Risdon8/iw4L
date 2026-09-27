@@ -42,7 +42,7 @@ impl FilmVisionView {
             self.result = pack_film_vision(map.unwrap_or_default());
             self.lerp.style = hud_iw4::VISION_SET_LERP_HOLD;
         }
-        let (current, _) = hud_iw4::cg_vision_sets_update(
+        let (current, _) = hud_iw4::vision_sets_update(
             now_ms,
             self.from,
             self.to,
@@ -52,7 +52,7 @@ impl FilmVisionView {
             script_forced,
         );
         let target = preset.or(map).unwrap_or_default();
-        (self.from, self.to, self.lerp) = hud_iw4::cg_vision_set_start(
+        (self.from, self.to, self.lerp) = hud_iw4::vision_set_start(
             now_ms,
             duration_ms,
             hud_iw4::VISION_SET_LERP_TO_SMOOTH,
@@ -127,7 +127,7 @@ pub fn presented_film_vision_with_glow_tweaks(
         return map_vision;
     }
     let mut vision = map_vision.unwrap_or_default();
-    let selected = lighting_iw4::r_select_glow_view_info(
+    let selected = lighting_iw4::select_glow_view_info(
         lighting_iw4::GlowViewInfo {
             enable: vision.glow_enable,
             cutoff: vision.glow_bloom_cutoff,
@@ -168,7 +168,7 @@ pub fn presented_film_vision_with_lerp(
         return None;
     };
     if slot.last_map != Some(map) {
-        let (from, to, lerp) = hud_iw4::cg_vision_set_start(
+        let (from, to, lerp) = hud_iw4::vision_set_start(
             now_ms,
             duration_ms,
             hud_iw4::VISION_SET_LERP_TO_LINEAR,
@@ -184,7 +184,7 @@ pub fn presented_film_vision_with_lerp(
             slot.result = slot.to;
         }
     }
-    let (vars, lerp) = hud_iw4::cg_vision_sets_update(
+    let (vars, lerp) = hud_iw4::vision_sets_update(
         now_ms,
         slot.from,
         slot.to,
@@ -246,7 +246,7 @@ fn update_film_vision_view(
     view: Res<crate::prepare::scene::view_parms::PreparedSceneView>,
     scene: Res<crate::prepare::scene::world::WorldScene>,
     glow: Res<GlowDvars>,
-    clock: Res<net::CgFrameClock>,
+    clock: Res<net::FrameClock>,
     mut film: ResMut<FilmVisionView>,
     presented: Res<net::PresentedSnapshot>,
     mut intro: ResMut<MatchIntroVision>,

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use asset_iw4::snd_attenuate;
+use asset_iw4::attenuate;
 use assets::{
     AssetNamespace, GamesRoot, LoadedSoundBank, NamespaceSoundIwd, NamespaceTrees, SoundCatalog,
     compose_sound_bank, gather_sound_sources, namespace_for_zone,
@@ -601,7 +601,7 @@ pub(crate) fn emitter_gain(emitter: &MapEmitter, ear_inches: [f32; 3]) -> f32 {
     if emitter.knots.is_empty() {
         return 0.0;
     }
-    let atten = snd_attenuate(&emitter.knots, dist, emitter.dist_min, emitter.dist_max);
+    let atten = attenuate(&emitter.knots, dist, emitter.dist_min, emitter.dist_max);
     if atten < 0.0 {
         0.0
     } else {
@@ -625,7 +625,7 @@ pub fn update_map_emitter_gain(
         return;
     }
     if n > 1 {
-        panic!("second listener / amp maxRadius gate not ported");
+        panic!("more than one ambient listener");
     }
     let Some(listener) = listeners.iter().next() else {
         return;

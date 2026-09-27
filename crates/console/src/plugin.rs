@@ -14,8 +14,8 @@ use bevy::{
     window::{CursorEntered, CursorGrabMode, CursorOptions, PrimaryWindow, WindowFocused},
 };
 use frame::{AppScreen, HasWorld};
-use input_iw4::{SCRIPT_KEYNUM, cl_input_cmd, cl_key_event, command_names, key_up_command_id};
-use net::{ClientActionInput, ClientSet, PresentedSnapshot, com_frame_time_msec, key_frame_msec};
+use input_iw4::{SCRIPT_KEYNUM, command_names, input_cmd, key_event, key_up_command_id};
+use net::{ClientActionInput, ClientSet, PresentedSnapshot, frame_time_msec, key_frame_msec};
 use render_frontend::prepare::scene::world::WorldScene;
 use ui::UiLayer;
 
@@ -495,7 +495,7 @@ fn publish_client_action_input(
     out.mouse_x = 0.0;
     out.mouse_y = 0.0;
     out.frame_msec = key_frame_msec(time.delta_secs());
-    out.now_msec = com_frame_time_msec(time.elapsed_secs());
+    out.now_msec = frame_time_msec(time.elapsed_secs());
     out.sensitivity = settings.sensitivity;
     if out.m_yaw == 0.0 {
         out.m_yaw = 0.022;
@@ -512,7 +512,7 @@ fn publish_client_action_input(
         for _ in motion.read() {}
         for key_num in 0..input_iw4::KEY_COUNT {
             if out.client.keys[key_num].down != 0 {
-                cl_key_event(&mut out.client, key_num, false, now, frame);
+                key_event(&mut out.client, key_num, false, now, frame);
             }
         }
         return;
@@ -526,10 +526,10 @@ fn publish_client_action_input(
         }
         out.client.keys[key_num].binding = id;
         if inputs.just_pressed(button) {
-            cl_key_event(&mut out.client, key_num, true, now, frame);
+            key_event(&mut out.client, key_num, true, now, frame);
         }
         if inputs.just_released(button) {
-            cl_key_event(&mut out.client, key_num, false, now, frame);
+            key_event(&mut out.client, key_num, false, now, frame);
         }
     }
 
@@ -546,11 +546,11 @@ fn publish_client_action_input(
     for id in down {
         let extra = now.wrapping_sub(frame as i32);
         let extra = if extra == 0 { -(frame as i32) } else { extra };
-        cl_input_cmd(&mut out.client, id, SCRIPT_KEYNUM, extra, frame);
+        input_cmd(&mut out.client, id, SCRIPT_KEYNUM, extra, frame);
     }
     for id in up {
         if let Some(up_id) = key_up_command_id(id) {
-            cl_input_cmd(&mut out.client, up_id, SCRIPT_KEYNUM, now, frame);
+            input_cmd(&mut out.client, up_id, SCRIPT_KEYNUM, now, frame);
         }
     }
     out.scripted_ids = scripted_now;
@@ -690,7 +690,7 @@ fn setup_console(
     if registry.resolve("con_toggle").is_none() {
         registry.register(
             crate::CommandSpec::new("con_toggle")
-                .usage("con_toggle — open/close the overlay (debug; not a retail name)"),
+                .usage("con_toggle — open/close the overlay (debug)"),
         );
     }
     if registry.resolve("con_feed").is_none() {

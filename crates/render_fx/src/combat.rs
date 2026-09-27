@@ -2,7 +2,7 @@ use assets::PreparedWeapons;
 use bevy::prelude::*;
 use fx::{FxMsec, FxSystemHost, PlayResult, SpawnFail, axis_from_hit_normal};
 use fx_iw4::{
-    FX_IMPACT_EXIT_SURFACE_FLAG, FX_SURF_TYPE_FLESH, fx_flesh_effect_index, fx_impact_table_row,
+    FX_IMPACT_EXIT_SURFACE_FLAG, FX_SURF_TYPE_FLESH, flesh_effect_index, impact_table_row,
 };
 use net::CEntitySlots;
 use weapon_iw4::SURFACE_TYPE_NAMES;
@@ -138,7 +138,7 @@ pub fn explosion_fx_names<'a>(
 ) -> ExplosionFxNames<'a> {
     let row = impact_type.and_then(|t| {
         table.map_or_else(
-            || fx_impact_table_row(t, false),
+            || impact_table_row(t, false),
             |table| table.impact_row(t, false),
         )
     });
@@ -300,7 +300,7 @@ pub fn play_impact_table_cell(
     let exit = surface_flags & FX_IMPACT_EXIT_SURFACE_FLAG != 0;
     let table = impact_fx.and_then(|fx| fx.0.as_ref());
     let Some(row) = table.map_or_else(
-        || fx_impact_table_row(impact_type, exit),
+        || impact_table_row(impact_type, exit),
         |table| table.impact_row(impact_type, exit),
     ) else {
         cursor.impact_miss_table = cursor.impact_miss_table.saturating_add(1);
@@ -310,7 +310,7 @@ pub fn play_impact_table_cell(
     };
     combat.last_row = Some(row as i64);
     let surf = surf_type as usize;
-    let flesh_slot = (surf == FX_SURF_TYPE_FLESH).then(|| fx_flesh_effect_index(flesh_flags));
+    let flesh_slot = (surf == FX_SURF_TYPE_FLESH).then(|| flesh_effect_index(flesh_flags));
     combat.last_impact_cell_empty = table.and_then(|t| {
         let entry = t.entries.get(row)?;
         if let Some(slot) = flesh_slot {

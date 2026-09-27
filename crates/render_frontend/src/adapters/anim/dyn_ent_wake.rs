@@ -252,7 +252,7 @@ pub(crate) fn apply_health(health: &mut i32, damage: i32) -> bool {
 }
 
 fn is_destroyable(ty: assets::DynEntType) -> bool {
-    assets::retail_dyn_ent_props(ty).is_some_and(|props| props.destroyable)
+    assets::dyn_ent_props(ty).is_some_and(|props| props.destroyable)
 }
 
 pub(crate) fn explosion_impulse(
@@ -327,7 +327,7 @@ fn can_wake(inst: &WorldDynEntInstance) -> Option<&assets::OwnedPhysPreset> {
     if inst.dead {
         return None;
     }
-    let props = assets::retail_dyn_ent_props(inst.ty)?;
+    let props = assets::dyn_ent_props(inst.ty)?;
     if !props.use_physics {
         return None;
     }
