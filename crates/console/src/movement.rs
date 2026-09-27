@@ -35,8 +35,12 @@ pub(crate) fn register_movement_commands(registry: &mut ConsoleRegistry) {
     if registry.resolve("slide").is_none() {
         registry.register(
             crate::CommandSpec::new("slide")
-                .usage("slide [on|off] — crouch/power slide (mod)")
-                .arg(crate::StaticCompleter::new(["on", "off"])),
+                .usage(
+                    "slide [on|off] | time|cooldown|speed|end|friction|jump <n> — crouch/power slide (mod)",
+                )
+                .arg(crate::StaticCompleter::new([
+                    "on", "off", "time", "cooldown", "speed", "end", "friction", "jump",
+                ])),
         );
     }
 }
@@ -180,8 +184,10 @@ fn parse_double_jump(
     Ok(Some(next))
 }
 
-/// The `slide` shorthand: bare is a status query, `on`/`off` toggles it.
+/// The `slide` shorthand: bare is a status query, `on`/`off` toggles it, and
+/// the named numbers tune it.
 fn parse_slide(args: &[String], base: MovementTuning) -> Result<Option<MovementTuning>, String> {
+    const SLIDE_USAGE: &str = "slide [on|off] | slide time|cooldown|speed|end|friction|jump <n>";
     let mut next = base;
     match args
         .iter()
@@ -191,9 +197,33 @@ fn parse_slide(args: &[String], base: MovementTuning) -> Result<Option<MovementT
     {
         [] => return Ok(None),
         [value] => next.slide = parse_bool("slide", value)?,
-        _ => return Err("usage: slide [on|off]".into()),
+        ["time", value] => next.slide_time_ms = parse_millis("slide time", value)?,
+        ["cooldown", value] => next.slide_cooldown_ms = parse_millis("slide cooldown", value)?,
+        ["speed", value] => next.slide_min_speed = parse_non_negative("slide speed", value)?,
+        ["end", value] => next.slide_end_speed = parse_non_negative("slide end", value)?,
+        ["friction", value] => next.slide_friction = parse_non_negative("slide friction", value)?,
+        ["jump", value] => next.slide_jump_up = parse_non_negative("slide jump", value)?,
+        _ => return Err(SLIDE_USAGE.into()),
     }
     Ok(Some(next))
+}
+
+fn parse_non_negative(name: &str, raw: &str) -> Result<f32, String> {
+    match raw.parse::<f32>() {
+        Ok(value) if value.is_finite() && value >= 0.0 => Ok(value),
+        _ => Err(format!(
+            "{name}: expected a non-negative number, got `{raw}`"
+        )),
+    }
+}
+
+fn parse_millis(name: &str, raw: &str) -> Result<i32, String> {
+    match raw.parse::<i32>() {
+        Ok(value) if value >= 0 => Ok(value),
+        _ => Err(format!(
+            "{name}: expected a non-negative whole number of ms, got `{raw}`"
+        )),
+    }
 }
 
 fn parse_bool(name: &str, raw: &str) -> Result<bool, String> {
@@ -288,7 +318,16 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(!off.slide);
+        let tuned = parse_slide(&args(&["time", "1500"]), MovementTuning::default())
+            .unwrap()
+            .unwrap();
+        assert_eq!(tuned.slide_time_ms, 1500);
+        let friction = parse_slide(&args(&["friction", "0.2"]), MovementTuning::default())
+            .unwrap()
+            .unwrap();
+        assert_eq!(friction.slide_friction, 0.2);
         assert!(parse_slide(&args(&["maybe"]), MovementTuning::default()).is_err());
+        assert!(parse_slide(&args(&["friction", "-1"]), MovementTuning::default()).is_err());
         assert!(parse_slide(&args(&["on", "off"]), MovementTuning::default()).is_err());
     }
 }

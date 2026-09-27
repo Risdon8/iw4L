@@ -925,7 +925,7 @@ fn slide_preserves_speed() {
         &flat_floor(),
         standing_with_speed(320.0),
         MovementTuning::fluid(),
-        50,
+        90,
         |tick, _| Intent {
             crouch: tick < 5,
             ..Intent::default()
@@ -941,6 +941,26 @@ fn slide_preserves_speed() {
         end.pm_flags & movement_iw4::PMF_SLIDING,
         0,
         "the slide should have ended"
+    );
+}
+
+/// A slide should actually carry the player a distance.
+#[test]
+fn slide_carries_far() {
+    let (end, _) = run(
+        &flat_floor(),
+        standing_with_speed(320.0),
+        MovementTuning::fluid(),
+        90,
+        |tick, _| Intent {
+            crouch: tick < 5,
+            ..Intent::default()
+        },
+    );
+    assert!(
+        end.origin[0] > 250.0,
+        "the slide should carry the player: {:?}",
+        end.origin
     );
 }
 

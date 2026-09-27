@@ -152,6 +152,9 @@ fn slide_move<C: CollisionBackend>(
         }
     }
 
+    // Gravity along the ground: clipped away on the flat, downhill it becomes
+    // speed, which is what makes a slide carry.
+    ps.velocity[2] -= (ps.gravity as f32) * pml.frametime;
     clip_to_ground_plane(&mut ps.velocity, &pml.ground_trace[1..4]);
     pm_step_slide_move(
         ps,

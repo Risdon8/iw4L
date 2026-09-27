@@ -21,13 +21,13 @@ pub const WALLRUN_DEFAULT_JUMP_OUT: f32 = 260.0;
 /// The air jump launches a little higher than a ground jump, so it is obvious.
 pub const DOUBLE_JUMP_DEFAULT_HEIGHT: f32 = 50.0;
 
-/// A crouch slide holds for about 0.7 s; it needs a running start and ends when
-/// it slows down.
-pub const SLIDE_DEFAULT_TIME_MS: i32 = 700;
-pub const SLIDE_DEFAULT_COOLDOWN_MS: i32 = 300;
-pub const SLIDE_DEFAULT_MIN_SPEED: f32 = 220.0;
-pub const SLIDE_DEFAULT_END_SPEED: f32 = 140.0;
-pub const SLIDE_DEFAULT_FRICTION: f32 = 1.2;
+/// A crouch slide is a long glide: it holds about 1.2 s, needs a running start,
+/// and barely sheds speed on the flat (downhill, gravity adds more).
+pub const SLIDE_DEFAULT_TIME_MS: i32 = 1200;
+pub const SLIDE_DEFAULT_COOLDOWN_MS: i32 = 250;
+pub const SLIDE_DEFAULT_MIN_SPEED: f32 = 200.0;
+pub const SLIDE_DEFAULT_END_SPEED: f32 = 90.0;
+pub const SLIDE_DEFAULT_FRICTION: f32 = 0.15;
 pub const SLIDE_DEFAULT_JUMP_UP: f32 = 250.0;
 
 /// How hard a slide can be steered. Small; a slide mostly holds its line.

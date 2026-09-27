@@ -28,11 +28,17 @@ applied when a match starts, so a real map needs no layout.
 ```
 movement                 show the profile
 movement fluid|retail    all features on, or stock MW2
-movement surf|wallrun|doublejump on|off
+movement surf|wallrun|doublejump|slide on|off
 doublejump on|off        shorthand for the air jump
+slide on|off             shorthand for the crouch slide
 surf accel <n> | cap <n>      tune the air physics
 wallrun time|cooldown|speed|up|out <n>
 ```
+
+**Crouch slide**: tap crouch at a run (>220 u/s) to slide — it keeps your
+momentum with little friction for up to 0.7 s, steers a little, and jumping out
+of it launches while keeping the horizontal speed. It ends when it slows down;
+holding crouch does not chain slides.
 
 **Wall-running is deliberate**: in the air next to a wall, press jump to
 grip it (hold your height), then press jump again to launch off. Merely hopping
