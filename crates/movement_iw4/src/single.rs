@@ -196,6 +196,9 @@ pub fn pm_move<C: CollisionBackend, L: MantleXAnimLength, R: MantleRootDelta>(
                 collision,
             );
         } else if pml.walking == 0 {
+            if context.walk.slide.is_some() {
+                crate::pm_slide_air_intent(ps, cmd, context.old_buttons);
+            }
             pm_air_move(ps, &pml, cmd, context.air, bounds, collision);
         } else {
             pm_walk_move(ps, &mut pml, cmd, context.walk, bounds, collision);
@@ -208,15 +211,18 @@ pub fn pm_move<C: CollisionBackend, L: MantleXAnimLength, R: MantleRootDelta>(
         pm_ladder_footsteps(ps, pml.msec, cmd.server_time);
     } else {
         let old_bob = ps.bob_cycle as u8;
-        pm_footsteps_bob_cycle(
-            ps,
-            pml.msec,
-            cmd.forwardmove,
-            cmd.rightmove,
-            pml.almost_ground_plane != 0,
-            cmd.server_time,
-            context.walk.cmd_scale,
-        );
+        // Mod: a slide holds the viewmodel steady instead of bobbing at speed.
+        if (ps.pm_flags & crate::PMF_SLIDING) == 0 {
+            pm_footsteps_bob_cycle(
+                ps,
+                pml.msec,
+                cmd.forwardmove,
+                cmd.rightmove,
+                pml.almost_ground_plane != 0,
+                cmd.server_time,
+                context.walk.cmd_scale,
+            );
+        }
         pm_footstep_event(
             ps,
             old_bob,

@@ -964,6 +964,35 @@ fn slide_carries_far() {
     );
 }
 
+/// A crouch press in the air queues a slide for the landing, so jumping leads
+/// straight into a slide.
+#[test]
+fn crouch_in_the_air_slides_on_landing() {
+    let mut slid = false;
+    let mut ps = spawn_player_state([0.0, 0.0, 40.0], [0.0, 0.0, 0.0]);
+    ps.command_time = 1_000;
+    ps.jump_time = -100_000;
+    ps.ground_entity_num = trace_iw4::ENTITYNUM_NONE as i32;
+    ps.velocity = [320.0, 0.0, 0.0];
+    let (end, _) = run(
+        &flat_floor(),
+        ps,
+        MovementTuning::fluid(),
+        140,
+        |tick, ps| {
+            if (ps.pm_flags & movement_iw4::PMF_SLIDING) != 0 {
+                slid = true;
+            }
+            Intent {
+                crouch: tick == 5,
+                ..Intent::default()
+            }
+        },
+    );
+    assert!(slid, "a crouch press in the air should slide on landing");
+    assert_eq!(end.pm_flags & movement_iw4::PMF_SLIDING, 0);
+}
+
 /// Crouching slowly does not slide; it needs a running start.
 #[test]
 fn crouch_without_speed_does_not_slide() {

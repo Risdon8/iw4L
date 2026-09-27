@@ -10,6 +10,8 @@ use crate::{CollisionBackend, MoveBounds, Pml, pm_step_slide_move};
 /// Set while sliding. Free `pm_flags` bits (`pm_drop_timers` clears `0x2180`).
 pub const PMF_SLIDING: u32 = 0x0200_0000;
 pub const PMF_SLIDE_COOLDOWN: u32 = 0x0400_0000;
+/// A crouch press made in the air, buffered until the player lands.
+pub const PMF_SLIDE_QUEUED: u32 = 0x0800_0000;
 
 const BUTTON_CROUCH: u32 = 0x200;
 const BUTTON_JUMP: u32 = 0x400;
@@ -57,6 +59,14 @@ pub fn pm_crouch_slide<C: CollisionBackend>(
     }
 }
 
+/// While airborne, a crouch press queues a slide for the landing, so a jump can
+/// lead straight into one.
+pub fn pm_slide_air_intent(ps: &mut PlayerState, cmd: &UserCmd, old_buttons: u32) {
+    if (cmd.buttons & BUTTON_CROUCH) != 0 && (old_buttons & BUTTON_CROUCH) == 0 {
+        ps.pm_flags |= PMF_SLIDE_QUEUED;
+    }
+}
+
 fn try_start<C: CollisionBackend>(
     ps: &mut PlayerState,
     pml: &Pml,
@@ -65,11 +75,14 @@ fn try_start<C: CollisionBackend>(
     bounds: MoveBounds,
     collision: &C,
 ) -> bool {
-    if (ps.pm_flags & PMF_SLIDE_COOLDOWN) != 0 {
+    let queued = (ps.pm_flags & PMF_SLIDE_QUEUED) != 0;
+    let pressed = (cmd.buttons & BUTTON_CROUCH) != 0 && (context.old_buttons & BUTTON_CROUCH) == 0;
+    if !queued && !pressed {
         return false;
     }
-    // A fresh crouch tap starts it, so holding crouch does not chain slides.
-    if (cmd.buttons & BUTTON_CROUCH) == 0 || (context.old_buttons & BUTTON_CROUCH) != 0 {
+    // Consume the buffered press either way, so it cannot fire later by surprise.
+    ps.pm_flags &= !PMF_SLIDE_QUEUED;
+    if (ps.pm_flags & PMF_SLIDE_COOLDOWN) != 0 {
         return false;
     }
     if horizontal_speed(ps) < context.min_speed {
