@@ -3,10 +3,11 @@ use super::iw4_natives::{precache, string};
 use super::natives_math::{arg, distance_sq, float, int, kind, new_array, optional, vector};
 use super::runtime::raise;
 use super::*;
-use crate::bullet_collision::{MASK_PLAYER_SOLID, MASK_SHOT, PLAYER_MAXS, PLAYER_MINS};
+use crate::bullet_collision::{
+    MASK_PLAYER_SOLID, MASK_SHOT, PLAYER_MAXS, PLAYER_MINS, TraceOutcome,
+};
 use bevy_ecs::prelude::World;
 
-const GRAVITY: f32 = 800.0;
 const ZERO: [f32; 3] = [0.0; 3];
 
 fn runtime(world: &mut World) -> bevy_ecs::world::Mut<'_, Runtime> {
@@ -80,7 +81,7 @@ fn origin_of(world: &mut World, value: &Value) -> Result<[f32; 3], String> {
     }
 }
 
-fn keyed_array(world: &mut World, pairs: Vec<(&str, Value)>) -> Result<Value, String> {
+pub(super) fn keyed_array(world: &mut World, pairs: Vec<(&str, Value)>) -> Result<Value, String> {
     let mut runtime = runtime(world);
     let id = runtime.next_object;
     runtime.next_object = id.checked_add(1).ok_or("object identifier exhausted")?;
@@ -94,7 +95,7 @@ fn keyed_array(world: &mut World, pairs: Vec<(&str, Value)>) -> Result<Value, St
     Ok(Value::Array(id))
 }
 
-fn trace(
+pub(super) fn trace(
     world: &mut World,
     start: [f32; 3],
     end: [f32; 3],
@@ -103,6 +104,174 @@ fn trace(
     mask: u32,
 ) -> trace_iw4::Trace {
     crate::frame::FrameWorld::from_world(world).trace_world(start, end, mins, maxs, mask)
+}
+
+const SIGHT_CONE_MASK: u32 = 0x0801;
+const DAMAGE_CONE_MASK: u32 = 0x0080_2011;
+
+fn shot_mask(args: &[Value]) -> Result<u32, String> {
+    Ok(if int(args, 2)? != 0 {
+        MASK_SHOT
+    } else {
+        MASK_SHOT & !crate::bullet_collision::CONTENTS_BODY
+    })
+}
+
+#[derive(Clone, Copy, Default)]
+pub(super) struct TraceIgnore {
+    pub client: Option<crate::ClientId>,
+    pub other_client: Option<crate::ClientId>,
+    pub model: Option<crate::ScriptModelId>,
+}
+
+impl TraceIgnore {
+    fn with(mut self, other: TraceIgnore) -> Self {
+        self.other_client = other.client;
+        self.model = self.model.or(other.model);
+        self
+    }
+}
+
+fn trace_ignore(world: &World, value: Option<&Value>) -> TraceIgnore {
+    let runtime = world.resource::<Runtime>();
+    let Some(value) = value else {
+        return TraceIgnore::default();
+    };
+    if let Some(client) = runtime.player_client_of(value) {
+        return TraceIgnore {
+            client: Some(crate::ClientId(client)),
+            ..Default::default()
+        };
+    }
+    TraceIgnore {
+        model: runtime.entity(value).and_then(|(_, e)| e.presence),
+        ..Default::default()
+    }
+}
+
+pub(super) fn entity_trace(
+    world: &mut World,
+    start: [f32; 3],
+    end: [f32; 3],
+    mask: u32,
+    ignore: TraceIgnore,
+) -> TraceOutcome {
+    crate::frame::FrameWorld::from_world(world).sensor_trace(
+        crate::bullet_collision::BulletTraceQuery {
+            start,
+            end,
+            mask,
+            ignore: ignore.client,
+            ignore_hit: ignore.other_client,
+            ignore_model: ignore.model,
+        },
+    )
+}
+
+fn surface_name(collider: crate::bullet_collision::ColliderId) -> &'static str {
+    use crate::bullet_collision::ColliderId;
+    let flags = match collider {
+        ColliderId::World { surface_flags, .. }
+        | ColliderId::EntityDObjBone { surface_flags, .. }
+        | ColliderId::EntityLinkedBrush { surface_flags, .. } => surface_flags,
+        ColliderId::Player { .. } => return "flesh",
+    };
+    weapon_iw4::SURFACE_TYPE_NAMES
+        .get(trace_iw4::surface_type_from_flags(flags) as usize)
+        .copied()
+        .unwrap_or("default")
+}
+
+pub(super) fn collider_entity(
+    world: &World,
+    collider: crate::bullet_collision::ColliderId,
+) -> Value {
+    use crate::bullet_collision::ColliderId;
+    let runtime = world.resource::<Runtime>();
+    let found = match collider {
+        ColliderId::World { .. } => None,
+        ColliderId::Player { client, .. } => runtime.players.get(&client.0).map(|s| s.object),
+        ColliderId::EntityDObjBone { owner, .. } | ColliderId::EntityLinkedBrush { owner, .. } => {
+            let model = owner.script_model();
+            runtime
+                .entities
+                .iter()
+                .find(|(_, e)| e.presence.is_some() && e.presence == model)
+                .map(|(id, _)| *id)
+        }
+    };
+    found.map_or(Value::Undefined, Value::Object)
+}
+
+fn cone_trace(
+    world: &mut World,
+    receiver: &Value,
+    args: &[Value],
+    mask: u32,
+) -> Result<Value, String> {
+    let origin = vector(args, 0)?;
+    let id = entity_id(world, receiver)?;
+    let ignore = trace_ignore(world, Some(receiver)).with(trace_ignore(world, args.get(1)));
+    let target = vector_field(world, id, "origin");
+    let player = runtime(world).player_client(id);
+    let (center, right, up) = match player {
+        Some(client) => {
+            let eye_height = crate::frame::FrameWorld::from_world(world)
+                .player(crate::ClientId(client))
+                .map_or(0.0, |ps| ps.view_height_current);
+            let forward = normalize([origin[0] - target[0], origin[1] - target[1], 0.0]);
+            (
+                add(target, [0.0, 0.0, eye_height * 0.5]),
+                [-forward[1] * 15.0, forward[0] * 15.0, 0.0],
+                [0.0, 0.0, eye_height * 0.5],
+            )
+        }
+        None => {
+            let (mins, maxs) = super::triggers::entity_bounds(world, id);
+            let center = add(target, scale(add(mins, maxs), 0.5));
+            let corner = scale(sub(maxs, mins), 0.5);
+            let v = normalize(sub(origin, center));
+            let side = normalize([-v[1], v[0], 0.0]);
+            let up = cross(v, side);
+            let right_radius = (corner[0] * side[0]).abs() + (corner[1] * side[1]).abs();
+            let up_radius: f32 = (0..3).map(|i| (corner[i] * up[i]).abs()).sum();
+            (center, scale(side, right_radius), scale(up, up_radius))
+        }
+    };
+    let points = [
+        center,
+        add(add(center, right), up),
+        add(sub(center, right), up),
+        sub(add(center, right), up),
+        sub(sub(center, right), up),
+    ];
+    let hits = points
+        .iter()
+        .filter(|point| {
+            matches!(
+                entity_trace(world, origin, **point, mask, ignore),
+                TraceOutcome::Miss { .. }
+            )
+        })
+        .count();
+    Ok(Value::Float(match (player, hits) {
+        (_, 0) => 0.0,
+        (Some(_), hits) => (hits as f32 / 3.0).min(1.0),
+        (None, _) => 1.0,
+    }))
+}
+
+fn normalize(v: [f32; 3]) -> [f32; 3] {
+    let len = dot(v, v).sqrt();
+    if len > 0.0 { scale(v, 1.0 / len) } else { ZERO }
+}
+
+fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 
 fn trace_passed(world: &mut World, start: [f32; 3], end: [f32; 3], mask: u32) -> bool {
@@ -191,7 +360,7 @@ fn start_motion(
     })
 }
 
-fn move_accel_check(args: &[Value], time: f32) -> Result<(), String> {
+fn ramp(args: &[Value], time: f32, from: [f32; 3], to: [f32; 3]) -> Result<MotionPath, String> {
     let accel = optional(args, 2, float)?.unwrap_or(0.0);
     let decel = optional(args, 3, float)?.unwrap_or(0.0);
     if accel < 0.0 || decel < 0.0 {
@@ -200,7 +369,12 @@ fn move_accel_check(args: &[Value], time: f32) -> Result<(), String> {
     if accel + decel > time {
         return Err("accel time plus decel time is greater than total time".into());
     }
-    Ok(())
+    Ok(MotionPath::Linear {
+        from,
+        to,
+        accel,
+        decel,
+    })
 }
 
 fn rotate_by(
@@ -211,7 +385,6 @@ fn rotate_by(
 ) -> Result<Value, String> {
     let delta = float(args, 0)?;
     let time = float(args, 1)?;
-    move_accel_check(args, time)?;
     let duration = seconds_ms(time)?;
     let id = entity_id(world, receiver)?;
     let from = vector_field(world, id, "angles");
@@ -221,7 +394,7 @@ fn rotate_by(
         world,
         receiver,
         "angles",
-        MotionPath::Linear { from, to },
+        ramp(args, time, from, to)?,
         duration,
         "rotatedone",
     )
@@ -254,20 +427,9 @@ pub(super) fn advance_motions(world: &mut World, now: i64) {
         let motions = std::mem::take(&mut runtime.entities.get_mut(&id).unwrap().motion);
         let mut remaining = Vec::new();
         for motion in motions {
-            let elapsed = (now - motion.start_ms).clamp(0, motion.duration_ms);
-            let value = match motion.path {
-                MotionPath::Linear { from, to } => {
-                    lerp(from, to, elapsed as f32 / motion.duration_ms as f32)
-                }
-                MotionPath::Ballistic { from, velocity } => {
-                    let s = elapsed as f32 / 1000.0;
-                    let mut p = add(from, scale(velocity, s));
-                    p[2] -= 0.5 * GRAVITY * s * s;
-                    p
-                }
-            };
+            let (value, _) = motion.sample(now);
             runtime.set_object_field(id, motion.field, Value::Vector(value));
-            if elapsed >= motion.duration_ms {
+            if now - motion.start_ms >= motion.duration_ms {
                 finished.push((id, motion.done));
             } else {
                 remaining.push(motion);
@@ -470,6 +632,15 @@ fn match_data_key(prefix: &str, keys: &[Value]) -> Result<String, String> {
 fn set_match_data(world: &mut World, prefix: &str, args: &[Value]) -> Result<Value, String> {
     let (value, keys) = args.split_last().ok_or("wrong number of parameters")?;
     let key = match_data_key(prefix, keys)?;
+    if !matches!(
+        value,
+        Value::Int(_) | Value::Float(_) | Value::String(_) | Value::LocalizedString(_)
+    ) {
+        return Err(format!(
+            "match data takes a number or string, not {}",
+            kind(value)
+        ));
+    }
     runtime(world).engine.match_data.insert(key, value.clone());
     Ok(Value::Undefined)
 }
@@ -680,6 +851,10 @@ pub(super) fn register(registry: &mut NativeRegistry) {
             return Ok(Value::Undefined);
         }
         let id = entity_id(world, receiver)?;
+        if let Some(client) = runtime(world).player_client(id) {
+            crate::frame::FrameWorld::from_world(world).set_origin(crate::ClientId(client), origin);
+            return Ok(Value::Undefined);
+        }
         let mut runtime = runtime(world);
         runtime
             .entities
@@ -704,19 +879,54 @@ pub(super) fn register(registry: &mut NativeRegistry) {
             origin[i] + axis[0][i] * offset[0] + axis[1][i] * offset[1] + axis[2][i] * offset[2]
         })))
     });
-    for name in ["geteye", "getpointinbounds"] {
-        registry.register(Method, name, |world, receiver, _| {
-            let id = entity_id(world, receiver)?;
-            Ok(Value::Vector(vector_field(world, id, "origin")))
-        });
-    }
-    registry.register(Method, "gettagangles", |world, receiver, _| {
+    registry.register(Method, "geteye", |world, receiver, _| {
         let id = entity_id(world, receiver)?;
-        Ok(Value::Vector(vector_field(world, id, "angles")))
+        let origin = vector_field(world, id, "origin");
+        let height = match runtime(world).player_client(id) {
+            Some(client) => crate::frame::FrameWorld::from_world(world)
+                .player(crate::ClientId(client))
+                .map_or(0.0, |ps| ps.view_height_current),
+            None => 0.0,
+        };
+        Ok(Value::Vector(add(origin, [0.0, 0.0, height])))
+    });
+    registry.register(Method, "getpointinbounds", |world, receiver, args| {
+        let id = entity_id(world, receiver)?;
+        let origin = vector_field(world, id, "origin");
+        let scale = [float(args, 0)?, float(args, 1)?, float(args, 2)?];
+        let (mins, maxs) = super::triggers::entity_bounds(world, id);
+        Ok(Value::Vector(std::array::from_fn(|i| {
+            origin[i] + (maxs[i] + mins[i]) * 0.5 + (maxs[i] - mins[i]) * 0.5 * scale[i]
+        })))
+    });
+    registry.register(Method, "gettagangles", |world, receiver, args| {
+        let id = entity_id(world, receiver)?;
+        let tag = string(args, 0)?;
+        match super::presence::tag_world(world, id, &tag) {
+            Some((_, axis)) => Ok(Value::Vector(math_iw4::axis_to_angles(axis))),
+            None if tag.eq_ignore_ascii_case("tag_origin") => {
+                Ok(Value::Vector(vector_field(world, id, "angles")))
+            }
+            None => Err(format!("tag '{tag}' does not exist on entity")),
+        }
     });
     registry.register(Method, "getvelocity", |world, receiver, _| {
-        entity_id(world, receiver)?;
-        Ok(Value::Vector(ZERO))
+        let id = entity_id(world, receiver)?;
+        if let Some(client) = runtime(world).player_client(id) {
+            return Ok(Value::Vector(
+                crate::frame::FrameWorld::from_world(world)
+                    .player(crate::ClientId(client))
+                    .map_or(ZERO, |ps| ps.velocity),
+            ));
+        }
+        let now = now_ms(world);
+        Ok(Value::Vector(
+            runtime(world).entities[&id]
+                .motion
+                .iter()
+                .find(|m| m.field == "origin")
+                .map_or(ZERO, |m| m.sample(now).1),
+        ))
     });
     registry.register(Method, "getentitynumber", |world, receiver, _| {
         let id = entity_id(world, receiver)?;
@@ -808,6 +1018,26 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         ))
     });
     registry.register(Method, "linkto", |world, receiver, args| {
+        if let Some(client) = runtime(world).player_client_of(receiver) {
+            super::natives_player::link_to(
+                world,
+                receiver,
+                &args[..args.len().min(2)],
+                super::players::LinkView::Free,
+            )?;
+            if let Some(origin) = optional(args, 2, vector)? {
+                let angles = optional(args, 3, vector)?.unwrap_or(ZERO);
+                if let Some(link) = runtime(world)
+                    .players
+                    .get_mut(&client)
+                    .and_then(|slot| slot.link.as_mut())
+                {
+                    link.origin = origin;
+                    link.angles = angles;
+                }
+            }
+            return Ok(Value::Undefined);
+        }
         let parent = entity_id(world, arg(args, 0)?)?;
         let id = entity_id(world, receiver)?;
         if parent == id {
@@ -846,20 +1076,13 @@ pub(super) fn register(registry: &mut NativeRegistry) {
     });
     registry.register(Method, "unlink", |world, receiver, _| {
         if let Some(client) = runtime(world).player_client_of(receiver) {
-            let mut frame = crate::frame::FrameWorld::from_world(world);
-            if frame.client_meta(crate::ClientId(client)).is_some() {
-                frame
-                    .client_meta_mut(crate::ClientId(client))
-                    .controls
-                    .linked = false;
-            }
+            super::players::unlink_player(world, client);
         }
         with_entity(world, receiver, |e| e.linked_to = None)
     });
     registry.register(Method, "moveto", |world, receiver, args| {
         let to = vector(args, 0)?;
         let time = float(args, 1)?;
-        move_accel_check(args, time)?;
         let duration = seconds_ms(time)?;
         let id = entity_id(world, receiver)?;
         let from = vector_field(world, id, "origin");
@@ -867,7 +1090,7 @@ pub(super) fn register(registry: &mut NativeRegistry) {
             world,
             receiver,
             "origin",
-            MotionPath::Linear { from, to },
+            ramp(args, time, from, to)?,
             duration,
             "movedone",
         )
@@ -889,7 +1112,6 @@ pub(super) fn register(registry: &mut NativeRegistry) {
     registry.register(Method, "rotateto", |world, receiver, args| {
         let to = vector(args, 0)?;
         let time = float(args, 1)?;
-        move_accel_check(args, time)?;
         let duration = seconds_ms(time)?;
         let id = entity_id(world, receiver)?;
         let from = vector_field(world, id, "angles");
@@ -908,7 +1130,7 @@ pub(super) fn register(registry: &mut NativeRegistry) {
             world,
             receiver,
             "angles",
-            MotionPath::Linear { from, to },
+            ramp(args, time, from, to)?,
             duration,
             "rotatedone",
         )
@@ -925,7 +1147,6 @@ pub(super) fn register(registry: &mut NativeRegistry) {
     registry.register(Method, "rotatevelocity", |world, receiver, args| {
         let velocity = vector(args, 0)?;
         let time = float(args, 1)?;
-        move_accel_check(args, time)?;
         let duration = seconds_ms(time)?;
         let id = entity_id(world, receiver)?;
         let from = vector_field(world, id, "angles");
@@ -934,7 +1155,7 @@ pub(super) fn register(registry: &mut NativeRegistry) {
             world,
             receiver,
             "angles",
-            MotionPath::Linear { from, to },
+            ramp(args, time, from, to)?,
             duration,
             "rotatedone",
         )
@@ -1206,31 +1427,48 @@ pub(super) fn register(registry: &mut NativeRegistry) {
 
     registry.register(Function, "bullettrace", |world, _, args| {
         let (start, end) = (vector(args, 0)?, vector(args, 1)?);
-        let t = trace(world, start, end, ZERO, ZERO, MASK_SHOT);
-        let hit = t.fraction < 1.0;
-        let surface = if hit {
-            weapon_iw4::SURFACE_TYPE_NAMES
-                .get(trace_iw4::surface_type_from_flags(t.surface_flags) as usize)
-                .copied()
-                .unwrap_or("default")
-        } else {
-            "none"
+        let mask = shot_mask(args)?;
+        let ignore = trace_ignore(world, args.get(3));
+        let outcome = entity_trace(world, start, end, mask, ignore);
+        let (fraction, normal, collider) = match outcome {
+            TraceOutcome::Hit {
+                fraction,
+                normal,
+                collider,
+                ..
+            } => (fraction, normal, Some(collider)),
+            TraceOutcome::StartSolid { collider, .. } => (0.0, ZERO, collider),
+            _ => (1.0, ZERO, None),
         };
+        let (normal, surface) = match collider {
+            Some(collider) if fraction < 1.0 => (normal, surface_name(collider)),
+            _ => {
+                let d = sub(end, start);
+                let len = dot(d, d).sqrt();
+                (if len > 0.0 { scale(d, 1.0 / len) } else { ZERO }, "none")
+            }
+        };
+        let entity = collider.map_or(Value::Undefined, |c| collider_entity(world, c));
         keyed_array(
             world,
             vec![
-                ("fraction", Value::Float(t.fraction)),
-                ("position", Value::Vector(lerp(start, end, t.fraction))),
-                ("normal", Value::Vector(if hit { t.normal } else { ZERO })),
+                ("fraction", Value::Float(fraction)),
+                ("position", Value::Vector(lerp(start, end, fraction))),
+                ("entity", entity),
+                ("normal", Value::Vector(normal)),
                 ("surfacetype", Value::string(surface)),
             ],
         )
     });
     registry.register(Function, "bullettracepassed", |world, _, args| {
         let (start, end) = (vector(args, 0)?, vector(args, 1)?);
-        Ok(Value::Int(
-            trace_passed(world, start, end, MASK_SHOT).into(),
-        ))
+        let mask = shot_mask(args)?;
+        let ignore = trace_ignore(world, args.get(3));
+        let passed = matches!(
+            entity_trace(world, start, end, mask, ignore),
+            TraceOutcome::Miss { .. }
+        );
+        Ok(Value::Int(passed.into()))
     });
     registry.register(Function, "physicstrace", |world, _, args| {
         let (start, end) = (vector(args, 0)?, vector(args, 1)?);
@@ -1267,21 +1505,28 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         );
         Ok(Value::Int((t.startsolid == 0 && t.allsolid == 0).into()))
     });
-    registry.register(Function, "positionwouldtelefrag", |_, _, args| {
-        vector(args, 0)?;
-        Ok(Value::Int(0))
-    });
-    registry.register(Method, "sightconetrace", |world, _, args| {
+    registry.register(Function, "positionwouldtelefrag", |world, _, args| {
         let origin = vector(args, 0)?;
-        let target = origin_of(world, arg(args, 1)?)?;
-        let passed = trace_passed(world, origin, target, MASK_SHOT);
-        Ok(Value::Float(if passed { 1.0 } else { 0.0 }))
+        let frame = crate::frame::FrameWorld::from_world(world);
+        let blocked = frame.client_ids_sorted().into_iter().any(|id| {
+            frame.player(id).is_some_and(|ps| {
+                ps.pm_type < playerstate_iw4::PM_TYPE_SPECTATOR
+                    && frame
+                        .client_meta(id)
+                        .is_some_and(|m| m.lifecycle == crate::ClientLifecycle::Alive)
+                    && (0..3).all(|i| {
+                        origin[i] + PLAYER_MINS[i] <= ps.origin[i] + PLAYER_MAXS[i]
+                            && origin[i] + PLAYER_MAXS[i] >= ps.origin[i] + PLAYER_MINS[i]
+                    })
+            })
+        });
+        Ok(Value::Int(blocked.into()))
+    });
+    registry.register(Method, "sightconetrace", |world, receiver, args| {
+        cone_trace(world, receiver, args, SIGHT_CONE_MASK)
     });
     registry.register(Method, "damageconetrace", |world, receiver, args| {
-        let origin = vector(args, 0)?;
-        let target = origin_of(world, receiver)?;
-        let passed = trace_passed(world, origin, target, MASK_SHOT);
-        Ok(Value::Float(if passed { 1.0 } else { 0.0 }))
+        cone_trace(world, receiver, args, DAMAGE_CONE_MASK)
     });
 
     registry.register(Function, "setteamscore", |world, _, args| {
@@ -1358,10 +1603,22 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         });
     }
     registry.register(Function, "exitlevel", |world, _, _| {
-        runtime(world).exit_level = true;
+        let mut state = runtime(world);
+        if std::mem::replace(&mut state.finished, true) {
+            return Err("exitlevel already called".into());
+        }
+        state.exit_level = true;
+        drop(state);
         signal(world, EXIT_LEVEL)
     });
-    registry.register(Function, "map_restart", |world, _, _| {
+    registry.register(Function, "map_restart", |world, _, args| {
+        let persist = !args.is_empty() && int(args, 0)? != 0;
+        let mut state = runtime(world);
+        if std::mem::replace(&mut state.finished, true) {
+            return Err("map_restart already called".into());
+        }
+        state.pending_restart = Some(persist);
+        drop(state);
         signal(world, MAP_RESTART)
     });
     registry.register(Function, "setmatchdata", |world, _, args| {
@@ -1386,19 +1643,70 @@ pub(super) fn register(registry: &mut NativeRegistry) {
             precache(world, "asset", string(args, 0)?).map(Value::Int)
         });
     }
-    fn fx_entity(world: &mut World, args: &[Value], origin_at: usize) -> Result<Value, String> {
-        int(args, 0)?;
+    fn fx_entity(
+        world: &mut World,
+        args: &[Value],
+        origin_at: usize,
+        orient_at: usize,
+        repeat_ms: i32,
+        cull_distance: f32,
+    ) -> Result<Value, String> {
+        let name = fx_name(world, int(args, 0)?)?;
         let origin = vector(args, origin_at)?;
+        let forward = optional(args, orient_at, vector)?.unwrap_or([0.0, 0.0, 1.0]);
+        let forward = glam::Vec3::from_array(forward)
+            .try_normalize()
+            .ok_or("effect forward vector is zero")?;
+        let up = match optional(args, orient_at + 1, vector)? {
+            Some(up) => {
+                let up = glam::Vec3::from_array(up);
+                (up - forward * up.dot(forward))
+                    .try_normalize()
+                    .ok_or("effect up vector is parallel to forward")?
+            }
+            None => forward.any_orthonormal_vector(),
+        };
+        let now = crate::level_time_ms(world.resource::<crate::step::StepRequest>().tick);
         let mut runtime = runtime(world);
         let id = runtime.create_entity(EntityKind::Spawned, "script_model")?;
         runtime.set_object_field(id, "origin", Value::Vector(origin));
+        runtime.engine.effects.insert(
+            id,
+            super::entities::PersistentFx {
+                name,
+                origin,
+                forward: forward.to_array(),
+                up: up.to_array(),
+                start_ms: (repeat_ms > 0).then_some(now),
+                repeat_ms,
+                cull_distance,
+            },
+        );
         Ok(Value::Object(id))
     }
     registry.register(Function, "spawnfx", |world, _, args| {
-        fx_entity(world, args, 1)
+        fx_entity(world, args, 1, 2, 0, 0.0)
     });
     registry.register(Function, "playloopedfx", |world, _, args| {
-        fx_entity(world, args, 2)
+        let repeat = float(args, 1)?;
+        if repeat <= 0.0 {
+            return Err("playloopedfx repeat delay must be positive".into());
+        }
+        let cull = optional(args, 3, float)?.unwrap_or(0.0);
+        fx_entity(world, args, 2, 4, (repeat * 1000.0) as i32, cull)
+    });
+    registry.register(Function, "triggerfx", |world, _, args| {
+        let id = entity_id(world, arg(args, 0)?)?;
+        let delay = optional(args, 1, float)?.unwrap_or(0.0);
+        let now = crate::level_time_ms(world.resource::<crate::step::StepRequest>().tick);
+        let mut runtime = runtime(world);
+        let fx = runtime
+            .engine
+            .effects
+            .get_mut(&id)
+            .ok_or("triggerfx expects an effect entity")?;
+        fx.start_ms = Some(now + (delay * 1000.0) as i32);
+        Ok(Value::Undefined)
     });
     registry.register(Method, "usetriggerrequirelookat", |world, receiver, _| {
         let id = entity_id(world, receiver)?;
@@ -1418,12 +1726,10 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         "earthquake",
         "playfxontagforclients",
         "stopfxontag",
-        "triggerfx",
         "playrumbleonposition",
         "setslowmotion",
         "setac130ambience",
         "physicsexplosionsphere",
-        "setminimap",
         "setclientnamemode",
     ];
     macro_rules! platform {
@@ -1493,7 +1799,6 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         => "animation data is not loaded in the simulation");
     refused!(Function: "getweaponmodel", "getweaponhidetags"
         => "weapon models are not loaded in the simulation");
-    refused!(Function: "spawnturret" => "turrets are not simulated");
     registry.register(Function, "radiusdamage", |world, _, args| {
         radius_damage(world, None, args)
     });
@@ -1504,18 +1809,10 @@ pub(super) fn register(registry: &mut NativeRegistry) {
     refused!(Function: "glassradiusdamage", "missile_createattractorent"
         => "script-driven damage is not simulated");
     refused!(Function: "kick" => "no client with that number");
-    refused!(Method: "missile_setflightmodedirect", "missile_settargetent",
-        "missile_settargetpos"
-        => "receiver is not a missile");
     refused!(Method: "getcorpseanim", "startragdoll", "isragdoll" => "receiver is not a corpse");
     refused!(Method: "itemweaponsetammo" => "receiver is not a weapon item");
-    refused!(Method: "setmode", "maketurretinoperable", "maketurretsolid", "setturretminimapvisible",
-        "setturretmodechangewait", "setturretteam", "setsentrycarried", "setsentryowner",
-        "getturrettarget", "shootturret", "settargetentity", "cleartargetentity"
-        => "receiver is not a turret");
     refused!(Method: "attachpath", "startpath", "vehicle_dospawn", "vehicleturretcontroloff",
-        "vehicleturretcontrolon", "vehicle_canturrettargetpoint", "fireweapon",
-        "setturrettargetent", "setdefaultdroppitch"
+        "vehicleturretcontrolon", "vehicle_canturrettargetpoint", "fireweapon"
         => "receiver is not a vehicle");
     refused!(Method: "allowjump", "allowspectateteam", "anyammoforweaponmodes", "attachshieldmodel",
         "attackbuttonpressed", "beginlocationselection", "buttonpressed", "cameralinkto",

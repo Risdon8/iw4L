@@ -22,6 +22,7 @@ mod impact_fx_catalog;
 mod localize;
 mod lochit;
 mod menu_catalog;
+mod menu_source;
 mod penetration;
 mod tracer_catalog;
 mod weapon_anim_dispatch;

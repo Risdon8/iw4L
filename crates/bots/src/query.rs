@@ -371,6 +371,7 @@ impl WorldQuery for SimWorld {
             mask: MASK_SIGHT,
             ignore: Some(ignore),
             ignore_hit: None,
+            ignore_model: None,
         })))
     }
 
@@ -386,6 +387,7 @@ impl WorldQuery for SimWorld {
             mask: MASK_SHOT,
             ignore: Some(ignore),
             ignore_hit: None,
+            ignore_model: None,
         })))
     }
 

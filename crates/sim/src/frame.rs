@@ -850,7 +850,7 @@ fn spawn_player_row(world: &mut World, client: ClientId, state: PlayerState) {
 
 fn spawn_projectile(world: &mut World, projectile: ProjectileState) {
     if occupancy(world, projectile.entnum) != Some(EntityRunKind::Missile) {
-        panic!("in-flight projectile has no G_RunThink Missile occupancy");
+        panic!("in-flight projectile has no Missile think occupancy");
     }
     let entnum = projectile.entnum;
     let payload = world.spawn(ProjectileRow(projectile)).id();
@@ -890,7 +890,7 @@ fn dropped_item_numbers_sorted(world: &World) -> Vec<i32> {
 
 fn spawn_dropped_item(world: &mut World, item: DroppedItem) {
     if occupancy(world, item.state.number) != Some(EntityRunKind::Item) {
-        panic!("dropped ET_ITEM has no G_RunThink Item occupancy");
+        panic!("dropped ET_ITEM has no Item think occupancy");
     }
     let number = item.state.number;
     let payload = world.spawn(DroppedItemRow(item)).id();
@@ -899,7 +899,7 @@ fn spawn_dropped_item(world: &mut World, item: DroppedItem) {
 
 fn spawn_script_mover_row(world: &mut World, mover: ScriptMoverGentity) {
     if occupancy(world, mover.state.number) != Some(EntityRunKind::ScriptMover) {
-        panic!("script mover has no G_RunThink ScriptMover occupancy");
+        panic!("script mover has no ScriptMover think occupancy");
     }
     let number = mover.state.number;
     let payload = world.spawn(ScriptMoverRow(mover)).id();

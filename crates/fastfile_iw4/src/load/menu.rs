@@ -92,6 +92,7 @@ pub struct MenuItemLayout<'a> {
 
     pub on_focus_ptr: u8,
     pub static_flags: i32,
+    pub dvar_flags: i32,
 }
 
 fn name_at<'s>(s: &'s ZoneStream<'_>, p: Ptr) -> Result<Option<&'s str>> {
@@ -1075,6 +1076,7 @@ fn load_item_def(
         mouse_enter_ptr,
         on_focus_ptr,
         static_flags,
+        dvar_flags: s.i32_at(p, s.layout(292, 368)).unwrap_or(0),
     })?;
 
     load_item_type_data(

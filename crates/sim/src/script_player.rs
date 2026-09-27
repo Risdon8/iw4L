@@ -735,6 +735,11 @@ pub(crate) fn constrain_cmd(
             | buttons::RELOAD
             | buttons::USE_RELOAD);
     }
+    if controls.stunned {
+        cmd.forwardmove /= 2;
+        cmd.rightmove /= 2;
+        cmd.buttons &= !(buttons::JUMP | buttons::SPRINT);
+    }
     if controls.linked {
         cmd.forwardmove = 0;
         cmd.rightmove = 0;

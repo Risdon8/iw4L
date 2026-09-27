@@ -16,6 +16,7 @@ pub(crate) enum Command {
     ScriptMenuResponse(String),
     Exec(String),
     SetDvar(String, String),
+    CopyDvar(String, String),
     ExecOnDvarIntValue {
         dvar: String,
         value: i32,
@@ -25,6 +26,16 @@ pub(crate) enum Command {
         dvar: String,
         value: String,
         command: String,
+    },
+    OpenForGameType(String),
+    CloseForGameType(String),
+    SetFocusByDvar(String),
+    MenuOnDvar {
+        open: bool,
+        want_match: bool,
+        dvar: String,
+        value: String,
+        menu: String,
     },
     Unhandled(String),
 }
@@ -91,6 +102,7 @@ pub(crate) fn parse(script: &str) -> Vec<Command> {
             "play" => (Command::Play(arg(i + 1)), 2),
             "scriptmenuresponse" => (Command::ScriptMenuResponse(arg(i + 1)), 2),
             "exec" | "execnow" => (Command::Exec(arg(i + 1)), 2),
+            "copydvar" => (Command::CopyDvar(arg(i + 1), arg(i + 2)), 3),
             "setdvar" => (Command::SetDvar(arg(i + 1), arg(i + 2)), 3),
             "execondvarintvalue" => (
                 Command::ExecOnDvarIntValue {
@@ -108,10 +120,30 @@ pub(crate) fn parse(script: &str) -> Vec<Command> {
                 },
                 4,
             ),
-            "uiscript" | "fadein" | "fadeout" | "setbackground" | "playlooped"
-            | "setfocusbydvar" => (Command::Unhandled(format!("{name} {}", arg(i + 1))), 2),
+            "setfocusbydvar" => (Command::SetFocusByDvar(arg(i + 1)), 2),
+            "openforgametype" => (Command::OpenForGameType(arg(i + 1)), 2),
+            "closeforgametype" => (Command::CloseForGameType(arg(i + 1)), 2),
+            "uiscript" => {
+                let script = arg(i + 1).to_ascii_lowercase();
+                match script.as_str() {
+                    "openmenuondvar" | "openmenuondvarnot" | "closemenuondvar"
+                    | "closemenuondvarnot" => (
+                        Command::MenuOnDvar {
+                            open: script.starts_with("open"),
+                            want_match: !script.ends_with("not"),
+                            dvar: arg(i + 2),
+                            value: arg(i + 3),
+                            menu: arg(i + 4),
+                        },
+                        5,
+                    ),
+                    _ => (Command::Unhandled(format!("uiscript {script}")), 2),
+                }
+            }
+            "fadein" | "fadeout" | "setbackground" | "playlooped" => {
+                (Command::Unhandled(format!("{name} {}", arg(i + 1))), 2)
+            }
             "setcolor" => (Command::Unhandled(name.clone()), 6),
-            "openforgametype" | "closeforgametype" => (Command::Unhandled(name.clone()), 3),
             _ => (Command::Unhandled(name.clone()), 1),
         };
         out.push(command);

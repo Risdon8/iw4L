@@ -250,7 +250,7 @@ pub(crate) fn update_hud_elems(
         .iter()
         .chain(copy_in_use_prefix(&client.hud_archival).iter())
         .filter(|e| {
-            !(e.flags & HUDELEM_FLAG_HIDEWHENINMENU != 0 && input.menu_open
+            !(e.flags & HUDELEM_FLAG_HIDEWHENINMENU != 0 && input.script_menu_open
                 || e.flags & HUDELEM_FLAG_HIDEWHENDEAD != 0 && dead)
         })
         .collect();

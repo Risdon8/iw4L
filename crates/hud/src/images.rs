@@ -139,6 +139,7 @@ pub struct HudImages {
     zone_image_name: HashMap<String, String>,
     material_images: HashMap<String, String>,
     zone_states: HashMap<String, Option<[u32; 2]>>,
+    zone_srgb_reads: HashMap<String, bool>,
     blood_plan: Option<Result<BloodMaterialBinding, String>>,
     zone_installed: bool,
     zone_uploaded: bool,
@@ -196,6 +197,12 @@ impl HudImages {
         self.zone_installed = true;
         self.zone_uploaded = false;
         self.blood_plan = Some(blood_material_binding(catalog));
+        self.zone_srgb_reads.extend(
+            catalog
+                .material_srgb_reads
+                .iter()
+                .map(|(name, &srgb)| (cache_key(name), srgb)),
+        );
         self.material_images.extend(
             catalog
                 .material_images
@@ -258,6 +265,30 @@ impl HudImages {
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
         self.get_sampled(ns, name, HudSampling::Color, images)
+    }
+
+    pub(crate) fn get_native(
+        &mut self,
+        ns: AssetNamespace,
+        name: &str,
+        images: &mut Assets<Image>,
+    ) -> Option<Handle<Image>> {
+        let srgb = ns == HUD_CHROME_NAMESPACE
+            && self
+                .zone_srgb_reads
+                .get(&cache_key(name))
+                .copied()
+                .unwrap_or(false);
+        self.get_sampled(
+            ns,
+            name,
+            if srgb {
+                HudSampling::Color
+            } else {
+                HudSampling::Data
+            },
+            images,
+        )
     }
 
     pub fn get_sampled(

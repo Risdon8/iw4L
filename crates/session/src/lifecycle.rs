@@ -238,7 +238,7 @@ pub fn run_teardown(
         "Bevy Assets<Image/Mesh> handles dropped by WorldScene::default stay \
          until Bevy GC; they are not drawable leftover world",
         "WorldScene Resource stays so hold still freezes level.time; render \
-         empties geometry / tess / GPU plans (R_ShutdownWorld)",
+         empties geometry / tess / GPU plans",
         "AuthorityWorld Resource stays; clip is SimWorld::shutdown_game, not remove",
     ];
 

@@ -179,9 +179,8 @@ pub const EV_DISPATCH_REGISTRY: &[EntityEventRow] = &[
         retail_name: "EV_FIRE_MELEE",
         event: EntityEventKind::FIRE_MELEE,
         dispatch: EntityEventDispatch::Unsupported(
-            "CG_EntityEvent case 0x2f is DynEntCl_MeleeEvent + \
-             CG_GlassMeleeEvent; this build's melee hit is the server \
-             FireWeaponMelee centre-ray, not those client FX",
+            "melee hit is the server centre-ray; client dyn-ent and glass \
+             melee FX are not played",
         ),
     },
     EntityEventRow {

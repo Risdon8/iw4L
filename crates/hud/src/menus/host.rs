@@ -5,6 +5,8 @@ use crate::playercard::UiLocalVars;
 
 pub(crate) struct MenuWorld<'a> {
     pub ms: i32,
+    pub in_game: bool,
+    pub party: &'a frame::UiPartyState,
     pub dvars: Option<sim::ScriptDvars<'a>>,
     pub sv_running: bool,
     pub catalog: Option<&'a MenuCatalog>,
@@ -25,6 +27,7 @@ const CUSTOM_CLASS_SLOTS: usize = 10;
 pub(crate) struct MenuHost<'a> {
     pub world: &'a MenuWorld<'a>,
     pub menu: &'a MenuDef,
+    pub dvars: &'a frame::UiMenuDvars,
     pub locals: &'a UiLocalVars,
     pub open: &'a [String],
     pub focus_rect: Option<[f32; 4]>,
@@ -32,13 +35,18 @@ pub(crate) struct MenuHost<'a> {
 
 impl MenuHost<'_> {
     fn dvar(&self, name: &str) -> String {
+        if let Some(value) = self.dvars.get(name) {
+            return value.to_owned();
+        }
         if let Some(value) = self.world.dvars.as_ref().and_then(|d| d.string(name)) {
             return value.to_owned();
         }
         let lower = name.to_ascii_lowercase();
         let flag = |on: bool| String::from(if on { "1" } else { "0" });
         match lower.as_str() {
-            "cl_ingame" | "ui_multiplayer" | "widescreen" | "hidef" => flag(true),
+            "cl_ingame" => flag(self.world.in_game),
+            "gamemode" => "mp".to_owned(),
+            "ui_multiplayer" | "widescreen" | "hidef" => flag(true),
             "sv_running" => flag(self.world.sv_running),
             "g_gametype" | "ui_gametype" => self
                 .world
@@ -328,8 +336,14 @@ impl ExprHost for MenuHost<'_> {
     fn is_item_unlocked(&self, _item: &str) -> Result<i32, ExprError> {
         Ok(1)
     }
-    fn party_flag(&self, _flag: PartyFlag) -> Result<i32, ExprError> {
-        Ok(0)
+    fn party_flag(&self, flag: PartyFlag) -> Result<i32, ExprError> {
+        let party = self.world.party;
+        Ok(i32::from(match flag {
+            PartyFlag::InLobby => party.in_lobby,
+            PartyFlag::InPrivateParty => party.active,
+            PartyFlag::PrivatePartyHost => party.active && party.is_host,
+            PartyFlag::PrivatePartyHostInLobby => party.in_lobby && party.is_host,
+        }))
     }
     fn radar_jam_intensity(&self) -> Result<f32, ExprError> {
         Ok(0.0)

@@ -47,7 +47,7 @@ pub struct GlassZoneCensus {
 impl GlassZoneCensus {
     pub fn report_line(&self) -> String {
         format!(
-            "glass zone: fx init_pieces={} defs={} init_geo={} | G_GlassData pieces={} names={} | clip encoded={} unique={} surf9={} contents_glass={} (not tess, not hitType=4)",
+            "glass zone: fx init_pieces={} defs={} init_geo={} | glass data pieces={} names={} | clip encoded={} unique={} surf9={} contents_glass={} (not tess, not hitType=4)",
             self.fx_init_piece_n,
             self.fx_def_n,
             self.fx_init_geo_n,

@@ -640,6 +640,14 @@ impl FxSystemHost {
         }
     }
 
+    pub fn stop_owned(&mut self, handle: u16) {
+        let Some(slot) = self.slot_index_for_handle(handle) else {
+            return;
+        };
+        crate::spawn::stop_effect_non_recursive(self, slot);
+        self.play_release_ownership(handle);
+    }
+
     pub fn kill_def_newer_than(&mut self, def_name: &str, msec_begin: i32) {
         let slots: Vec<_> = self
             .effects

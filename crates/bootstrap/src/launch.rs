@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use assets::{
     LoadProgress, LoadingPreviewSource, LoadingScreen, MatchLoadRequest, NamespaceSoundIwd,
-    NamespaceTrees, decode_menu_background, find_runtime_common_mp, find_zone_file, list_mp_maps,
+    NamespaceTrees, find_runtime_common_mp, find_zone_file, list_mp_maps,
     load_mp_localized_strings, load_mp_sound_bank, load_ui_menu_catalog,
 };
 use audio::{SoundBank, SoundIwd};
@@ -16,8 +16,8 @@ use render_frontend::prepare::scene::world::WorldScene;
 use replay::{Playback, ReplayPlayback};
 use session::StartupCommands;
 use ui::{
-    AppScreen, ClassLoadoutCatalog, LaunchIdentity, LaunchReport, MenuEnabled, MenuFrontend,
-    MenuMapList, MenuShotPlan, PendingMenuBgPixels, UiAssetRoot, UiDraw, UiLayer, UiLayers,
+    AppScreen, ClassLoadoutCatalog, LaunchIdentity, LaunchReport, MenuMapList, UiAssetRoot, UiDraw,
+    UiLayer, UiLayers,
 };
 
 use crate::args::{AcceptanceLaunch, LaunchMode};
@@ -63,7 +63,12 @@ struct ShellCommonTask {
     started: std::time::Instant,
 }
 
-fn install_class_catalog(mut commands: Commands, shell: Option<ResMut<ShellCommonTask>>) {
+fn install_class_catalog(
+    mut commands: Commands,
+    shell: Option<ResMut<ShellCommonTask>>,
+    mut strings: ResMut<assets::LocalizeCatalog>,
+    menus: Res<assets::MenuCatalog>,
+) {
     use bevy::tasks::futures_lite::future;
     let Some(mut shell) = shell else {
         return;
@@ -90,6 +95,14 @@ fn install_class_catalog(mut commands: Commands, shell: Option<ResMut<ShellCommo
         class_catalog.excluded.len(),
         shell.started.elapsed().as_secs_f32() * 1000.0,
     );
+    // Shared IW4 attachment art also serves donor weapons when their table names
+    // the very same UI material. Preserve donor-only icons in their own namespace.
+    for (key, preview) in &mut class_catalog.previews {
+        if key.contains('+') && menus.material_images.contains_key(&preview.image) {
+            preview.image = format!("iw4:material/{}", preview.image);
+        }
+    }
+    strings.absorb(common.strings);
     commands.insert_resource(class_catalog);
     commands.remove_resource::<ShellCommonTask>();
 }
@@ -197,7 +210,8 @@ fn run_menu(games: assets::GamesRoot, artifacts: PathBuf) {
         ))
     });
     let shell_common = assets::load_pool().spawn(assets::load_shell_common(games.clone()));
-    let (menus, menu_report) = load_ui_menu_catalog(&ui_games);
+    let (mut menus, menu_report) = load_ui_menu_catalog(&ui_games);
+    ui::install_frontend_menus(&mut menus).unwrap_or_else(|error| fatal(&error));
     for line in &menu_report {
         diag::info!(Launch, "{line}");
     }
@@ -254,20 +268,6 @@ fn run_menu(games: assets::GamesRoot, artifacts: PathBuf) {
             ..default()
         },
     ));
-    let menu_bg = match decode_menu_background(&ui_games.0) {
-        Ok(Some(v)) => {
-            diag::info!(Launch, "menu: background ready");
-            Some(v)
-        }
-        Ok(None) => {
-            diag::info!(Launch, "menu: no menu_mp_image in IWD");
-            None
-        }
-        Err(error) => {
-            diag::warn!(Launch, "menu: background: {error}");
-            None
-        }
-    };
     app.insert_resource(ShellCommonTask {
         task: shell_common,
         perk_table: menus.string_table("mp/perkTable.csv").cloned(),
@@ -316,10 +316,6 @@ fn run_menu(games: assets::GamesRoot, artifacts: PathBuf) {
     }
     app.insert_resource(launch_identity(&config))
         .insert_resource(MenuMapList(maps))
-        .insert_resource(MenuEnabled(true))
-        .insert_resource(MenuFrontend {
-            game_mode: Some("mp".into()),
-        })
         .insert_resource(AppScreen::MainMenu)
         .insert_resource(UiAssetRoot(Some(ui_games.0)))
         .insert_resource(StartupCommands {
@@ -333,13 +329,7 @@ fn run_menu(games: assets::GamesRoot, artifacts: PathBuf) {
             layers
         });
     add_runtime_plugins(&mut app);
-    if let Some(decoded) = menu_bg {
-        app.insert_resource(PendingMenuBgPixels(decoded));
-    }
-    if let Some(plan) = MenuShotPlan::from_env() {
-        diag::info!(Launch, "menu-shots: {}", plan.dir.display());
-        app.insert_resource(plan);
-    } else if let Some(capture) = CaptureRequest::from_env() {
+    if let Some(capture) = CaptureRequest::from_env() {
         queue_launch_capture(
             &mut app,
             CaptureRequest {
@@ -442,7 +432,8 @@ fn run_map(
         artifacts,
     };
     start_perf(Some(zone.clone()), role_name(config.role));
-    let (menus, menu_report) = load_ui_menu_catalog(&games);
+    let (mut menus, menu_report) = load_ui_menu_catalog(&games);
+    ui::install_frontend_menus(&mut menus).unwrap_or_else(|error| fatal(&error));
     for line in &menu_report {
         diag::info!(Launch, "{line}");
     }
@@ -508,7 +499,6 @@ fn run_map(
             loading_title,
             sim::host_game_mode_kind().display_name().to_owned(),
         ))
-        .insert_resource(MenuEnabled(false))
         .insert_resource(UiAssetRoot(ui_games_root))
         .insert_resource(StartupCommands {
             lines: console::startup_commands(),

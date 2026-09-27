@@ -53,6 +53,9 @@ impl Default for NativeRegistry {
         super::vehicles::register(&mut registry);
         super::physics::register(&mut registry);
         super::natives_t5::register(&mut registry);
+        super::controls::register(&mut registry);
+        super::guidance::register(&mut registry);
+        super::turrets::register(&mut registry);
         registry
     }
 }
@@ -104,6 +107,21 @@ pub(crate) fn install(
     natives: NativeRegistry,
     level: LevelData,
 ) -> Result<(), Fault> {
+    let plan = super::restart::RestartPlan {
+        natives: natives.clone(),
+        entities: Arc::new(level.entities),
+        tables: Arc::new(level.tables),
+        entries: Vec::new(),
+    };
+    install_level(world, Arc::new(program), plan)
+}
+
+pub(super) fn install_level(
+    world: &mut World,
+    program: Arc<Program>,
+    plan: super::restart::RestartPlan,
+) -> Result<(), Fault> {
+    let natives = plan.natives.clone();
     let location = Location {
         module: "<runtime>".into(),
         function: "install".into(),
@@ -134,7 +152,6 @@ pub(crate) fn install(
         .iter()
         .map(|b| natives.get(b.namespace, b.name).unwrap())
         .collect();
-    let program = Arc::new(program);
     let mut runtime = world.resource_mut::<Runtime>();
     runtime.program = Some(program.clone());
     runtime.natives = bound;
@@ -143,7 +160,7 @@ pub(crate) fn install(
     runtime.objects.insert(2, BTreeMap::new());
     runtime.next_object = 3;
     runtime.next_entity_number = playerstate_iw4::GENTITY_SPAWN_BASE;
-    runtime.tables = Arc::new(level.tables);
+    runtime.tables = plan.tables.clone();
     runtime.rng = u32::from_le_bytes(program.fingerprint()[..4].try_into().unwrap()) | 1;
     runtime.loading = true;
     world.insert_resource(natives);
@@ -162,9 +179,11 @@ pub(crate) fn install(
         }
         runtime.started = false;
     }
+    let entities = plan.entities.clone();
+    world.resource_mut::<Runtime>().restart = Some(Arc::new(plan));
     world
         .resource_mut::<Runtime>()
-        .spawn_map_entities(&level.entities)
+        .spawn_map_entities(&entities)
         .map_err(|m| Fault::at(&location, m))?;
     Ok(())
 }
@@ -176,6 +195,50 @@ const INSTRUCTION_BUDGET: usize = 16 * 1_000_000;
 
 pub(crate) fn take_signals(world: &mut World) -> Vec<Arc<str>> {
     std::mem::take(&mut world.resource_mut::<Runtime>().signals)
+}
+
+const WAIT_FOR_PLAYERS: &str = "maps/mp/gametypes/_gamelogic::waitforplayers";
+const START_TIMER_BEGINNING: &str = "match_start_timer_beginning";
+
+pub(crate) fn skip_prematch(world: &mut World, tick: crate::Tick) -> bool {
+    let runtime = world.resource::<Runtime>();
+    if runtime.fault.is_some() {
+        return false;
+    }
+    let Some(program) = runtime.program.clone() else {
+        return false;
+    };
+    let counting = runtime.waiters.iter().any(|w| {
+        w.receiver == Value::level()
+            && &*w.name == START_TIMER_BEGINNING
+            && matches!(w.kind, WaiterKind::Endon { .. })
+    });
+    let waiting: Vec<_> = match program.names.get(WAIT_FOR_PLAYERS) {
+        Some(&function) => world
+            .query::<(Entity, &Thread)>()
+            .iter(world)
+            .filter_map(|(entity, thread)| {
+                let depth = thread.frames.iter().position(|f| f.function == function)?;
+                Some((entity, depth))
+            })
+            .collect(),
+        None => Vec::new(),
+    };
+    if !counting && waiting.is_empty() {
+        return false;
+    }
+    let now = i64::from(tick.0) * i64::from(crate::MATCH_TICK_MS);
+    {
+        let mut runtime = world.resource_mut::<Runtime>();
+        runtime.set_object_field(0, "prematchperiodend", Value::Int(0));
+    }
+    for (entity, depth) in waiting {
+        let mut thread = world.entity_mut(entity).take::<Thread>().unwrap();
+        unwind(world, &mut thread, depth, now, false);
+        world.entity_mut(entity).insert(thread);
+    }
+    raise(world, Value::level(), START_TIMER_BEGINNING, Vec::new());
+    true
 }
 
 pub(super) fn raise(world: &mut World, receiver: Value, name: &str, args: Vec<Value>) {
@@ -268,6 +331,14 @@ pub(crate) fn start(
     args: Vec<Value>,
 ) -> Result<u64, Fault> {
     let (program, function, location) = entry(world, name)?;
+    let mut runtime = world.resource_mut::<Runtime>();
+    if runtime.last_tick.is_none()
+        && receiver == Value::level()
+        && args.is_empty()
+        && let Some(plan) = runtime.restart.as_mut()
+    {
+        Arc::make_mut(plan).entries.push(name.into());
+    }
     spawn_thread(world, &program, function, receiver, args).map_err(|m| Fault::at(&location, m))
 }
 
@@ -331,7 +402,6 @@ fn new_thread(
     })
 }
 
-/// Frames live at once across a thread and the threads suspended beneath it.
 const MAX_FRAMES: usize = 31;
 
 fn frame_room(world: &World, thread: &Thread) -> Result<(), String> {
@@ -1353,6 +1423,7 @@ pub(crate) fn advance_scheduler(world: &mut World) {
     world.resource_mut::<Runtime>().last_tick = Some(tick);
     let now = i64::from(tick.0) * i64::from(crate::MATCH_TICK_MS);
     super::natives_engine::advance_motions(world, now);
+    super::players::apply_player_links(world);
     deliver_external(world, now);
     let threads: Vec<_> = world
         .query::<(Entity, &Thread)>()
@@ -1494,7 +1565,7 @@ pub(crate) fn preflight(
                 line: 0,
                 column: 0,
             },
-            "no loaded and started GSC program; handwritten gameplay dispatch has been removed",
+            "no loaded and started GSC program",
         ));
     }
     Ok(())
@@ -1502,10 +1573,10 @@ pub(crate) fn preflight(
 
 fn array_key(value: Value) -> Result<ArrayKey, String> {
     match value {
-        Value::Int(n) if n >= 0 => Ok(ArrayKey::Integer(n)),
+        Value::Int(n) => Ok(ArrayKey::Integer(n)),
         Value::String(s) => Ok(ArrayKey::String(s)),
         other => Err(format!(
-            "array index must be a nonnegative int or string, found {}",
+            "array index must be an int or string, found {}",
             type_name(&other)
         )),
     }
@@ -1574,7 +1645,6 @@ fn entity_receivers(world: &World, thread: &Thread) -> Vec<Value> {
         .collect()
 }
 
-/// A receiver is gone once its kernel entity is freed or its script entity deleted.
 fn any_deleted(world: &mut World, receivers: &[Value]) -> bool {
     let objects = &world.resource::<Runtime>().objects;
     if receivers
@@ -1588,6 +1658,42 @@ fn any_deleted(world: &mut World, receivers: &[Value]) -> bool {
         Value::Entity(entity) => frame.entity_kernel().resolve(*entity).is_err(),
         _ => false,
     })
+}
+
+impl Runtime {
+    /// Values held outside script objects by the engine side: they keep what
+    /// they reference alive exactly like a script variable would.
+    fn native_roots(&self, pending: &mut Vec<Value>) {
+        pending.extend(self.presented.values().flatten().cloned());
+        for (receiver, _, args) in &self.pending_notifies {
+            pending.push(receiver.clone());
+            pending.extend(args.iter().cloned());
+        }
+        pending.extend(self.timers.iter().map(|(_, receiver, _)| receiver.clone()));
+        pending.extend(self.engine.match_data.values().cloned());
+        pending.extend(self.engine.world.map(Value::Object));
+        pending.extend(
+            self.engine
+                .objectives
+                .values()
+                .filter_map(|o| o.entity())
+                .cloned(),
+        );
+        for slot in self.players.values() {
+            pending.push(Value::Object(slot.object));
+            pending.extend(slot.data.values().cloned());
+            pending.extend(slot.presented.values().flatten().cloned());
+        }
+        for answers in self.menu_answers.values() {
+            pending.extend(answers.iter().flat_map(|a| a.values()).cloned());
+        }
+        pending.extend(
+            self.deaths
+                .iter()
+                .flat_map(|(_, _, args)| args.iter().cloned()),
+        );
+        self.t5.roots(pending);
+    }
 }
 
 fn collect_heap(world: &mut World) {
@@ -1609,6 +1715,7 @@ fn collect_heap(world: &mut World) {
     let mut objects = std::collections::BTreeSet::new();
     let mut arrays = std::collections::BTreeSet::new();
     let mut runtime = world.resource_mut::<Runtime>();
+    runtime.native_roots(&mut pending);
     for waiter in &runtime.waiters {
         pending.push(waiter.receiver.clone());
         if let WaiterKind::Match { values } = &waiter.kind {

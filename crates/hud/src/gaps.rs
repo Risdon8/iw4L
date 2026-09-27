@@ -615,7 +615,7 @@ impl fmt::Display for GapCause {
             GapCause::SplashEmptyPaint { name } => {
                 write!(
                     f,
-                    "`{name}` Item_Paint emitted no tess quads for a live splash slot"
+                    "`{name}` paint emitted no tess quads for a live splash slot"
                 )
             }
             GapCause::ObituaryNoClientInfo => {
@@ -653,7 +653,7 @@ impl fmt::Display for GapCause {
                 write!(f, "entity {entnum} has no same-Present posed-head product")
             }
             GapCause::OverheadFlashUnavailable => {
-                f.write_str("local presented playerState is missing for CG_IsFlashbanged")
+                f.write_str("local presented playerState is missing for the flashbang check")
             }
             GapCause::OverheadPartyUnavailable { client } => {
                 write!(f, "party relation to client {client} is unknown")
@@ -686,7 +686,7 @@ impl fmt::Display for GapCause {
                 write!(f, "playercard image `{name}` is {miss}")
             }
             GapCause::PlayerCardEmptyPaint { name } => {
-                write!(f, "`{name}` Item_Paint emitted no tess quads")
+                write!(f, "`{name}` paint emitted no tess quads")
             }
             GapCause::WeaponbarPaint { error } => write!(f, "weaponbar_hd: {error}"),
             GapCause::PerkPaint { error } => write!(f, "perks_info_hd: {error}"),
@@ -703,7 +703,7 @@ impl fmt::Display for GapCause {
                 write!(f, "perk image `{name}` is {miss}")
             }
             GapCause::PerkEmptyPaint { name } => {
-                write!(f, "`{name}` Item_Paint emitted no tess quads")
+                write!(f, "`{name}` paint emitted no tess quads")
             }
             GapCause::CompassRingMaterialMissing { name, miss } => {
                 write!(f, "compass ring image `{name}` is {miss}")

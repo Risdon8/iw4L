@@ -109,7 +109,7 @@ impl ExprHost for WeaponbarExprHost<'_> {
     fn ui_active(&self) -> Result<i32, ExprError> {
         Ok(i32::from(
             self.input
-                .is_some_and(|i| i.menu_open || i.script_menu_open),
+                .is_some_and(|i| i.script_menu_open),
         ))
     }
     fn action_slot_usable(&self, slot: i32) -> Result<i32, ExprError> {
@@ -538,7 +538,7 @@ impl HudPlayerVisInput<'_> {
         let ui_active = self
             .input
             .as_ref()
-            .is_some_and(|i| i.menu_open || i.script_menu_open);
+            .is_some_and(|i| i.script_menu_open);
         let Some(ps) = presented.player(local) else {
             return HudPlayerVis {
                 ui_active,

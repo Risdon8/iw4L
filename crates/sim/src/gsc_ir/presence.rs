@@ -11,6 +11,7 @@ pub(super) struct Shown {
     origin: [f32; 3],
     angles: [f32; 3],
     model: Option<Arc<str>>,
+    attachments: Vec<(Arc<str>, Arc<str>)>,
     hidden: bool,
     shown_to: u64,
     solid: bool,
@@ -23,6 +24,7 @@ struct Wanted {
     origin: [f32; 3],
     angles: [f32; 3],
     model: Option<Arc<str>>,
+    attachments: Vec<(Arc<str>, Arc<str>)>,
     hidden: bool,
     shown_to: u64,
     solid: bool,
@@ -65,7 +67,7 @@ pub(super) fn spawn_presence(world: &mut World, origin: [f32; 3]) -> Result<Scri
     let mut frame = FrameWorld::from_world(world);
     frame
         .spawn_script_mover(id, origin, [0.0; 3])
-        .map_err(|_| "G_Spawn: no free entities".to_owned())?;
+        .map_err(|_| "no free entities".to_owned())?;
     frame.insert_collision_owner(EntityCollisionCapabilities::current_tick(
         crate::AuthorityModelOwner::ScriptModel(id),
         None,
@@ -84,6 +86,7 @@ pub(crate) fn sync_presence(world: &mut World) {
     super::entity_damage::apply_script_blasts(world, tick);
     publish_loop_sounds(world);
     super::objectives::publish(world);
+    super::controls::sync_script_locks(world);
     super::triggers::dispatch_triggers(world);
     present(world, now);
     resolve_link_tags(world);
@@ -132,6 +135,7 @@ fn present(world: &mut World, now: i32) {
                 .collision_owner_mut(want.presence)
                 .and_then(|row| row.dobj.as_ref())
                 .map(|dobj| dobj.current_model.as_str().into()),
+            attachments: Vec::new(),
             hidden: mover.state.e_flags & entity_iw4::CG_SCRIPT_MOVER_NODRAW != 0,
             shown_to: mover.shown_to,
             solid: !mover.nonsolid,
@@ -150,7 +154,7 @@ fn present(world: &mut World, now: i32) {
         if posed || shown.moving {
             frame.set_script_mover_pose(mover.state.number, now, want.origin, want.angles);
         }
-        let reshaped = want.model != shown.model;
+        let reshaped = want.model != shown.model || want.attachments != shown.attachments;
         if reshaped || !want.part_ops.is_empty() || want.anim_op.is_some() {
             present_model(&mut frame, &want);
         }
@@ -161,6 +165,7 @@ fn present(world: &mut World, now: i32) {
                 origin: if posed { want.origin } else { shown.origin },
                 angles: if posed { want.angles } else { shown.angles },
                 model: want.model,
+                attachments: want.attachments,
                 hidden: want.hidden,
                 shown_to: want.shown_to,
                 solid: want.solid,
@@ -201,6 +206,35 @@ fn tag_lookup(world: &mut World, object: u64, tag: &str) -> Option<Option<[f32; 
             .transform_point3(glam::Vec3::from(at))
             .to_array()
     }))
+}
+
+pub(super) fn tag_world(
+    world: &mut World,
+    object: u64,
+    tag: &str,
+) -> Option<([f32; 3], [[f32; 3]; 3])> {
+    let presence = world
+        .resource::<Runtime>()
+        .entities
+        .get(&object)?
+        .presence?;
+    let frame = FrameWorld::from_world(world);
+    let matrix = frame
+        .entity_collision_capabilities()
+        .iter()
+        .find(|row| row.owner.script_model() == Some(presence))?
+        .dobj
+        .as_ref()?
+        .tag_world_matrix(tag)?;
+    let axis = |v: glam::Vec4| v.truncate().normalize_or_zero().to_array();
+    Some((
+        matrix.w_axis.truncate().to_array(),
+        [
+            axis(matrix.x_axis),
+            axis(matrix.y_axis),
+            axis(matrix.z_axis),
+        ],
+    ))
 }
 
 pub(super) fn tag_offset(world: &mut World, object: u64, tag: &str) -> Option<[f32; 3]> {
@@ -247,6 +281,7 @@ fn collect_wanted(world: &mut World) -> Vec<Wanted> {
         let entity = runtime.entities.get_mut(&object).unwrap();
         let part_ops = std::mem::take(&mut entity.part_ops);
         let anim_op = entity.anim_op.take();
+        let attachments = entity.attachments.clone();
         let unchanged = part_ops.is_empty()
             && anim_op.is_none()
             && runtime.shown.get(&object).is_some_and(|shown| {
@@ -255,6 +290,7 @@ fn collect_wanted(world: &mut World) -> Vec<Wanted> {
                     && shown.shown_to == shown_to
                     && shown.solid == solid
                     && shown.model == model
+                    && shown.attachments == attachments
                     && near(shown.origin, origin)
                     && near_angles(shown.angles, angles)
             });
@@ -267,6 +303,7 @@ fn collect_wanted(world: &mut World) -> Vec<Wanted> {
             origin,
             angles,
             model,
+            attachments,
             hidden,
             shown_to,
             solid,
@@ -306,6 +343,12 @@ fn present_model(frame: &mut FrameWorld, want: &Wanted) {
     let Some(dobj) = row.dobj.as_mut() else {
         return;
     };
+    let attachments: Vec<(&str, &str)> = want
+        .attachments
+        .iter()
+        .map(|(model, tag)| (&**model, &**tag))
+        .collect();
+    dobj.set_attachments(&attachments);
     for (tag, hidden) in &want.part_ops {
         dobj.set_tag_hidden(tag, *hidden);
     }

@@ -167,7 +167,7 @@ impl UnsupportedEntityEvents {
             };
             diag::warn!(
                 Net,
-                "entity events: {} (#{:#x}) has no ported CG_EntityEvent branch — {} \
+                "entity events: {} (#{:#x}) has no client handler — {} \
                  (further unsupported events counted, not printed)",
                 name,
                 event.0,

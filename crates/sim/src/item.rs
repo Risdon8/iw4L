@@ -258,7 +258,7 @@ fn push_dropped_item(
     }
     let entnum = world
         .allocate_dynamic_entity(crate::gentity::EntityRunKind::Item)
-        .expect("G_Spawn exhausted dynamic entity slots for dropped item")
+        .expect("no free dynamic entity slot for a dropped item")
         .number();
     let state = init_item_state(entnum, weapon, pos, apos, owner);
     world.push_dropped_item(DroppedItem {

@@ -253,6 +253,7 @@ fn attachment_material(token: &str) -> Option<&'static str> {
 
 pub fn pretty_weapon_name(weapon: &str) -> String {
     let weapon = weapon.rsplit('/').next().unwrap_or(weapon);
+    let weapon = weapon.strip_prefix("iw5_").unwrap_or(weapon);
     weapon
         .strip_suffix("_mp")
         .unwrap_or(weapon)

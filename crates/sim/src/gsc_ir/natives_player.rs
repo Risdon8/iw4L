@@ -1,5 +1,6 @@
 use super::iw4_natives::string;
 use super::natives_math::{arg, float, int, optional, vector};
+use super::players::{LinkView, PlayerLink};
 use super::*;
 use crate::frame::FrameWorld;
 use crate::script_player;
@@ -37,7 +38,7 @@ pub(super) fn present(
     Ok(Value::Undefined)
 }
 
-fn text(value: &Value) -> Result<Arc<str>, String> {
+pub(super) fn text(value: &Value) -> Result<Arc<str>, String> {
     match value {
         Value::String(s) | Value::LocalizedString(s) => Ok(s.clone()),
         Value::Int(n) => Ok(n.to_string().into()),
@@ -72,7 +73,7 @@ fn publish_client_dvar(world: &mut World, client: u32, name: &str, value: String
     }
 }
 
-fn send_menu_command(world: &mut World, client: u32, kind: crate::MenuCommandKind) {
+pub(super) fn send_menu_command(world: &mut World, client: u32, kind: crate::MenuCommandKind) {
     let mut frame = FrameWorld::from_world(world);
     if frame.client_meta(ClientId(client)).is_none() {
         return;
@@ -312,23 +313,9 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         Ok(Value::Undefined)
     });
     presented!(
-        "stoplocalsound",
         "setcardtitle",
         "setcardicon",
         "setcardnameplate",
-        "setblurforplayer",
-        "setdepthoffield",
-        "visionsetnakedforplayer",
-        "visionsetthermalforplayer",
-        "visionsetmissilecamforplayer",
-        "thermalvisionon",
-        "thermalvisionoff",
-        "thermalvisionfofoverlayon",
-        "thermalvisionfofoverlayoff",
-        "stoprumble",
-        "setempjammed",
-        "remotecamerasoundscapeoff",
-        "setrearviewrenderenabled",
         "setweaponhudiconoverride",
         "pingplayer",
         "sayall",
@@ -336,29 +323,14 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         "setspectatedefaults",
         "kc_regweaponforfxremoval",
         "setviewmodel",
-        "viewkick",
-        "stunplayer",
         "playerhide",
-        "startac130",
-        "stopac130",
         "forceusehinton",
         "forceusehintoff",
         "predictstreampos",
-        "player_recoilscaleon",
-        "player_recoilscaleoff",
         "attachshieldmodel",
         "detachshieldmodel",
         "moveshieldmodel",
         "playerforcedeathanim",
-        "beginlocationselection",
-        "endlocationselection",
-        "weaponlockstart",
-        "weaponlockfinalize",
-        "weaponlockfree",
-        "weaponlocknoclearance",
-        "weaponlocktargettooclose",
-        "setspreadoverride",
-        "resetspreadoverride",
         "clientclaimtrigger",
         "clientreleasetrigger",
     );
@@ -371,7 +343,7 @@ pub(super) fn register(registry: &mut NativeRegistry) {
         )*};
     }
     answers!(Value::Int(1) => "isitemunlocked");
-    answers!(Value::Int(0) => "canplayerplacesentry", "isusingturret", "isfiringturret",
+    answers!(Value::Int(0) => "isusingturret",
         "worldpointinreticle_circle");
     answers!(Value::Undefined => "getspectatingplayer");
     answers!(Value::Vector([0.0; 3]) => "getthirdpersoncrosshairoffset");
@@ -597,7 +569,7 @@ fn register_death(registry: &mut NativeRegistry) {
     );
     registry.register(Method, "dropitem", |world, receiver, args| {
         let id = client_of(world, receiver)?;
-        let weapon = weapon_arg(world, args, 0)?;
+        let weapon = player_weapon(world, id, args, 0)?;
         let tick = tick(world);
         match crate::item::drop_weapon(&mut FrameWorld::from_world(world), tick, id, weapon) {
             Some(number) => new_item_entity(world, number, "weapon_item"),
@@ -607,7 +579,7 @@ fn register_death(registry: &mut NativeRegistry) {
     for name in ["dropscavengerbag", "dropscavengeritem"] {
         registry.register(Method, name, |world, receiver, args| {
             let id = client_of(world, receiver)?;
-            let weapon = weapon_arg(world, args, 0)?;
+            let weapon = player_weapon(world, id, args, 0)?;
             let tick = tick(world);
             let mut frame = FrameWorld::from_world(world);
             match crate::item::drop_scavenger_item(&mut frame, tick, id, weapon) {
@@ -660,6 +632,53 @@ fn client_of(world: &World, receiver: &Value) -> Result<ClientId, String> {
     player(world, receiver).map(ClientId)
 }
 
+pub(super) fn link_to(
+    world: &mut World,
+    receiver: &Value,
+    args: &[Value],
+    view: LinkView,
+) -> Result<Value, String> {
+    let client = player(world, receiver)?;
+    let parent = super::natives_engine::entity_id(world, arg(args, 0)?)?;
+    if world.resource::<Runtime>().player_client(parent) == Some(client) {
+        return Err("cannot link an entity to itself".into());
+    }
+    let tag = match args.get(1) {
+        None | Some(Value::Undefined) => None,
+        Some(_) => Some(string(args, 1)?),
+    }
+    .filter(|tag| !tag.is_empty() && !tag.eq_ignore_ascii_case("tag_origin"))
+    .map(Arc::<str>::from);
+    let arc = |index| -> Result<f32, String> {
+        Ok(optional(args, index, float)?
+            .unwrap_or(180.0)
+            .clamp(0.0, 180.0))
+    };
+    let clamp = (view != LinkView::Absolute && args.len() > 3)
+        .then(|| -> Result<[f32; 4], String> { Ok([-arc(5)?, arc(6)?, -arc(3)?, arc(4)?]) })
+        .transpose()?;
+    let (base, axis) = super::players::link_parent_pose(world, parent, tag.as_deref());
+    let origin = FrameWorld::from_world(world)
+        .player(ClientId(client))
+        .map_or(base, |ps| ps.origin);
+    let delta: [f32; 3] = std::array::from_fn(|i| origin[i] - base[i]);
+    let local = std::array::from_fn(|i| (0..3).map(|j| delta[j] * axis[i][j]).sum());
+    super::players::link_player(
+        world,
+        client,
+        PlayerLink {
+            parent,
+            tag,
+            origin: local,
+            angles: [0.0; 3],
+            view,
+            clamp,
+            parent_angles: math_iw4::axis_to_angles(axis),
+        },
+    );
+    Ok(Value::Undefined)
+}
+
 fn flag(args: &[Value], index: usize) -> Result<bool, String> {
     Ok(optional(args, index, int)?.unwrap_or(1) != 0)
 }
@@ -667,6 +686,16 @@ fn flag(args: &[Value], index: usize) -> Result<bool, String> {
 fn weapon_arg(world: &mut World, args: &[Value], index: usize) -> Result<u32, String> {
     let name = string(args, index)?;
     script_player::weapon_named(&FrameWorld::from_world(world), &name)
+}
+
+fn player_weapon(
+    world: &mut World,
+    id: ClientId,
+    args: &[Value],
+    index: usize,
+) -> Result<u32, String> {
+    let weapon = weapon_arg(world, args, index)?;
+    Ok(super::players::bridged_weapon(world, id.0, weapon))
 }
 
 fn weapon_value(world: &mut World, weapon: u32) -> Value {
@@ -869,26 +898,14 @@ fn register_body(registry: &mut NativeRegistry) {
         Ok(Value::Int((held & mask != 0).into()))
     });
     registry.register(Method, "playerlinkto", |world, receiver, args| {
-        let id = client_of(world, receiver)?;
-        super::natives_engine::entity_id(world, arg(args, 0)?)?;
-        let mut frame = FrameWorld::from_world(world);
-        frame.client_meta_mut(id).controls.linked = true;
-        if let Some(ps) = frame.player_mut(id) {
-            ps.velocity = [0.0; 3];
-        }
-        Ok(Value::Undefined)
+        link_to(world, receiver, args, LinkView::Free)
     });
-    for name in ["playerlinktodelta", "playerlinktoabsolute"] {
-        registry.register(Method, name, |world, receiver, args| {
-            let id = client_of(world, receiver)?;
-            super::natives_engine::entity_id(world, arg(args, 0)?)?;
-            FrameWorld::from_world(world)
-                .client_meta_mut(id)
-                .controls
-                .linked = true;
-            Ok(Value::Undefined)
-        });
-    }
+    registry.register(Method, "playerlinktodelta", |world, receiver, args| {
+        link_to(world, receiver, args, LinkView::Delta)
+    });
+    registry.register(Method, "playerlinktoabsolute", |world, receiver, args| {
+        link_to(world, receiver, args, LinkView::Absolute)
+    });
     for name in ["playerlinkedoffsetenable", "playerlinkedoffsetdisable"] {
         registry.register(Method, name, |world, receiver, _| {
             client_of(world, receiver)?;
@@ -999,14 +1016,14 @@ fn register_inventory(registry: &mut NativeRegistry) {
     );
     registry.register(Method, "giveweapon", |world, receiver, args| {
         let id = client_of(world, receiver)?;
-        let weapon = weapon_arg(world, args, 0)?;
+        let weapon = player_weapon(world, id, args, 0)?;
         let akimbo = optional(args, 2, int)?.unwrap_or(0) != 0;
         script_player::give_weapon(&mut FrameWorld::from_world(world), id, weapon, akimbo)?;
         Ok(Value::Undefined)
     });
     registry.register(Method, "takeweapon", |world, receiver, args| {
         let id = client_of(world, receiver)?;
-        let weapon = weapon_arg(world, args, 0)?;
+        let weapon = player_weapon(world, id, args, 0)?;
         script_player::take_weapon(&mut FrameWorld::from_world(world), id, weapon);
         Ok(Value::Undefined)
     });
@@ -1017,20 +1034,20 @@ fn register_inventory(registry: &mut NativeRegistry) {
     });
     registry.register(Method, "hasweapon", |world, receiver, args| {
         let id = client_of(world, receiver)?;
-        let weapon = weapon_arg(world, args, 0)?;
+        let weapon = player_weapon(world, id, args, 0)?;
         Ok(Value::Int(
             script_player::has_weapon(&FrameWorld::from_world(world), id, weapon).into(),
         ))
     });
     registry.register(Method, "setspawnweapon", |world, receiver, args| {
         let id = client_of(world, receiver)?;
-        let weapon = weapon_arg(world, args, 0)?;
+        let weapon = player_weapon(world, id, args, 0)?;
         script_player::set_spawn_weapon(&mut FrameWorld::from_world(world), id, weapon)?;
         Ok(Value::Undefined)
     });
     registry.register(Method, "switchtoweapon", |world, receiver, args| {
         let id = client_of(world, receiver)?;
-        let weapon = weapon_arg(world, args, 0)?;
+        let weapon = player_weapon(world, id, args, 0)?;
         script_player::switch_to_weapon(&mut FrameWorld::from_world(world), id, weapon);
         Ok(Value::Undefined)
     });
@@ -1039,6 +1056,7 @@ fn register_inventory(registry: &mut NativeRegistry) {
         let weapon = FrameWorld::from_world(world)
             .player(id)
             .map_or(0, |ps| ps.weapon);
+        let weapon = super::players::script_weapon(world, id.0, weapon);
         Ok(weapon_value(world, weapon))
     });
     registry.register(Method, "getcurrentprimaryweapon", |world, receiver, _| {
@@ -1046,6 +1064,7 @@ fn register_inventory(registry: &mut NativeRegistry) {
         let weapon = FrameWorld::from_world(world)
             .player(id)
             .map_or(0, |ps| ps.weapon_primary);
+        let weapon = super::players::script_weapon(world, id.0, weapon);
         Ok(weapon_value(world, weapon))
     });
     macro_rules! weapon_list {
@@ -1054,7 +1073,13 @@ fn register_inventory(registry: &mut NativeRegistry) {
                 let id = client_of(world, receiver)?;
                 let list = script_player::WeaponList::$list;
                 let weapons = script_player::weapons(&FrameWorld::from_world(world), id, list);
-                let names = weapons.into_iter().map(|w| weapon_value(world, w)).collect();
+                let names = weapons
+                    .into_iter()
+                    .map(|w| {
+                        let w = super::players::script_weapon(world, id.0, w);
+                        weapon_value(world, w)
+                    })
+                    .collect();
                 natives_math::new_array(world, names)
             });
         )*};
@@ -1068,7 +1093,7 @@ fn register_inventory(registry: &mut NativeRegistry) {
     );
     registry.register(Method, "getweaponammoclip", |world, receiver, args| {
         let id = client_of(world, receiver)?;
-        let weapon = weapon_arg(world, args, 0)?;
+        let weapon = player_weapon(world, id, args, 0)?;
         Ok(Value::Int(script_player::ammo_clip(
             &FrameWorld::from_world(world),
             id,
@@ -1077,7 +1102,7 @@ fn register_inventory(registry: &mut NativeRegistry) {
     });
     registry.register(Method, "getammocount", |world, receiver, args| {
         let id = client_of(world, receiver)?;
-        let weapon = weapon_arg(world, args, 0)?;
+        let weapon = player_weapon(world, id, args, 0)?;
         let frame = FrameWorld::from_world(world);
         Ok(Value::Int(
             script_player::ammo_clip(&frame, id, weapon)
@@ -1093,7 +1118,7 @@ fn register_inventory(registry: &mut NativeRegistry) {
     });
     registry.register(Method, "getweaponammostock", |world, receiver, args| {
         let id = client_of(world, receiver)?;
-        let weapon = weapon_arg(world, args, 0)?;
+        let weapon = player_weapon(world, id, args, 0)?;
         Ok(Value::Int(script_player::ammo_stock(
             &FrameWorld::from_world(world),
             id,
@@ -1102,33 +1127,33 @@ fn register_inventory(registry: &mut NativeRegistry) {
     });
     registry.register(Method, "setweaponammoclip", |world, receiver, args| {
         let id = client_of(world, receiver)?;
-        let weapon = weapon_arg(world, args, 0)?;
+        let weapon = player_weapon(world, id, args, 0)?;
         let count = int(args, 1)?;
         script_player::set_ammo_clip(&mut FrameWorld::from_world(world), id, weapon, count);
         Ok(Value::Undefined)
     });
     registry.register(Method, "setweaponammostock", |world, receiver, args| {
         let id = client_of(world, receiver)?;
-        let weapon = weapon_arg(world, args, 0)?;
+        let weapon = player_weapon(world, id, args, 0)?;
         let count = int(args, 1)?;
         script_player::set_ammo_stock(&mut FrameWorld::from_world(world), id, weapon, count);
         Ok(Value::Undefined)
     });
     registry.register(Method, "givemaxammo", |world, receiver, args| {
         let id = client_of(world, receiver)?;
-        let weapon = weapon_arg(world, args, 0)?;
+        let weapon = player_weapon(world, id, args, 0)?;
         script_player::give_max_ammo(&mut FrameWorld::from_world(world), id, weapon);
         Ok(Value::Undefined)
     });
     registry.register(Method, "givestartammo", |world, receiver, args| {
         let id = client_of(world, receiver)?;
-        let weapon = weapon_arg(world, args, 0)?;
+        let weapon = player_weapon(world, id, args, 0)?;
         script_player::give_start_ammo(&mut FrameWorld::from_world(world), id, weapon);
         Ok(Value::Undefined)
     });
     registry.register(Method, "anyammoforweaponmodes", |world, receiver, args| {
         let id = client_of(world, receiver)?;
-        let weapon = weapon_arg(world, args, 0)?;
+        let weapon = player_weapon(world, id, args, 0)?;
         let frame = FrameWorld::from_world(world);
         let any = script_player::ammo_clip(&frame, id, weapon) > 0
             || script_player::ammo_stock(&frame, id, weapon) > 0;

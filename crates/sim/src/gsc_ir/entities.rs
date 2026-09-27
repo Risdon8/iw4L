@@ -79,6 +79,22 @@ pub(crate) struct EngineState {
     pub map_center: [f32; 3],
     pub winning_team: Option<String>,
     pub objectives: BTreeMap<u8, super::objectives::ScriptObjective>,
+    pub minimap: Option<super::controls::MiniMap>,
+    pub weapon_locks: BTreeMap<u32, super::controls::ScriptLock>,
+    pub guides: BTreeMap<u64, super::guidance::Guide>,
+    pub turrets: BTreeMap<u64, super::turrets::Turret>,
+    pub effects: BTreeMap<u64, PersistentFx>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct PersistentFx {
+    pub name: String,
+    pub origin: [f32; 3],
+    pub forward: [f32; 3],
+    pub up: [f32; 3],
+    pub start_ms: Option<i32>,
+    pub repeat_ms: i32,
+    pub cull_distance: f32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -162,8 +178,70 @@ pub(crate) struct Motion {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum MotionPath {
-    Linear { from: [f32; 3], to: [f32; 3] },
-    Ballistic { from: [f32; 3], velocity: [f32; 3] },
+    Linear {
+        from: [f32; 3],
+        to: [f32; 3],
+        accel: f32,
+        decel: f32,
+    },
+    Ballistic {
+        from: [f32; 3],
+        velocity: [f32; 3],
+    },
+}
+
+pub(crate) const GRAVITY: f32 = 800.0;
+
+impl Motion {
+    pub(crate) fn sample(&self, now: i64) -> ([f32; 3], [f32; 3]) {
+        let elapsed = (now - self.start_ms).clamp(0, self.duration_ms);
+        let t = elapsed as f32 / 1000.0;
+        match self.path {
+            MotionPath::Linear {
+                from,
+                to,
+                accel,
+                decel,
+            } => {
+                let total = self.duration_ms as f32 / 1000.0;
+                let peak = 2.0 / (2.0 * total - accel - decel);
+                let cruise_end = total - decel;
+                let (fraction, rate) = if t < accel {
+                    (0.5 * peak * t * t / accel, peak * t / accel)
+                } else if t <= cruise_end {
+                    (0.5 * peak * accel + peak * (t - accel), peak)
+                } else {
+                    let u = t - cruise_end;
+                    (
+                        0.5 * peak * accel + peak * (cruise_end - accel) + peak * u
+                            - 0.5 * peak * u * u / decel,
+                        peak * (1.0 - u / decel),
+                    )
+                };
+                let fraction = if elapsed >= self.duration_ms {
+                    1.0
+                } else {
+                    fraction
+                };
+                let rate = if elapsed >= self.duration_ms {
+                    0.0
+                } else {
+                    rate
+                };
+                (
+                    std::array::from_fn(|i| from[i] + (to[i] - from[i]) * fraction),
+                    std::array::from_fn(|i| (to[i] - from[i]) * rate),
+                )
+            }
+            MotionPath::Ballistic { from, velocity } => {
+                let mut p: [f32; 3] = std::array::from_fn(|i| from[i] + velocity[i] * t);
+                p[2] -= 0.5 * GRAVITY * t * t;
+                let mut v = velocity;
+                v[2] -= GRAVITY * t;
+                (p, v)
+            }
+        }
+    }
 }
 
 fn vector(text: &str) -> [f32; 3] {
@@ -225,7 +303,7 @@ impl Runtime {
                 .count()
                 >= MAX_SCRIPT_ENTITIES
             {
-                return Err("G_Spawn: no free entities".into());
+                return Err("no free entities".into());
             }
             let number = self.next_entity_number;
             self.next_entity_number += 1;
@@ -373,7 +451,6 @@ impl Runtime {
                 self.engine.world = Some(world);
                 continue;
             }
-            // Path nodes belong to the path system, not the entity list.
             if classname.is_empty() || classname.starts_with("node_") {
                 continue;
             }

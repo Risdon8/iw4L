@@ -75,7 +75,7 @@ pub fn player_prone_allowed<C: CollisionBackend>(
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "preserves the proven BG_CheckProne call boundary"
+    reason = "one call boundary for the prone check"
 )]
 #[must_use]
 pub fn bg_check_prone<C: CollisionBackend>(

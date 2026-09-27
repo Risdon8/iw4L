@@ -159,7 +159,6 @@ pub(super) fn string(args: &[Value], index: usize) -> Result<String, String> {
     }
 }
 
-/// The dvar's text, or the optional second argument when the dvar does not exist.
 fn dvar(world: &mut World, args: &[Value]) -> Result<String, String> {
     let fallback = match args.len() {
         1 => String::new(),
@@ -185,7 +184,6 @@ fn dvar_value(args: &[Value]) -> Result<String, String> {
     string(args, 1)
 }
 
-/// C `atoi`: optional whitespace and sign, then digits; wraps like the MSVC CRT.
 pub(super) fn atoi(text: &str) -> i32 {
     let text = text.trim_start_matches([' ', '\t', '\n', '\r', '\x0b', '\x0c']);
     let (negative, digits) = match text.as_bytes().first() {
@@ -206,7 +204,6 @@ pub(super) fn atoi(text: &str) -> i32 {
     }
 }
 
-/// C `atof`: the longest decimal prefix, 0 when there is none.
 pub(super) fn atof(text: &str) -> f64 {
     let text = text.trim_start_matches([' ', '\t', '\n', '\r', '\x0b', '\x0c']);
     let bytes = text.as_bytes();

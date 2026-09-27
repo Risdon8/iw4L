@@ -37,7 +37,7 @@ pub(crate) fn update(
     view: Option<Res<frame::ViewSubject>>,
 ) {
     pass.use_hint = TessJob::Hide;
-    if !surface.is_ready() || input.menu_open || view.as_ref().is_some_and(|v| v.in_killcam()) {
+    if !surface.is_ready() || input.script_menu_open || view.as_ref().is_some_and(|v| v.in_killcam()) {
         memory.caption = None;
         return;
     }

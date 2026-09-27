@@ -848,31 +848,25 @@ pub(crate) fn advance_weapon_command(
 
 fn apply_weapon_anim_event(world: &mut FrameWorld, id: ClientId, event: u8) {
     let Some(script) = world.player_anim_script() else {
-        world.count_fire_anim_gap();
         return;
     };
     let mut seed = world.anim_event_seed();
     let (view_w, primary) = {
         let Some(ps) = world.player_mut(id) else {
-            world.count_fire_anim_gap();
             return;
         };
         crate::pmove_anim_weapon_ids(ps)
     };
     let view_facts = world.combat_facts_for(view_w);
     let primary_facts = world.combat_facts_for(primary);
-    let applied = {
+    {
         let Some(ps) = world.player_mut(id) else {
-            world.count_fire_anim_gap();
             return;
         };
         let conds = crate::anim_conditions_from_pmove(ps, view_facts, primary_facts);
-        script.apply_event(ps, event, &conds, &mut seed)
-    };
-    world.set_anim_event_seed(seed);
-    if !applied {
-        world.count_fire_anim_gap();
+        script.apply_event(ps, event, &conds, &mut seed);
     }
+    world.set_anim_event_seed(seed);
 }
 
 pub fn spread_pellet_direction(
@@ -1000,6 +994,7 @@ pub(crate) fn phase_trace(
                 mask: MASK_BULLET_WORLD,
                 ignore: Some(em.attacker),
                 ignore_hit: None,
+                ignore_model: None,
             },
             pen,
             world.penetration_table(),
@@ -1288,6 +1283,7 @@ fn fire_weapon_melee(
                 mask: MASK_BULLET_WORLD,
                 ignore: Some(attacker),
                 ignore_hit: None,
+                ignore_model: None,
             },
             weapon_iw4::BulletPenFacts::default(),
             world.penetration_table(),

@@ -403,7 +403,7 @@ pub(crate) fn radius_player_candidates(
     let area_half = gamemode_iw4::g_radius_damage_area_half_extent(radius);
     let query =
         clipmap_iw4::AreaBounds::from_mid_half(origin, [area_half; 3]).unwrap_or_else(|_| {
-            panic!("G_RadiusDamage query Bounds are invalid");
+            panic!("radius damage query Bounds are invalid");
         });
     world
         .area_entity_candidates(query, u32::MAX, AREA_ENTITY_CAPACITY)

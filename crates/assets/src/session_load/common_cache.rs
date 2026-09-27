@@ -221,6 +221,7 @@ pub(super) async fn ensure_common(key: CommonKey) -> (Arc<CommonSet>, &'static s
 
 pub struct ShellCommon {
     pub weapons: WeaponRegistry,
+    pub strings: LocalizeCatalog,
     pub tables: Vec<(crate::AssetNamespace, crate::CapturedStringTable)>,
     pub report: Vec<String>,
 }
@@ -249,6 +250,7 @@ pub async fn load_shell_common(games: crate::GamesRoot) -> ShellCommon {
     }
     ShellCommon {
         weapons,
+        strings: common.products.strings.clone(),
         tables: common.cac_tables.clone(),
         report,
     }

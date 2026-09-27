@@ -14,7 +14,7 @@ pub fn step(
 enters through `TickInput` and leaves through `Snapshot`. There is no second
 door. `try_step` exposes the same path as a `Result<Snapshot, gsc_ir::Fault>`;
 `step` panics on script failure. Authority/replay require a loaded, started GSC
-program. The gameplay cutover is incomplete; see `GSC-RUNTIME.md`.
+program.
 
 ## One function, three callers
 
@@ -49,4 +49,4 @@ A human at a keyboard and a bot both arrive as entries in `TickInput.cmds`.
 reconciles the local client against one. Both live in `crates/sim/src/adopt.rs`
 and answer with an `AdoptReport`.
 
-See [`ENTITIES.md`](ENTITIES.md) for snapshots and [`GSC-RUNTIME.md`](GSC-RUNTIME.md) for script execution and migration.
+See [`ENTITIES.md`](ENTITIES.md) for snapshots and [`GSC-RUNTIME.md`](GSC-RUNTIME.md) for script execution.

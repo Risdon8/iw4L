@@ -59,7 +59,7 @@ pub(crate) fn register_weapon_commands(
     if registry.resolve("give").is_none() {
         registry.register(
             crate::CommandSpec::new("give")
-                .usage("give <game:weapon> [attachment...] — equip a weapon on the active slot (e.g. give iw5:acr acog)")
+                .usage("give <game:weapon> [attachment...] | give killstreak <name> — equip a weapon on the active slot (e.g. give iw5:acr acog), or grant a killstreak (e.g. give killstreak airdrop)")
                 .arg(LiveListCompleter(Arc::clone(&completions.give))),
         );
     }
@@ -135,6 +135,17 @@ pub(crate) fn route_weapon_commands(
                     );
                     continue;
                 };
+                if arg == "killstreak" {
+                    give_killstreak(
+                        cmd.args.get(1),
+                        &presented,
+                        &local,
+                        &mut inbox,
+                        &mut seq,
+                        |msg| echo(msg, &mut console, &mut line),
+                    );
+                    continue;
+                }
                 let Some(weapons) = weapons.as_ref() else {
                     echo(
                         "give: weapon catalog not loaded".into(),
@@ -245,6 +256,41 @@ pub(crate) fn route_weapon_commands(
             }
             _ => {}
         }
+    }
+}
+
+fn give_killstreak(
+    name: Option<&String>,
+    presented: &PresentedSnapshot,
+    local: &LocalPresentClient,
+    inbox: &mut ClientActionInbox,
+    seq: &mut net::ActionRequestIds,
+    mut echo: impl FnMut(String),
+) {
+    let Some(name) = name else {
+        echo("usage: give killstreak <name> (e.g. airdrop, uav, predator_missile)".into());
+        return;
+    };
+    if !alive(presented, local.0) {
+        echo("give killstreak: not Alive — spawn a class first".into());
+        return;
+    }
+    let Some(field) = sim::menu_response_field(name) else {
+        echo(format!("give killstreak: `{name}` is too long"));
+        return;
+    };
+    let request_id = seq.allocate();
+    match inbox.push(
+        local.0,
+        ClientAction::GiveKillstreak {
+            request_id,
+            name: field,
+        },
+    ) {
+        Ok(()) => echo(format!(
+            "give killstreak: queued {name} request_id={request_id}"
+        )),
+        Err(error) => echo(format!("give killstreak: {error}")),
     }
 }
 

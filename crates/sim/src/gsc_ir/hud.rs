@@ -126,7 +126,7 @@ pub(super) fn new_hud_elem(world: &mut World, audience: HudAudience) -> Result<V
         team,
     ) else {
         world.resource_mut::<Runtime>().delete_entity(id);
-        return Err("G_HudElems: no free hud elems".into());
+        return Err("no free hud elems".into());
     };
     let mut runtime = world.resource_mut::<Runtime>();
     for (name, value) in DEFAULTS {

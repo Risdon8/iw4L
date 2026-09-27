@@ -76,6 +76,7 @@ impl Plugin for HudPlugin {
                     sync_zone_atlases,
                     warm_hud_images,
                     ensure_hud_root,
+                    sync_frontend_camera,
                     hud_stamp_setup,
                     ApplyDeferred,
                     hud_stamp_deferred,
@@ -163,10 +164,11 @@ fn hud_root_should_show(screen: AppScreen, ui_draw: bool) -> bool {
 
 fn hide_tess_when_hud_hidden(
     root: Res<HudRootVisible>,
+    screen: Res<AppScreen>,
     mut frame: ResMut<crate::gpu_list::HudTessGpuFrame>,
     mut latches: Query<&mut crate::gpu_list::GpuListLatch>,
 ) {
-    if root.0 == Some(1) {
+    if root.0 == Some(1) || *screen == AppScreen::MainMenu {
         return;
     }
     frame.clear_geometry();
@@ -266,6 +268,36 @@ fn warm_hud_images(
     hud_images.warm_present_stems(&mut images, catalog.as_deref(), compass.as_deref());
 }
 
+#[derive(Component)]
+struct FrontendCamera;
+
+fn sync_frontend_camera(
+    mut commands: Commands,
+    screen: Res<AppScreen>,
+    cameras: Query<Entity, With<FrontendCamera>>,
+) {
+    if *screen == AppScreen::MainMenu {
+        if cameras.is_empty() {
+            commands.spawn((
+                FrontendCamera,
+                Camera3d::default(),
+                bevy::camera::CompositingSpace::Srgb,
+                bevy::core_pipeline::tonemapping::Tonemapping::None,
+                Camera {
+                    order: -1,
+                    ..default()
+                },
+                bevy::render::view::Msaa::Off,
+                IsDefaultUiCamera,
+            ));
+        }
+    } else {
+        for camera in &cameras {
+            commands.entity(camera).despawn();
+        }
+    }
+}
+
 fn ensure_hud_root(mut commands: Commands, existing: Query<Entity, With<HudRoot>>) {
     if !existing.is_empty() {
         return;
@@ -305,12 +337,11 @@ fn ensure_hud_root(mut commands: Commands, existing: Query<Entity, With<HudRoot>
 fn sync_hud_visibility(
     screen: Res<AppScreen>,
     ui_draw: Option<Res<UiDraw>>,
-    input: Option<Res<frame::HudInputView>>,
     mut roots: Query<&mut Visibility, With<HudRoot>>,
     mut visible: ResMut<HudRootVisible>,
 ) {
     let ui_on = ui_draw.is_some_and(|d| d.0);
-    let show = hud_root_should_show(*screen, ui_on) && !input.is_some_and(|input| input.menu_open);
+    let show = hud_root_should_show(*screen, ui_on);
     visible.0 = Some(i32::from(show));
     for mut vis in &mut roots {
         let want = if show {

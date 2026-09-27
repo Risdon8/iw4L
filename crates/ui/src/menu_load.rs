@@ -12,7 +12,7 @@ use crate::layers::{UiLayer, UiLayers};
 use crate::loading::{
     LoadingCamera, LoadingRoot, LoadingScreen, OverlayUiCamera, dismiss_loading_overlay,
 };
-use crate::menu::{MenuEnabled, MenuMapList, PendingMenuMap};
+use crate::menu::MenuMapList;
 use frame::{AppScreen, LaunchIdentity, LaunchReport, MapLoadApproved, ReturnedToMenu};
 
 fn launch_report(
@@ -96,26 +96,9 @@ fn insert_loading_chrome(
     });
 }
 
-pub(crate) fn begin_map_from_menu(
-    mut commands: Commands,
-    mut pending: ResMut<PendingMenuMap>,
-    mut swap: ResMut<session::SessionSwapRequest>,
-    game_setup: Res<crate::menu::GameSetupDraft>,
-) {
-    let Some(requested) = pending.0.take() else {
-        return;
-    };
-    commands.insert_resource(game_setup.selected_mode);
-    match swap.request_zone(requested.clone()) {
-        Ok(id) => diag::info!(Ui, "menu: loading {requested} (swap #{id})"),
-        Err(error) => diag::warn!(Ui, "menu: load `{requested}` refused — {error}"),
-    }
-}
-
 pub(crate) fn begin_load_from_session(
     mut commands: Commands,
     mut approved: MessageReader<MapLoadApproved>,
-    mut menu_enabled: ResMut<MenuEnabled>,
     mut app_screen: ResMut<AppScreen>,
     mut class_overlay: ResMut<ClassSelectOverlayOpen>,
     identity: Option<ResMut<LaunchIdentity>>,
@@ -149,7 +132,6 @@ pub(crate) fn begin_load_from_session(
     if let Ok(mut window) = window.single_mut() {
         window.title = format!("iw4l — {zone}");
     }
-    menu_enabled.0 = false;
     class_overlay.0 = false;
     *app_screen = AppScreen::Loading;
     commands.insert_resource(probe);
@@ -171,7 +153,6 @@ pub(crate) fn begin_load_from_session(
 pub(crate) fn restore_menu_on_return(
     mut commands: Commands,
     mut returned: MessageReader<ReturnedToMenu>,
-    mut menu_enabled: ResMut<MenuEnabled>,
     mut class_overlay: ResMut<ClassSelectOverlayOpen>,
     mut maps: ResMut<MenuMapList>,
     identity: Option<Res<LaunchIdentity>>,
@@ -184,7 +165,6 @@ pub(crate) fn restore_menu_on_return(
     }
     class_overlay.0 = false;
     *app_screen = AppScreen::MainMenu;
-    menu_enabled.0 = true;
 
     dismiss_loading_overlay(&mut commands, chrome.iter(), overlay_cams.iter(), false);
     if maps.0.is_empty() {
@@ -254,24 +234,16 @@ fn install_menu_strings_prepare(
 }
 
 pub(crate) fn register_menu_load_systems(app: &mut App) {
-    app.add_message::<ReturnedToMenu>()
-        .add_systems(Update, begin_map_from_menu.in_set(ClientSet::Ui))
-        .add_systems(
-            Update,
-            crate::retail_menu::sync_frontend_music
-                .after(begin_map_from_menu)
-                .in_set(ClientSet::Ui),
+    app.add_message::<ReturnedToMenu>().add_systems(
+        Update,
+        (
+            begin_load_from_session,
+            restore_menu_on_return.after(begin_load_from_session),
+            start_menu_strings_prepare,
+            install_menu_strings_prepare.after(start_menu_strings_prepare),
         )
-        .add_systems(
-            Update,
-            (
-                begin_load_from_session,
-                restore_menu_on_return.after(begin_load_from_session),
-                start_menu_strings_prepare,
-                install_menu_strings_prepare.after(start_menu_strings_prepare),
-            )
-                .after(assets::MapLoadApproval)
-                .before(assets::MatchLoadDispatch)
-                .in_set(ClientSet::Load),
-        );
+            .after(assets::MapLoadApproval)
+            .before(assets::MatchLoadDispatch)
+            .in_set(ClientSet::Load),
+    );
 }

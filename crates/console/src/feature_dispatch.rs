@@ -23,9 +23,7 @@ use replay::{
     Recording, ReplaySession,
 };
 use sim::{ClientAction, ClientId};
-use ui::{
-    Focus, MenuEnabled, MenuMapList, MenuShellCmd, NavDir, RetailMenuStack, UiDraw, play_map_layout,
-};
+use ui::UiDraw;
 
 use crate::{ConsoleCommand, ConsoleDispatch, ConsoleLine, ConsoleSettings, ConsoleState};
 
@@ -37,7 +35,7 @@ pub(crate) struct ConsoleEcho<'w> {
 }
 
 impl ConsoleEcho<'_> {
-    fn write(&mut self, msg: impl Into<String>) {
+    pub(crate) fn write(&mut self, msg: impl Into<String>) {
         let msg = msg.into();
         diag::info!(Console, "{msg}");
         self.line.0 = msg.clone();
@@ -377,14 +375,8 @@ pub(crate) fn route_ui_commands(
         Res<ConsoleSettings>,
         ResMut<ConsoleLine>,
     ),
-    mut ui: (
-        ResMut<UiDraw>,
-        Option<Res<MenuEnabled>>,
-        Option<ResMut<RetailMenuStack>>,
-        Option<Res<Focus>>,
-        MessageWriter<MenuShellCmd>,
-        Option<Res<MenuMapList>>,
-    ),
+    mut ui_draw: ResMut<UiDraw>,
+    menus: Res<hud::ScriptMenus>,
     identity: Option<Res<LaunchIdentity>>,
     (authority, authority_clock, presented): (
         Option<Res<AuthorityWorld>>,
@@ -405,16 +397,16 @@ pub(crate) fn route_ui_commands(
         match cmd.name.as_str() {
             "ui" => match cmd.args.as_slice() {
                 [] => echo(
-                    format!("ui = {}", if ui.0.0 { 1 } else { 0 }),
+                    format!("ui = {}", if ui_draw.0 { 1 } else { 0 }),
                     console,
                     line,
                 ),
                 [value] if value == "0" || value.eq_ignore_ascii_case("off") => {
-                    ui.0.0 = false;
+                    ui_draw.0 = false;
                     echo("ui 0".into(), console, line);
                 }
                 [value] if value == "1" || value.eq_ignore_ascii_case("on") => {
-                    ui.0.0 = true;
+                    ui_draw.0 = true;
                     echo("ui 1".into(), console, line);
                 }
                 _ => echo("usage: ui [0|1]".into(), console, line),
@@ -433,43 +425,44 @@ pub(crate) fn route_ui_commands(
                 }
                 _ => echo(format!("usage: {} <menu>", cmd.name), console, line),
             },
+            "menutext" => {
+                menu_requests.write(frame::UiMenuRequest::Text(cmd.args.join(" ")));
+            }
             "menukey" => {
                 let key = match cmd.args.first().map(|a| a.to_ascii_lowercase()).as_deref() {
                     Some("escape") => Some(frame::UiMenuKey::Escape),
                     Some("enter") => Some(frame::UiMenuKey::Enter),
                     Some("up") => Some(frame::UiMenuKey::Up),
                     Some("down") => Some(frame::UiMenuKey::Down),
+                    Some("left") => Some(frame::UiMenuKey::Left),
+                    Some("right") => Some(frame::UiMenuKey::Right),
+                    Some("home") => Some(frame::UiMenuKey::Home),
+                    Some("end") => Some(frame::UiMenuKey::End),
+                    Some("backspace") => Some(frame::UiMenuKey::Backspace),
+                    Some("delete") => Some(frame::UiMenuKey::Delete),
                     _ => None,
                 };
                 match key {
                     Some(key) => {
                         menu_requests.write(frame::UiMenuRequest::Key(key));
                     }
-                    None => echo("usage: menukey escape|enter|up|down".into(), console, line),
+                    None => echo(
+                        "usage: menukey escape|enter|up|down|left|right|home|end|backspace|delete"
+                            .into(),
+                        console,
+                        line,
+                    ),
                 }
             }
 
             "menu" => match parse_menu_args(&cmd.args) {
                 Err(msg) => echo(msg, console, line),
                 Ok(MenuVerb::Status) => {
-                    let enabled = ui.1.as_ref().map(|e| e.0);
-                    let stack = ui.2.as_ref().map(|s| s.names.join(",")).unwrap_or_default();
-                    let focus =
-                        ui.3.as_ref()
-                            .and_then(|f| f.widget.clone())
-                            .unwrap_or_else(|| "NULL".into());
-                    let maps = ui.5.as_ref().map(|m| play_map_layout(&m.0));
                     echo(
                         format!(
-                            "menu: enabled={} stack=[{stack}] focus={focus}{}",
-                            enabled.map(|e| if e { "1" } else { "0" }).unwrap_or("NULL"),
-                            match maps {
-                                Some(l) => format!(
-                                    " maps={} iw4={} iw5={} t5={} pages={}",
-                                    l.maps_n, l.iw4_n, l.iw5_n, l.t5_n, l.pages_n
-                                ),
-                                None => " maps=NULL".into(),
-                            }
+                            "menu: stack=[{}] focus={:?}",
+                            menus.open_names().join(","),
+                            menus.focused_item()
                         ),
                         console,
                         line,
@@ -490,50 +483,23 @@ pub(crate) fn route_ui_commands(
                     ),
                     Err(error) => echo(format!("menu dump: {error}"), console, line),
                 },
-                Ok(MenuVerb::Open(name)) => match retail_menu_name(&name) {
-                    Some(target) => {
-                        if let Some(stack) = ui.2.as_mut() {
-                            if target == "main" {
-                                stack.names.clear();
-                            }
-                            if stack.names.last().map(String::as_str) != Some(target) {
-                                stack.names.push(target.into());
-                            }
-                            echo(format!("menu: open {target}"), console, line);
-                        } else {
-                            echo(
-                                "menu open: RetailMenuStack resource missing".into(),
-                                console,
-                                line,
-                            );
-                        }
-                    }
-                    None => echo(
-                        format!("menu open: `{name}` is not a screen yet (typed gap)"),
-                        console,
-                        line,
-                    ),
-                },
-                Ok(MenuVerb::Nav(dir)) => match NavDir::parse(&dir) {
-                    Some(nav) => {
-                        ui.4.write(MenuShellCmd::Nav(nav));
-                        echo(format!("menu: nav {dir}"), console, line);
-                    }
-                    None => echo("usage: menu nav up|down|left|right".into(), console, line),
-                },
+                Ok(MenuVerb::Open(name)) => {
+                    menu_requests.write(frame::UiMenuRequest::Open(name));
+                }
+                Ok(MenuVerb::Nav(dir)) => {
+                    let key = match dir.as_str() {
+                        "up" => frame::UiMenuKey::Up,
+                        "down" => frame::UiMenuKey::Down,
+                        _ => continue,
+                    };
+                    menu_requests.write(frame::UiMenuRequest::Key(key));
+                }
                 Ok(MenuVerb::Accept) => {
-                    ui.4.write(MenuShellCmd::Accept);
-                    echo("menu: accept".into(), console, line);
+                    menu_requests.write(frame::UiMenuRequest::Key(frame::UiMenuKey::Enter));
                 }
                 Ok(MenuVerb::Back) => {
-                    ui.4.write(MenuShellCmd::Back);
-                    echo("menu: back".into(), console, line);
+                    menu_requests.write(frame::UiMenuRequest::Key(frame::UiMenuKey::Escape));
                 }
-                Ok(MenuVerb::Device(dev)) => echo(
-                    format!("menu device {dev}: InputDevice not wired (S4) — typed gap"),
-                    console,
-                    line,
-                ),
             },
             _ => {}
         }
@@ -911,7 +877,8 @@ pub(crate) fn route_debug_feature_commands(
                         echo(format!("bot give: {id:?} is not a bot"), console, line);
                         continue;
                     }
-                    match crate::weapon_dispatch::resolve_give_id(&weapons.0, &weapon, &attachments) {
+                    match crate::weapon_dispatch::resolve_give_id(&weapons.0, &weapon, &attachments)
+                    {
                         Ok(weapon_id) => {
                             let request_id = give_seq.allocate();
                             if let Err(error) = inbox.push(
@@ -948,7 +915,8 @@ pub(crate) fn route_debug_feature_commands(
             }
             "splash" => match cmd.args.as_slice() {
                 [] => echo(
-                    "usage: splash <key> [optionalNumber] — CG_ActivateSplash slot 0 (mp/splashTable.csv)".into(),
+                    "usage: splash <key> [optionalNumber] — splash slot 0 (mp/splashTable.csv)"
+                        .into(),
                     console,
                     line,
                 ),
@@ -960,7 +928,7 @@ pub(crate) fn route_debug_feature_commands(
                     pending_splash.key = Some(key.clone());
                     pending_splash.optional_number = optional;
                     echo(
-                        format!("splash: queued `{key}` optional={optional} (CG_ActivateSplash slot 0)"),
+                        format!("splash: queued `{key}` optional={optional} (slot 0)"),
                         console,
                         line,
                     );
@@ -1358,12 +1326,16 @@ pub fn register_feature_commands(registry: &mut crate::ConsoleRegistry, maps: &[
         ),
         ("openmenu", "openmenu <menu> — open an in-game menuDef"),
         (
+            "menutext",
+            "menutext <text> — type into the active native menu field",
+        ),
+        (
             "closemenu",
             "closemenu <menu> — close an open in-game menuDef",
         ),
         (
             "menukey",
-            "menukey escape|enter|up|down — a key to the top in-game menu (not a retail command string)",
+            "menukey escape|enter|up|down|left|right|home|end|backspace|delete — a key to the top in-game menu",
         ),
         (
             "dump",
@@ -1379,15 +1351,12 @@ pub fn register_feature_commands(registry: &mut crate::ConsoleRegistry, maps: &[
         ),
         (
             "menu",
-            "menu [open <screen> | nav up|down|left|right | accept | back | device pad|mouse | dump] — shell surface; back/device remain typed gaps (S2/S4)",
+            "menu [open <screen> | nav up|down | accept | back | dump] — shell surface; back/device remain typed gaps (S2/S4)",
         ),
-        (
-            "hurt",
-            "hurt — stamp one undirected CG_DamageFeedback punch (listen-host experiment)",
-        ),
+        ("hurt", "hurt — stamp one undirected damage-feedback punch"),
         (
             "splash",
-            "splash <key> [optionalNumber] — CG_ActivateSplash slot 0 from mp/splashTable.csv (one_shot_kill, longshot, capture, …)",
+            "splash <key> [optionalNumber] — splash slot 0 from mp/splashTable.csv (one_shot_kill, longshot, capture, …)",
         ),
         (
             "wait",
@@ -1518,7 +1487,7 @@ fn parse_finite(s: &String) -> Result<f32, String> {
         .ok_or_else(|| format!("bot: not a finite number `{s}`"))
 }
 
-const MENU_USAGE: &str = "usage: menu [open <screen> | nav up|down|left|right | accept | back | device pad|mouse | dump]";
+const MENU_USAGE: &str = "usage: menu [open <screen> | nav up|down | accept | back | dump]";
 
 #[derive(Debug, PartialEq)]
 enum MenuVerb {
@@ -1528,7 +1497,6 @@ enum MenuVerb {
     Nav(String),
     Accept,
     Back,
-    Device(String),
 }
 
 fn parse_menu_args(args: &[String]) -> Result<MenuVerb, String> {
@@ -1554,32 +1522,13 @@ fn parse_menu_args(args: &[String]) -> Result<MenuVerb, String> {
         "nav" => {
             let dir = args.get(1).map(String::as_str).unwrap_or("");
             match dir {
-                "up" | "down" | "left" | "right" if args.len() == 2 => {
-                    Ok(MenuVerb::Nav(dir.to_owned()))
-                }
-                _ => Err("usage: menu nav up|down|left|right".into()),
+                "up" | "down" if args.len() == 2 => Ok(MenuVerb::Nav(dir.to_owned())),
+                _ => Err("usage: menu nav up|down".into()),
             }
         }
         "accept" if args.len() == 1 => Ok(MenuVerb::Accept),
         "back" if args.len() == 1 => Ok(MenuVerb::Back),
-        "device" => match args.get(1).map(String::as_str) {
-            Some("pad") | Some("mouse") if args.len() == 2 => Ok(MenuVerb::Device(args[1].clone())),
-            _ => Err("usage: menu device pad|mouse".into()),
-        },
         "accept" | "back" => Err(MENU_USAGE.into()),
         _ => Err(MENU_USAGE.into()),
-    }
-}
-
-fn retail_menu_name(name: &str) -> Option<&str> {
-    match name {
-        "main" => Some("main"),
-        "maps" | "map_setup" | "mapselect" | "play" => Some("map_setup"),
-        "settings" | "options" => Some("options"),
-        "online" => Some("find_lobbies"),
-        "classes" | "class_setup" | "cac" | "classsetup" => Some("class_setup"),
-        "game_mode_select" | "game_map_select" | "game_lobby" | "find_lobbies"
-        | "lobby_game_setup" => Some(name),
-        _ => None,
     }
 }

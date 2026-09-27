@@ -1,7 +1,7 @@
 # GSC → IR → Bevy
 
 Gameplay policy belongs to loaded GSC; Rust supplies language and engine primitives.
-Every native the IW4 mode programs link is bound. The scripts own the match flow,
+The scripts own the match flow,
 player connect/spawn/damage/killed, the in-game menus, and the sounds they play.
 
 ## Sources and installation
@@ -19,7 +19,7 @@ entries before authority ticks: the gametype `main`, the map `main` (if present)
 `_callbacksetup`'s `codecallback_startgametype`. Missing dependencies, unsupported
 syntax, unresolved names and unbound natives fail the transaction.
 
-Map entities follow the engine: `worldspawn` is kept as level settings (`getnorthyaw`),
+Map entities: `worldspawn` is kept as level settings (`getnorthyaw`),
 `script_struct` blocks become plain objects appended to `level.struct`, and every other
 block, known classname or not, becomes a script entity with typed keys (`origin`,
 `angles`, `angle` as yaw, integer `spawnflags`/`count`/`health`/`dmg`/`maxhealth`,
@@ -41,7 +41,7 @@ never resolve to builtins. A developer builtin used as a statement compiles to n
 (arguments are not evaluated); using its value or referencing it fails the load.
 `prof_begin`/`prof_end` statements compile to nothing. SHA-256 covers decompressed source bytes
 after terminator removal. Fingerprints hash IR version 3 and each module's
-`(site, realm)`; only `(server, iw4)` is instantiated. Calls, `::f` references (script
+`(site, realm)`; server modules of the IW4 and T5 realms are instantiated. Calls, `::f` references (script
 `Function` or native `Builtin`), locals (per-function slots) and field names (symbol ids)
 are resolved at load, and `install` binds native slots once.
 UTF-8 and single-byte sources are supported; developer blocks are excluded.
@@ -93,7 +93,7 @@ keep persistent script values in script-owned roots rather than retain raw handl
 
 ## Engine boundary and restoration
 
-Natives live in three modules:
+Natives are grouped by what they touch; the core three:
 - `iw4_natives`: dvars (`getdvar*` with an optional default for a missing dvar,
   `setdvar` storing a localized value as its reference, `setdvarifuninitialized`,
   `makedvarserverinfo`), precache and `loadfx` (allowed only while the first tick is
@@ -111,12 +111,15 @@ Natives live in three modules:
 Sounds the scripts play (`playLocalSound`, `playSoundToPlayer`, `playSoundToTeam`)
 reach the client. Effects, rumble and earthquakes validate their receiver and are
 kept in `Runtime.presented` or dropped. In-game menus (team, class, escape, leave-game,
-scoreboard header) run from their menuDefs; the frontend shell is still Rust.
+scoreboard header) and the IW4L frontend run from menuDefs through the same ordered
+GPU menu pass. `crates/ui/menus/frontend.json` defines IW4L navigation and native
+menu styling; frontend service commands connect it to session and master APIs.
 
 The scripts drive the match phase. Every `level` notify is recorded as a signal, and
 the simulation reads them after the scheduler each tick: `prematch_over` finishes the
-prematch (movement unlocks), `exitlevel` moves to intermission. `map_restart` is
-recorded and not acted on.
+prematch (movement unlocks), `exitlevel` moves to intermission. `map_restart` frees
+the level's entities and hud elements, reloads the scripts and keeps the primitive
+part of `game` (and `pers` when asked to persist).
 Scripts run and are checked only on authority frames (`try_step`/`step` with
 `StepReason::AuthorityFrame`); prediction of new and replayed commands steps a
 script-less world.
@@ -127,7 +130,8 @@ Faults are sticky and gate later engine phases; earlier writes are not rolled ba
 
 ## Remaining
 
-Killstreak natives (turrets, `beginLocationSelection`, `spawnPlane`), `stunPlayer`,
-and a live bomb plant/defuse check. The frontend menus (main menu, create-a-class,
-lobby, server browser) are still the Rust shell. A true dedicated server still runs
-on the listen runtime.
+A live bomb plant/defuse check. Native IW4L menus can create a private lobby,
+select a map/mode, start a match and return to the frontend. Browser/public-lobby
+actions are connected but still need multiplayer validation. Class editing and
+settings controls still need native bindings and IW4L flow completion. A true dedicated server still runs on the
+listen runtime.

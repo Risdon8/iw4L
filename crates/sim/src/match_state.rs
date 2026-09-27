@@ -469,6 +469,15 @@ pub struct ClientSnapshotMeta {
     pub shellshock: Option<hud_iw4::ShockParams>,
 
     pub menu_commands: Vec<MenuCommand>,
+
+    pub location_selection: Option<LocationSelection>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct LocationSelection {
+    pub material: String,
+    pub choose_direction: bool,
+    pub radius: f32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -482,6 +491,7 @@ pub enum MenuCommandKind {
     Open(String),
     ClosePopup,
     CloseInGame,
+    Client { name: String, args: Vec<String> },
 }
 
 pub const MENU_COMMAND_TAIL: usize = 8;
@@ -744,6 +754,7 @@ pub struct ClientMatchState {
     pub(crate) client_dvars: Vec<(String, String)>,
     pub(crate) shellshock: Option<hud_iw4::ShockParams>,
     pub(crate) menu_commands: Vec<MenuCommand>,
+    pub(crate) location_selection: Option<LocationSelection>,
 
     pub(crate) controls: ScriptControls,
 }
@@ -757,6 +768,7 @@ pub(crate) struct ScriptControls {
     pub jump_disabled: bool,
     pub usability_disabled: bool,
     pub linked: bool,
+    pub stunned: bool,
     pub switch_to: u32,
 }
 
@@ -846,6 +858,7 @@ impl ClientMatchState {
             client_dvars: self.client_dvars.clone(),
             shellshock: self.shellshock.clone(),
             menu_commands: self.menu_commands.clone(),
+            location_selection: self.location_selection.clone(),
         }
     }
 
@@ -892,6 +905,7 @@ impl ClientMatchState {
         self.client_dvars = meta.client_dvars.clone();
         self.shellshock = meta.shellshock.clone();
         self.menu_commands = meta.menu_commands.clone();
+        self.location_selection = meta.location_selection.clone();
     }
 }
 

@@ -23,6 +23,7 @@ use host::{MenuHost, MenuWorld};
 use script::Command;
 
 const WINDOW_DECORATION: i32 = 0x0010_0000;
+const DVAR_FOCUS: i32 = 0x10;
 const MAX_SCRIPT_DEPTH: u32 = 16;
 const MAIN_MENU_DVAR: &str = "g_scriptMainMenu";
 const FALLBACK_MAIN_MENU: &str = "class";
@@ -43,6 +44,15 @@ struct OpenMenu {
     items: Vec<ItemState>,
 }
 
+#[derive(Clone, Debug)]
+struct EditState {
+    menu: String,
+    item: usize,
+    buffer: Vec<char>,
+    cursor: usize,
+    max_chars: usize,
+}
+
 #[derive(Resource, Default)]
 pub struct ScriptMenus {
     stack: Vec<OpenMenu>,
@@ -51,6 +61,11 @@ pub struct ScriptMenus {
     exec: Vec<String>,
     sounds: Vec<String>,
     reported: std::collections::HashSet<String>,
+    screen: Option<AppScreen>,
+    cursor: Option<Vec2>,
+    editing: Option<EditState>,
+    binding_menu: Option<String>,
+    bind_requests: Vec<String>,
 }
 
 impl ScriptMenus {
@@ -60,6 +75,11 @@ impl ScriptMenus {
 
     pub fn open_names(&self) -> Vec<String> {
         self.stack.iter().map(|m| m.name.clone()).collect()
+    }
+
+    pub fn focused_item(&self) -> Option<(&str, usize)> {
+        let menu = self.stack.last()?;
+        Some((&menu.name, menu.focus?))
     }
 
     fn position(&self, name: &str) -> Option<usize> {
@@ -96,7 +116,9 @@ struct Runner<'a, 'w> {
     menus: &'a mut ScriptMenus,
     locals: &'a mut UiLocalVars,
     exprs: &'a mut MenuExprCache,
+    dvars: &'a mut frame::UiMenuDvars,
     depth: u32,
+    binding: &'a mut frame::UiBindingCapture,
 }
 
 impl Runner<'_, '_> {
@@ -117,6 +139,7 @@ impl Runner<'_, '_> {
             .map(item_rect);
         let host = MenuHost {
             world: self.world,
+            dvars: self.dvars,
             menu: def,
             locals: self.locals,
             open: &open,
@@ -224,7 +247,12 @@ impl Runner<'_, '_> {
                 self.menus.responses.push((menu.to_owned(), response));
             }
             Command::Exec(text) => self.menus.exec.push(text),
+            Command::CopyDvar(name, source) => {
+                let value = self.dvar(&source).unwrap_or_default().to_owned();
+                self.dvars.set(&name, value);
+            }
             Command::SetDvar(name, value) => {
+                self.dvars.set(&name, &value);
                 self.menus.exec.push(format!("set {name} \"{value}\""));
             }
             Command::ExecOnDvarIntValue {
@@ -233,11 +261,9 @@ impl Runner<'_, '_> {
                 command,
             } => {
                 let current = self
-                    .world
-                    .dvars
-                    .as_ref()
-                    .and_then(|d| d.int(&dvar))
-                    .unwrap_or(0);
+                    .dvar(&dvar)
+                    .and_then(|s| s.parse::<f32>().ok())
+                    .unwrap_or(0.0) as i32;
                 if current == value {
                     self.menus.exec.push(command);
                 }
@@ -247,15 +273,81 @@ impl Runner<'_, '_> {
                 value,
                 command,
             } => {
-                let current = self.world.dvars.as_ref().and_then(|d| d.string(&dvar));
+                let current = self.dvar(&dvar);
                 if current.is_some_and(|c| c.eq_ignore_ascii_case(&value)) {
                     self.menus.exec.push(command);
+                }
+            }
+            Command::OpenForGameType(format) => {
+                let name = self.for_game_type(menu, item, &format);
+                self.open(&name);
+            }
+            Command::CloseForGameType(format) => {
+                let name = self.for_game_type(menu, item, &format);
+                self.close(&name);
+            }
+            Command::SetFocusByDvar(dvar) => {
+                let Some(def) = self.def(menu) else {
+                    return;
+                };
+                let found = def.items.iter().position(|i| {
+                    i.dvar_flags & DVAR_FOCUS != 0
+                        && i.dvar_test.eq_ignore_ascii_case(&dvar)
+                        && self.enable_via_dvar(i, DVAR_FOCUS)
+                        && is_focusable(i)
+                });
+                if let Some(index) = found {
+                    self.set_focus(menu, index);
+                }
+            }
+            Command::MenuOnDvar {
+                open,
+                want_match,
+                dvar,
+                value,
+                menu: target_menu,
+            } => {
+                let Some(current) = self.dvar(&dvar) else {
+                    diag::debug!(Ui, "menu {menu}: menu-on-dvar cannot find dvar {dvar}");
+                    return;
+                };
+                if current.eq_ignore_ascii_case(&value) == want_match {
+                    if open {
+                        self.open(&target_menu);
+                    } else {
+                        self.close(&target(&target_menu));
+                    }
                 }
             }
             Command::Unhandled(name) => {
                 diag::debug!(Ui, "menu {menu}: script command `{name}` not run");
             }
         }
+    }
+
+    fn dvar(&self, name: &str) -> Option<&str> {
+        self.dvars
+            .get(name)
+            .or_else(|| self.world.dvars.as_ref().and_then(|d| d.string(name)))
+    }
+
+    fn for_game_type(&self, menu: &str, item: Option<usize>, format: &str) -> String {
+        let value = item
+            .and_then(|i| self.def(menu)?.items.get(i))
+            .and_then(|i| self.dvar(&i.dvar))
+            .unwrap_or("");
+        format.replacen("%s", value, 1)
+    }
+
+    fn enable_via_dvar(&self, item: &assets::MenuItem, flag: i32) -> bool {
+        if item.enable_dvar.is_empty() || item.dvar_test.is_empty() {
+            return true;
+        }
+        let value = self.dvar(&item.dvar_test).unwrap_or("");
+        let listed = script::tokens(&item.enable_dvar)
+            .iter()
+            .any(|v| v.eq_ignore_ascii_case(value));
+        listed == (item.dvar_flags & flag != 0)
     }
 
     fn each_item(
@@ -309,6 +401,14 @@ impl Runner<'_, '_> {
     }
 
     fn close(&mut self, name: &str) {
+        if self
+            .menus
+            .editing
+            .as_ref()
+            .is_some_and(|edit| edit.menu.eq_ignore_ascii_case(name))
+        {
+            self.menus.editing = None;
+        }
         let catalog = self.catalog;
         if self.menus.position(name).is_none() {
             return;
@@ -374,6 +474,9 @@ impl Runner<'_, '_> {
         };
         let old = open.hover;
         if old == index {
+            if let Some(index) = index {
+                self.set_focus(menu, index);
+            }
             return;
         }
         open.hover = index;
@@ -435,6 +538,7 @@ impl Runner<'_, '_> {
         let open = self.menus.open_names();
         let host = MenuHost {
             world: self.world,
+            dvars: self.dvars,
             menu: &def,
             locals: self.locals,
             open: &open,
@@ -454,11 +558,76 @@ impl Runner<'_, '_> {
         out
     }
 
+    fn adjust(&mut self, menu: &str, index: usize, step: i32) -> bool {
+        if !self.visible_items(menu).contains(&index) {
+            return false;
+        }
+        let Some(item) = self.catalog.get(menu).and_then(|d| d.items.get(index)) else {
+            return false;
+        };
+        if item.dvar.is_empty() {
+            return false;
+        }
+        let current = self.dvar(&item.dvar).unwrap_or_default();
+        let value = if !item.choices.is_empty() {
+            let at = item
+                .choices
+                .iter()
+                .position(|(_, value)| value == current)
+                .unwrap_or(0);
+            let next = (at as i32 + step).rem_euclid(item.choices.len() as i32) as usize;
+            item.choices[next].1.clone()
+        } else {
+            return false;
+        };
+        self.dvars.set(&item.dvar, &value);
+        self.menus
+            .exec
+            .push(format!("set {} \"{}\"", item.dvar, value));
+        self.run_events(menu, Some(index), &item.handlers.action);
+        true
+    }
+
     fn activate(&mut self, menu: &str, index: usize, accept: bool) {
+        if self.adjust(menu, index, 1) {
+            return;
+        }
+        if !self.visible_items(menu).contains(&index) {
+            return;
+        }
         let catalog = self.catalog;
         let Some(item) = catalog.get(menu).and_then(|d| d.items.get(index)) else {
             return;
         };
+        if item.item_type == 14 && !item.dvar.is_empty() {
+            self.binding.command = Some(item.dvar.clone());
+            self.menus.binding_menu = Some(menu.to_owned());
+            self.menus.bind_requests.push(item.dvar.clone());
+            self.run_events(menu, Some(index), &item.handlers.action);
+            return;
+        }
+        if item.item_type == 4 && !item.dvar.is_empty() {
+            let max_chars = item
+                .edit_field
+                .as_ref()
+                .map_or(32, |field| field.max_chars)
+                .min(4096);
+            let buffer: Vec<char> = self
+                .dvars
+                .get(&item.dvar)
+                .unwrap_or_default()
+                .chars()
+                .take(max_chars)
+                .collect();
+            self.menus.editing = Some(EditState {
+                menu: menu.to_owned(),
+                item: index,
+                cursor: buffer.len(),
+                buffer,
+                max_chars,
+            });
+            return;
+        }
         let events = if accept && !item.handlers.accept.is_empty() {
             &item.handlers.accept
         } else {
@@ -505,6 +674,7 @@ pub(crate) fn spawn_script_menus(root: &mut ChildSpawnerCommands) {
 #[derive(bevy::ecs::system::SystemParam)]
 pub(crate) struct MenuInputs<'w, 's> {
     keys: Res<'w, ButtonInput<KeyCode>>,
+    keyboard: MessageReader<'w, 's, bevy::input::keyboard::KeyboardInput>,
     mouse: Res<'w, ButtonInput<MouseButton>>,
     windows: Query<'w, 's, &'static Window, With<bevy::window::PrimaryWindow>>,
     hud_input: Option<ResMut<'w, frame::HudInputView>>,
@@ -512,6 +682,8 @@ pub(crate) struct MenuInputs<'w, 's> {
     actions: Option<Res<'w, ClientActionInput>>,
     requests: MessageReader<'w, 's, UiMenuRequest>,
     classes: Option<Res<'w, frame::HostClassLoadouts>>,
+    party: Res<'w, frame::UiPartyState>,
+    frontend_strings: Option<Res<'w, assets::LocalizeCatalog>>,
 }
 
 #[derive(Default)]
@@ -520,11 +692,23 @@ struct Pressed {
     enter: bool,
     up: bool,
     down: bool,
+    left: bool,
+    right: bool,
+    home: bool,
+    end: bool,
+    backspace: bool,
+    delete: bool,
+    text: Vec<String>,
 }
 
 #[derive(bevy::ecs::system::SystemParam)]
 pub(crate) struct MenuOutputs<'w> {
+    dvars: ResMut<'w, frame::UiMenuDvars>,
+    binding: ResMut<'w, frame::UiBindingCapture>,
+    binds: MessageWriter<'w, frame::UiBindRequest>,
     sounds: MessageWriter<'w, UiPlaySound>,
+    music: MessageWriter<'w, frame::UiPlayMusic>,
+    stop_music: MessageWriter<'w, frame::UiStopMusic>,
     exec: MessageWriter<'w, UiExecCommand>,
     inbox: Option<ResMut<'w, ClientActionInbox>>,
     ids: Option<ResMut<'w, ActionRequestIds>>,
@@ -551,6 +735,7 @@ pub(crate) fn update_script_menus(
 ) {
     pass.script_menus = TessJob::Hide;
     if torn.read().count() > 0 {
+        out.binding.command = None;
         *menus = ScriptMenus::default();
     }
     let requests: Vec<UiMenuRequest> = input.requests.read().cloned().collect();
@@ -560,8 +745,11 @@ pub(crate) fn update_script_menus(
     let snapshot = presented.snapshot();
     let meta = snapshot.and_then(|s| s.meta.for_client(local.0));
     let in_game = matches!(*input.screen, AppScreen::InGame | AppScreen::ClassSelect);
-    if !in_game || meta.is_none() {
-        if !menus.stack.is_empty() {
+    let frontend = *input.screen == AppScreen::MainMenu;
+    if (!in_game && !frontend) || (in_game && meta.is_none()) {
+        if menus.screen.is_some() {
+            out.stop_music.write(frame::UiStopMusic);
+            out.binding.command = None;
             *menus = ScriptMenus::default();
         }
         if let Some(view) = input.hud_input.as_mut()
@@ -571,30 +759,44 @@ pub(crate) fn update_script_menus(
         }
         return;
     }
-    let (Some(snapshot), Some(meta)) = (snapshot, meta) else {
-        return;
+    let screen_changed = menus.screen.map(|s| s == AppScreen::MainMenu) != Some(frontend);
+    if screen_changed {
+        out.binding.command = None;
+        *menus = ScriptMenus {
+            screen: Some(*input.screen),
+            ..default()
+        };
+        out.stop_music.write(frame::UiStopMusic);
+    }
+    let localize = if in_game {
+        strings.as_ref().map(|s| &s.0)
+    } else {
+        input.frontend_strings.as_deref()
     };
-    let now_ms = snapshot.tick.0.saturating_mul(sim::MATCH_TICK_MS) as i32;
     let world = MenuWorld {
         ms: crate::scorebar::sys_milliseconds() as i32,
-        dvars: Some(snapshot.meta.script_dvars(local.0)),
-        sv_running: role.is_some_and(|r| r.runs_authority()),
+        in_game,
+        party: &input.party,
+        dvars: snapshot
+            .filter(|_| in_game)
+            .map(|s| s.meta.script_dvars(local.0)),
+        sv_running: in_game && role.is_some_and(|r| r.runs_authority()),
         catalog: Some(catalog),
-        localize: strings.as_ref().map(|s| &s.0),
-        kind: Some(snapshot.meta.kind),
-        team: meta.client_state_team,
-        team_scores: snapshot.meta.objectives.scores,
-        player_score: meta.score,
-        time_left_s: snapshot
-            .meta
-            .objectives
-            .time_left_ms(now_ms)
-            .div_euclid(1000),
+        localize,
+        kind: snapshot.map(|s| s.meta.kind),
+        team: meta.map_or(0, |m| m.client_state_team),
+        team_scores: snapshot.map_or([0; 3], |s| s.meta.objectives.scores),
+        player_score: meta.map_or(0, |m| m.score),
+        time_left_s: snapshot.map_or(0, |s| {
+            let now_ms = s.tick.0.saturating_mul(sim::MATCH_TICK_MS) as i32;
+            s.meta.objectives.time_left_ms(now_ms).div_euclid(1000)
+        }),
         teams: teams.as_ref().map(|t| &t.0),
-        scores_open: input
-            .actions
-            .as_ref()
-            .is_some_and(|a| a.client.kb.scores.active),
+        scores_open: in_game
+            && input
+                .actions
+                .as_ref()
+                .is_some_and(|a| a.client.kb.scores.active),
         classes: input.classes.as_deref(),
     };
 
@@ -604,10 +806,27 @@ pub(crate) fn update_script_menus(
         menus: &mut menus,
         locals: &mut locals,
         exprs: &mut exprs,
+        dvars: &mut out.dvars,
         depth: 0,
+        binding: &mut out.binding,
     };
 
-    for command in &meta.menu_commands {
+    if frontend && screen_changed {
+        runner.open("iw4l_main");
+        if let Some(def) = catalog.get("main")
+            && !def.sound_name.is_empty()
+        {
+            out.music.write(frame::UiPlayMusic {
+                alias: def.sound_name.clone(),
+            });
+        }
+    }
+
+    for command in meta
+        .into_iter()
+        .filter(|_| in_game)
+        .flat_map(|m| &m.menu_commands)
+    {
         if command.serial <= runner.menus.applied_serial {
             continue;
         }
@@ -620,10 +839,10 @@ pub(crate) fn update_script_menus(
                 }
             }
             sim::MenuCommandKind::CloseInGame => runner.close_all(),
+            sim::MenuCommandKind::Client { .. } => {}
         }
     }
 
-    let rust_menu = input.hud_input.as_ref().is_some_and(|h| h.menu_open);
     let console_open = input.hud_input.as_ref().is_some_and(|h| h.console_open);
     let mut pressed = Pressed::default();
     for request in requests {
@@ -635,9 +854,16 @@ pub(crate) fn update_script_menus(
             UiMenuRequest::Key(UiMenuKey::Enter) => pressed.enter = true,
             UiMenuRequest::Key(UiMenuKey::Up) => pressed.up = true,
             UiMenuRequest::Key(UiMenuKey::Down) => pressed.down = true,
+            UiMenuRequest::Key(UiMenuKey::Left) => pressed.left = true,
+            UiMenuRequest::Key(UiMenuKey::Right) => pressed.right = true,
+            UiMenuRequest::Key(UiMenuKey::Home) => pressed.home = true,
+            UiMenuRequest::Key(UiMenuKey::End) => pressed.end = true,
+            UiMenuRequest::Key(UiMenuKey::Backspace) => pressed.backspace = true,
+            UiMenuRequest::Key(UiMenuKey::Delete) => pressed.delete = true,
+            UiMenuRequest::Text(text) => pressed.text.push(text),
         }
     }
-    let pointer = !rust_menu && !console_open;
+    let pointer = !console_open;
     if pointer {
         let keys = &input.keys;
         pressed.escape |= keys.just_pressed(KeyCode::Escape);
@@ -645,10 +871,32 @@ pub(crate) fn update_script_menus(
             keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::NumpadEnter);
         pressed.up |= keys.just_pressed(KeyCode::ArrowUp);
         pressed.down |= keys.just_pressed(KeyCode::ArrowDown);
+        pressed.left |= keys.just_pressed(KeyCode::ArrowLeft);
+        pressed.right |= keys.just_pressed(KeyCode::ArrowRight);
+        pressed.home |= keys.just_pressed(KeyCode::Home);
+        pressed.end |= keys.just_pressed(KeyCode::End);
+        pressed.backspace |= keys.just_pressed(KeyCode::Backspace);
+        pressed.delete |= keys.just_pressed(KeyCode::Delete);
     }
-    if !rust_menu {
-        handle_input(&mut runner, &input, &surface, &pressed, pointer);
+    for event in input.keyboard.read() {
+        if pointer
+            && event.state.is_pressed()
+            && let Some(text) = &event.text
+        {
+            pressed.text.push(text.to_string());
+        }
     }
+    if runner.menus.binding_menu.as_ref().is_some_and(|name| {
+        runner
+            .menus
+            .stack
+            .last()
+            .is_none_or(|top| &top.name != name)
+    }) {
+        runner.binding.command = None;
+        runner.menus.binding_menu = None;
+    }
+    handle_input(&mut runner, &input, &surface, &pressed, pointer);
 
     flush_outputs(&mut menus, &mut out, local.0);
     if let Some(view) = input.hud_input.as_mut() {
@@ -658,10 +906,10 @@ pub(crate) fn update_script_menus(
         }
     }
 
-    let scoreboard = crate::scoreboard::displayed(world.scores_open, snapshot, local.0)
-        .then(|| catalog.get(SCOREBOARD_MENU))
-        .flatten();
-    if (menus.stack.is_empty() && scoreboard.is_none()) || rust_menu || !surface.is_ready() {
+    let scoreboard = snapshot
+        .filter(|s| in_game && crate::scoreboard::displayed(world.scores_open, s, local.0))
+        .and_then(|_| catalog.get(SCOREBOARD_MENU));
+    if (menus.stack.is_empty() && scoreboard.is_none()) || !surface.is_ready() {
         return;
     }
     let open_names = menus.open_names();
@@ -675,11 +923,59 @@ pub(crate) fn update_script_menus(
             None,
         ));
     }
-    for open in &menus.stack {
+    let paint_start = menus
+        .stack
+        .iter()
+        .rposition(|open| {
+            catalog
+                .get(&open.name)
+                .is_some_and(|def| def.fullscreen != 0)
+        })
+        .unwrap_or(0);
+    for open in &menus.stack[paint_start..] {
         let Some(def) = catalog.get(&open.name) else {
             continue;
         };
-        let painted = painted_def(def, open);
+        let mut painted = painted_def(def, open);
+        for item in &mut painted.items {
+            if item.item_type == 14 && !item.dvar.is_empty() {
+                item.text_key = out
+                    .dvars
+                    .get(&format!("ui_bind_{}", item.dvar))
+                    .unwrap_or("UNBOUND")
+                    .to_owned();
+                if out.binding.command.as_deref() == Some(item.dvar.as_str()) {
+                    item.text_key = "... (ESC)".to_owned();
+                }
+                item.text_literal = true;
+                item.text_exp.clear();
+                item.text_align_mode = 10;
+                item.text_align_x = -8.0;
+                item.text_align_y = 0.0;
+            }
+            if !item.choices.is_empty() {
+                let value = out.dvars.get(&item.dvar).unwrap_or_default();
+                item.text_key = item
+                    .choices
+                    .iter()
+                    .find(|(_, v)| v == value)
+                    .map(|(label, _)| label.clone())
+                    .unwrap_or_else(|| value.to_owned());
+                item.text_exp.clear();
+                item.text_align_mode = 10;
+                item.text_align_x = -8.0;
+                item.text_align_y = 0.0;
+            }
+        }
+        if let Some(edit) = &menus.editing
+            && edit.menu == open.name
+            && let Some(item) = painted.items.get_mut(edit.item)
+        {
+            let mut text = edit.buffer.clone();
+            text.insert(edit.cursor.min(text.len()), '|');
+            item.text_key = text.into_iter().collect();
+            item.text_exp.clear();
+        }
         let focus_rect = open.focus.and_then(|i| painted.items.get(i)).map(item_rect);
         layers.push((
             open.name.clone(),
@@ -690,6 +986,7 @@ pub(crate) fn update_script_menus(
     for (name, painted, focus_rect) in &layers {
         let host = MenuHost {
             world: &world,
+            dvars: &out.dvars,
             menu: painted,
             locals: &locals,
             open: &open_names,
@@ -701,7 +998,7 @@ pub(crate) fn update_script_menus(
             &surface,
             ChromeAssets {
                 catalog: Some(catalog),
-                localize: strings.as_ref().map(|s| &s.0),
+                localize,
             },
             &mut exprs,
         );
@@ -740,11 +1037,7 @@ pub(crate) fn update_script_menus(
     menus.reported = reported;
     let mut fonts: HashMap<String, &assets::FontDef> = HashMap::new();
     for cmd in &list.cmds {
-        let _ = hud_images.get(
-            crate::images::HUD_CHROME_NAMESPACE,
-            &cmd.material,
-            &mut images,
-        );
+        let _ = hud_images.get_native(cmd.material_namespace, &cmd.material, &mut images);
         if let Draw2dOp::TextRun { font, .. } = &cmd.op
             && !fonts.contains_key(font)
             && let Some(def) = catalog.font(font)
@@ -765,9 +1058,65 @@ fn handle_input(
     pressed: &Pressed,
     pointer: bool,
 ) {
+    if runner.binding.command.is_some() || runner.binding.consumed_input {
+        if pressed.escape {
+            runner.binding.command = None;
+            runner.binding.consumed_input = true;
+        }
+        return;
+    }
+    if let Some(mut edit) = runner.menus.editing.take() {
+        if pressed.escape {
+            return;
+        }
+        if pressed.enter {
+            if let Some(item) = runner
+                .catalog
+                .get(&edit.menu)
+                .and_then(|def| def.items.get(edit.item))
+            {
+                runner
+                    .dvars
+                    .set(&item.dvar, edit.buffer.iter().collect::<String>());
+                runner.run_events(&edit.menu, Some(edit.item), &item.handlers.accept);
+            }
+            return;
+        }
+        if pressed.home {
+            edit.cursor = 0;
+        }
+        if pressed.end {
+            edit.cursor = edit.buffer.len();
+        }
+        if pressed.left {
+            edit.cursor = edit.cursor.saturating_sub(1);
+        }
+        if pressed.right {
+            edit.cursor = (edit.cursor + 1).min(edit.buffer.len());
+        }
+        if pressed.backspace && edit.cursor > 0 {
+            edit.cursor -= 1;
+            edit.buffer.remove(edit.cursor);
+        }
+        if pressed.delete && edit.cursor < edit.buffer.len() {
+            edit.buffer.remove(edit.cursor);
+        }
+        for text in &pressed.text {
+            for ch in text.chars().filter(|ch| !ch.is_control()) {
+                if edit.buffer.len() >= edit.max_chars {
+                    break;
+                }
+                edit.buffer.insert(edit.cursor, ch);
+                edit.cursor += 1;
+            }
+        }
+        runner.menus.editing = Some(edit);
+        return;
+    }
     if pressed.escape {
         match runner.menus.stack.last().map(|m| m.name.clone()) {
             Some(top) => runner.escape(&top),
+            None if !runner.world.in_game => runner.open("iw4l_main"),
             None => {
                 let main = runner
                     .world
@@ -798,6 +1147,12 @@ fn handle_input(
     if pressed.up {
         runner.focus_step(&top, -1, false);
     }
+    if (pressed.left || pressed.right)
+        && let Some(focus) = runner.menus.stack.last().and_then(|m| m.focus)
+    {
+        runner.adjust(&top, focus, if pressed.left { -1 } else { 1 });
+        return;
+    }
     if pressed.enter {
         if let Some(focus) = runner.menus.stack.last().and_then(|m| m.focus) {
             runner.activate(&top, focus, true);
@@ -816,6 +1171,11 @@ fn handle_input(
     let Some(cursor) = cursor else {
         return;
     };
+    let moved = runner.menus.cursor.is_some_and(|old| old != cursor);
+    runner.menus.cursor = Some(cursor);
+    if !moved && !input.mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
     let Some(def) = runner.catalog.get(&top) else {
         return;
     };
@@ -826,6 +1186,7 @@ fn handle_input(
     let names = runner.menus.open_names();
     let host = MenuHost {
         world: runner.world,
+        dvars: runner.dvars,
         menu: &painted,
         locals: runner.locals,
         open: &names,
@@ -846,6 +1207,9 @@ fn handle_input(
 }
 
 fn flush_outputs(menus: &mut ScriptMenus, out: &mut MenuOutputs, local: sim::ClientId) {
+    for command in menus.bind_requests.drain(..) {
+        out.binds.write(frame::UiBindRequest { command });
+    }
     for alias in menus.sounds.drain(..) {
         out.sounds.write(UiPlaySound { alias });
     }

@@ -79,8 +79,7 @@ stopped at the script. `run.json` keeps both under `gsc.a` / `gsc.b` and asserts
 `a.gsc_installed`, `b.gsc_installed` and `gsc.no_execution_fault`. A phase that
 fails after a refusal carries the refusal as its `failure_reason`, and a script
 fault that ends the process (`GSC execution failed: …` in `child_stderr.txt`)
-becomes the run's `failure`, so an incomplete cutover names its own gap instead
-of surfacing as a `wait world` timeout.
+becomes the run's `failure`.
 
 Movement is three facts, not one. `mark` reports the local player's input
 receipt — commands the authority applied, how many of them carried a move, and

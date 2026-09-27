@@ -331,6 +331,8 @@ dependencies = [
  "fastfile_iw5",
  "fastfile_t5",
  "fx_iw4",
+ "serde",
+ "serde_json",
  "weapon_iw4",
  "xmodel_runtime",
 ]

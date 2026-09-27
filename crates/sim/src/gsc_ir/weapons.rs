@@ -75,6 +75,16 @@ fn adopt(
 }
 
 pub(super) fn register(registry: &mut NativeRegistry) {
+    registry.register(Method, "predictgrenade", |world, receiver, _| {
+        let (_, id, number) = missile_of(world, receiver)?;
+        let now = now_ms(world);
+        let frame = FrameWorld::from_world(world);
+        let position = frame
+            .projectile_by_number(number)
+            .filter(|p| p.id == id && p.live)
+            .and_then(|p| crate::equipment::predict_projectile(&frame, p, now, 3000));
+        Ok(Value::Vector(position.unwrap_or([0.0; 3])))
+    });
     registry.register(Function, "magicbullet", |world, _, args| {
         let name = string(args, 0)?;
         let weapon = crate::script_player::weapon_named(&FrameWorld::from_world(world), &name)?;
@@ -179,6 +189,7 @@ pub(crate) fn sync_engine_events(world: &mut World) {
     for note in &notes {
         let (owner, notify, args) = match *note {
             WeaponNote::Pullback { owner, weapon } => {
+                let weapon = super::players::script_weapon(world, owner.0, weapon);
                 (owner, "grenade_pullback", vec![weapon_name(world, weapon)])
             }
             WeaponNote::Fired { owner } => (owner, "begin_firing", Vec::new()),
@@ -191,6 +202,8 @@ pub(crate) fn sync_engine_events(world: &mut World) {
         }
     }
     adopt_fired(world);
+    super::guidance::advance(world);
+    super::turrets::advance(world);
     settle_projectiles(world, &notes);
     settle_items(world);
     super::vehicles::advance(world);
@@ -214,8 +227,9 @@ fn notify_weapon_changes(world: &mut World) {
             continue;
         };
         let switching = dropping(ps.weaponstate_primary);
+        let current = super::players::script_weapon(world, client, ps.weapon);
         if switching && !was_switching {
-            let name = weapon_name(world, ps.weapon);
+            let name = weapon_name(world, current);
             raise(
                 world,
                 Value::Object(object),
@@ -224,7 +238,7 @@ fn notify_weapon_changes(world: &mut World) {
             );
         }
         if ps.weapon != last {
-            let name = weapon_name(world, ps.weapon);
+            let name = weapon_name(world, current);
             raise(world, Value::Object(object), "weapon_change", vec![name]);
         }
         if let Some(slot) = world.resource_mut::<Runtime>().players.get_mut(&client) {
@@ -262,7 +276,8 @@ fn adopt_fired(world: &mut World) {
                 continue;
             }
         };
-        let name = weapon_name(world, projectile.weapon);
+        let weapon = super::players::script_weapon(world, projectile.owner.0, projectile.weapon);
+        let name = weapon_name(world, weapon);
         raise(world, player, notify, vec![Value::Object(object), name]);
     }
 }

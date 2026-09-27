@@ -124,7 +124,7 @@ pub(crate) fn update_compass(
     let killed_by_showing = (crate::scorebar::sys_milliseconds() as i32)
         .wrapping_sub(local_vars.int("ui_show_killedBy"))
         < 4000;
-    let ui_active = hud_input.is_some_and(|i| i.menu_open || i.script_menu_open);
+    let ui_active = hud_input.is_some_and(|i| i.script_menu_open);
     if !surface.is_ready() || killed_by_showing || ui_active || view.is_some_and(|v| v.in_killcam())
     {
         hide(&mut pass);
@@ -180,13 +180,22 @@ pub(crate) fn update_compass(
 
     let north = cg_compass_up_yaw_vector(ps.viewangles[1]);
     let player_xy = [ps.origin[0], ps.origin[1]];
+    let local_team = presented
+        .snapshot()
+        .and_then(|s| s.meta.for_client(local.0))
+        .map_or(3, |m| m.client_state_team);
     let jam_fade = {
         let jammers = presented.snapshot().into_iter().flat_map(|snap| {
             snap.players.iter().filter_map(|(id, _)| {
-                if *id == local.0 {
+                if *id == local.0
+                    || snap
+                        .meta
+                        .for_client(*id)
+                        .is_some_and(|m| same_team(local_team, m.client_state_team))
+                {
                     return None;
                 }
-                let other = presented.player(*id)?;
+                let other = presented.alive_player(*id)?;
                 if other.e_flags & playerstate_iw4::eflags::RADAR_JAM == 0 {
                     return None;
                 }
@@ -200,10 +209,6 @@ pub(crate) fn update_compass(
         )
     };
     let map_item = items.map.1;
-    let local_team = presented
-        .snapshot()
-        .and_then(|s| s.meta.for_client(local.0))
-        .map_or(3, |m| m.client_state_team);
     let radar = take_radar_pings(
         &presented,
         local.0,
@@ -638,7 +643,6 @@ fn take_fire_pings(
     n
 }
 
-/// `CG_CompassIncreaseRadarTime`: the sweep pings an enemy when it crosses them.
 fn take_radar_pings(
     presented: &PresentedSnapshot,
     local: ClientId,

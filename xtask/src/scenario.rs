@@ -372,7 +372,7 @@ fn anim_claim(rows: &[Row]) -> Claim {
     let all_zero = legs.iter().all(|&v| v == 0) && torso.iter().all(|&v| v == 0);
     if all_zero {
         claim.note(
-            "all sampled values are 0 — BG_AnimParseAnimScript is not in pmove; this is the gap, not a passing 0x155 codec round-trip",
+            "all sampled values are 0 — the anim script is not in pmove; this is the gap, not a passing 0x155 codec round-trip",
         );
         claim.check(
             true,

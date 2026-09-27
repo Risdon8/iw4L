@@ -36,7 +36,7 @@ pub fn cg_adjust_position_for_mover(
         return input;
     }
     let Some(pos) = pos else {
-        panic!("CG_AdjustPositionForMover eType 6/0xd needs lerp.pos trajectory");
+        panic!("mover adjustment for eType 6/0xd needs a lerp.pos trajectory");
     };
     let old = bg_evaluate_trajectory(pos, from_time);
     let new = bg_evaluate_trajectory(pos, to_time);

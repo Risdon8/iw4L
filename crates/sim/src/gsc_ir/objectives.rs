@@ -3,7 +3,7 @@ use super::natives_math::{arg, int, vector};
 use super::runtime::type_name;
 use super::*;
 use crate::frame::FrameWorld;
-use crate::{CompassObjective, ObjectiveMatch, ObjectiveState};
+use crate::{CompassObjective, ObjectiveMatch, ObjectiveState, ScriptEffect};
 use bevy_ecs::prelude::World;
 use gamemode_iw4::Team;
 
@@ -17,6 +17,12 @@ pub(super) struct ScriptObjective {
     entity: Option<Value>,
     team: Team,
     icon: String,
+}
+
+impl ScriptObjective {
+    pub(super) fn entity(&self) -> Option<&Value> {
+        self.entity.as_ref()
+    }
 }
 
 fn index(args: &[Value]) -> Result<u8, String> {
@@ -159,10 +165,39 @@ pub(super) fn publish(world: &mut World) {
         .chain(engine)
         .collect();
     let game_end_time = runtime.engine.game_end_time;
-    FrameWorld::from_world(world).objectives = ObjectiveMatch {
+    let scripted_effects = runtime.program.is_some();
+    let rows: Vec<(u64, super::entities::PersistentFx)> = runtime
+        .engine
+        .effects
+        .iter()
+        .filter(|(id, _)| runtime.entities.contains_key(id))
+        .map(|(id, fx)| (*id, fx.clone()))
+        .collect();
+    let mut runtime = world.resource_mut::<Runtime>();
+    runtime
+        .engine
+        .effects
+        .retain(|id, _| rows.iter().any(|(row, _)| row == id));
+    let mut frame = FrameWorld::from_world(world);
+    let effects = rows
+        .into_iter()
+        .map(|(id, fx)| ScriptEffect {
+            id: id as u32,
+            effect: frame.effect_name_index(&fx.name),
+            origin: fx.origin,
+            forward: fx.forward,
+            up: fx.up,
+            start_ms: fx.start_ms,
+            repeat_ms: fx.repeat_ms,
+            cull_distance: fx.cull_distance,
+        })
+        .collect();
+    frame.objectives = ObjectiveMatch {
         scores,
         compass,
         server_info,
         game_end_time,
+        scripted_effects,
+        effects,
     };
 }

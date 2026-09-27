@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::class_presets::default_presets;
-use crate::class_setup::{ClassSetupScratch, ClassSlotState};
+use crate::class_setup::ClassSlotState;
 use frame::{HostClassLoadouts, HostClassSlot};
 
 #[derive(Resource, Clone, Debug, PartialEq, Eq)]
@@ -28,11 +28,6 @@ impl SessionClassStore {
             equipped: None,
             selected: 0,
         }
-    }
-
-    pub fn commit_slots(&mut self, scratch: &ClassSetupScratch) {
-        self.slots = scratch.slots.clone();
-        self.selected = scratch.selected;
     }
 
     pub fn commit_equip(&mut self, selected: usize) {
@@ -70,15 +65,13 @@ impl From<&ClassSlotState> for HostClassSlot {
 }
 
 pub(crate) fn sync_host_class_loadouts(
-    scratch: Res<ClassSetupScratch>,
-    mut store: ResMut<SessionClassStore>,
+    store: Res<SessionClassStore>,
     mut host: ResMut<HostClassLoadouts>,
 ) {
-    if !scratch.is_changed() {
+    if !store.is_changed() {
         return;
     }
-    store.commit_slots(&scratch);
-    host.slots = scratch.slots.iter().map(HostClassSlot::from).collect();
+    host.slots = store.slots.iter().map(HostClassSlot::from).collect();
 }
 
 const CLASS_FILE_HEADER: &str = "iw4l-classes 1";
@@ -176,7 +169,7 @@ fn decode_slots(text: &str) -> Option<Vec<ClassSlotState>> {
 pub(crate) fn load_class_store(
     identity: Option<Res<frame::LaunchIdentity>>,
     mut file: ResMut<ClassStoreFile>,
-    mut scratch: ResMut<ClassSetupScratch>,
+    mut store: ResMut<SessionClassStore>,
 ) {
     if file.loaded {
         return;
@@ -194,8 +187,8 @@ pub(crate) fn load_class_store(
             Some(slots) => {
                 diag::info!(Ui, "classes: {} read from {}", slots.len(), path.display());
                 file.written = Some(encode_slots(&slots));
-                scratch.slots = slots;
-                scratch.reset_navigation();
+                store.slots = slots;
+                store.selected = store.selected.min(store.slots.len().saturating_sub(1));
             }
             None => {
                 diag::warn!(

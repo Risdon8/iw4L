@@ -360,7 +360,7 @@ fn load_vehicle_segment(s: &mut ZoneStream<'_>, seg: Ptr) -> Result<()> {
     Ok(())
 }
 
-/// Pointer form of `G_GlassData`, shared with `GameWorldMp`'s inline variant.
+/// Pointer form of the glass data, shared with `GameWorldMp`'s inline variant.
 fn load_glass_ptr(s: &mut ZoneStream<'_>, p: Ptr, field: usize) -> Result<()> {
     if !s.begin_body(p.at(field))? {
         return Ok(());

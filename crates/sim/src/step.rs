@@ -116,6 +116,10 @@ fn apply_script_signals_system(world: &mut World) {
             {
                 frame.set_phase(MatchPhase::Intermission);
             }
+            crate::gsc_ir::MAP_RESTART => {
+                let tick = frame.ecs().resource::<StepRequest>().tick;
+                crate::gsc_ir::restart_level(frame.ecs(), tick);
+            }
             _ => {}
         }
     }
@@ -339,6 +343,7 @@ fn run_players_system(ecs: &mut World) {
             );
             let mut cmd = *cmd;
             crate::script_player::constrain_cmd(&mut world, *id, &mut cmd);
+            crate::gsc_ir::select_location(world.ecs(), id.0, &mut cmd, old_buttons);
             if world
                 .client_meta(*id)
                 .is_some_and(|m| m.remote_missile.is_some())
@@ -801,6 +806,16 @@ fn apply_actions(world: &mut FrameWorld, tick: Tick, actions: &[(ClientId, Clien
             ClientAction::SpawnIntermission { request_id: _ } => {
                 apply_spawn_intermission(world, *id);
             }
+            ClientAction::GiveKillstreak {
+                request_id: _,
+                name,
+            } => {
+                if !world.bootstrap_ref().allow_debug_actions {
+                    continue;
+                }
+                let name = crate::menu_response_text(&name);
+                crate::gsc_ir::give_killstreak(world.ecs(), id.0, name);
+            }
             ClientAction::ForceDeath { request_id: _ } => {
                 if !world.bootstrap_ref().allow_debug_actions {
                     continue;
@@ -815,7 +830,9 @@ fn apply_actions(world: &mut FrameWorld, tick: Tick, actions: &[(ClientId, Clien
                     continue;
                 }
                 if phase == MatchPhase::Playing && world.phase() == MatchPhase::Warmup {
-                    crate::score::finish_prematch(world);
+                    if !crate::gsc_ir::skip_prematch(world.ecs(), tick) {
+                        crate::score::finish_prematch(world);
+                    }
                 } else {
                     world.set_phase(phase);
                 }

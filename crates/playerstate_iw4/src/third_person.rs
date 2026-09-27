@@ -126,7 +126,7 @@ pub fn offset_third_person_view(
     trace_fraction: impl FnMut([f32; 3], [f32; 3]) -> f32,
 ) -> ThirdPersonView {
     if (i.other_flags & other_flags::DEAD_KILLCAM_TPV) != 0 && i.delta_time == 0 {
-        panic!("CG_DeathCamThirdPersonSeat: spectator/failed-archive, not death-watch");
+        panic!("death-cam seat: spectator/failed-archive, not death-watch");
     }
 
     let mut cam_org = i.origin;

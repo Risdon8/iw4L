@@ -902,7 +902,7 @@ pub(super) async fn walk_prepared_match(
         report.push("impactfx handoff: missing — combat play_oriented will miss cells".into());
     }
     report.push(format!(
-        "tracer catalog handoff: {} named ({} bound, {} unresolved) (CG_SpawnTracer)",
+        "tracer catalog handoff: {} named ({} bound, {} unresolved)",
         common_tracers.len(),
         common_tracers.bound_count(),
         common_tracers.unresolved_count()

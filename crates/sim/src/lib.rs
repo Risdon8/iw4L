@@ -1,5 +1,4 @@
 pub mod adopt;
-pub mod anim_script_gap;
 pub mod bullet;
 pub mod bullet_collision;
 mod carrier;
@@ -39,7 +38,6 @@ mod world;
 pub mod world_objects;
 
 pub use adopt::{ADOPT_GAP_COUNT, ADOPT_GAPS, AdoptGap, AdoptReport};
-pub use anim_script_gap::PlayerAnimScriptGap;
 pub use bullet_collision::{
     AuthorityDObjCollision, AuthorityDObjCollisionBone, AuthorityDObjState, AuthorityModelOwner,
     BulletHitKind, BulletPath, BulletTraceQuery, BulletTraceSegment, COLLISION_COVERAGE,
@@ -105,10 +103,10 @@ pub use match_state::{
     CLASS_CATALOG_STEADY_AIM, CLASS_CATALOG_STOPPING_POWER, ClassDef, ClassRejectReason,
     ClientLifecycle, ClientSnapshotMeta, ConfigurationChangeRejectReason, DroppedItemAmmo,
     EntityEventPayload, EntityEventRecord, EventAudience, EventRecord, GiveRejectReason,
-    HealthRegenCensus, InputReceipt, ItemPickupRecord, KillcamHud, LoadoutSpec, MENU_COMMAND_TAIL,
-    MatchEndReason, MenuCommand, MenuCommandKind, PelletFxRecord, RadarMode, RemoteMissile,
-    RngDebugMeta, SIM_EVENT_ROSTER, ScriptDvars, ScriptSeat, SimEvent, SimEventRow, SnapshotMeta,
-    UNRELIABLE_SIM_EVENT_COUNT, class_catalog_has, class_catalog_radar_jam_e_flags,
+    HealthRegenCensus, InputReceipt, ItemPickupRecord, KillcamHud, LoadoutSpec, LocationSelection,
+    MENU_COMMAND_TAIL, MatchEndReason, MenuCommand, MenuCommandKind, PelletFxRecord, RadarMode,
+    RemoteMissile, RngDebugMeta, SIM_EVENT_ROSTER, ScriptDvars, ScriptSeat, SimEvent, SimEventRow,
+    SnapshotMeta, UNRELIABLE_SIM_EVENT_COUNT, class_catalog_has, class_catalog_radar_jam_e_flags,
     perk_bits_from_class_catalog, sim_event_is_reliable,
 };
 pub use player_anim_script::{
@@ -159,6 +157,6 @@ pub use xmodel_runtime::{
 };
 
 mod objectives;
-pub use objectives::{CompassObjective, ObjectiveMatch, ObjectiveState};
+pub use objectives::{CompassObjective, ObjectiveMatch, ObjectiveState, ScriptEffect};
 
-pub use world::{SimContent, SimContentBuilder};
+pub use world::{SimContent, SimContentBuilder, WeaponSetup};

@@ -326,7 +326,7 @@ fn update_overhead_names(
                 material_namespace: crate::images::HUD_CHROME_NAMESPACE,
                 op: Draw2dOp::StretchPic,
                 provenance: Draw2dProvenance::CgDraw {
-                    site: "CG_DrawOverheadNames",
+                    site: "overhead_names",
                 },
                 layer: 1,
             });
@@ -363,7 +363,7 @@ fn update_overhead_names(
                     glow: None,
                 },
                 provenance: Draw2dProvenance::CgDraw {
-                    site: "CG_DrawOverheadNames",
+                    site: "overhead_names",
                 },
                 layer: 1,
             });

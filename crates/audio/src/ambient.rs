@@ -148,7 +148,7 @@ pub(crate) fn stop_map_ambient_on_match_end(
         });
     });
     perf::ambient_hold(i64::from(booted.0));
-    diag::info!(Audio, "audio: map ambient stopped (SND_StopAmbient)");
+    diag::info!(Audio, "audio: map ambient stopped");
 }
 
 pub(crate) fn start_sound_bank_compose(
@@ -591,7 +591,7 @@ fn start_map_ambient_prepared(
     if oneshot_count > 0 {
         diag::info!(
             Audio,
-            "audio: createfx oneshots {oneshot_count} parsed for {map_name} (host markers; no FX_Register play)"
+            "audio: createfx oneshots {oneshot_count} parsed for {map_name} (host markers)"
         );
     }
 }

@@ -989,7 +989,7 @@ impl ZoneLane for Iw4Lane {
             weapons.world_model_count(),
         ));
         report.push(format!(
-            "common_mp projectileModel @+0x420: slot={} bound={} unresolved_hint={} (pending unclassified XModels {}, retained {})",
+            "common_mp projectileModel: slot={} bound={} unresolved_hint={} (pending unclassified XModels {}, retained {})",
             weapons.projectile_model_count(),
             weapons.projectile_model_bound_n(),
             weapons.projectile_model_name_hint_n(),

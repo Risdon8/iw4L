@@ -1,5 +1,6 @@
 pub mod binds;
 mod class_dispatch;
+mod class_menu;
 mod debug_cg_gun;
 mod debug_cl_yawspeed;
 mod debug_distortion;
@@ -19,6 +20,7 @@ mod debug_vision;
 mod diagnostics;
 pub mod editor;
 mod feature_dispatch;
+mod frontend;
 pub mod input;
 pub mod plugin;
 pub mod registry;
@@ -176,18 +178,19 @@ impl ConsoleCommand {
         if trimmed.is_empty() {
             return None;
         }
-        let mut words: Vec<String> = trimmed.split_whitespace().map(str::to_owned).collect();
+        let mut words = command_words(trimmed);
 
-        let background = matches!(words.last().map(String::as_str), Some("&"));
+        let background = matches!(words.last(), Some((word, false)) if word == "&");
         if background {
             words.pop();
         }
 
-        let bang_token = matches!(words.last().map(String::as_str), Some("!"));
+        let bang_token = matches!(words.last(), Some((word, false)) if word == "!");
         if bang_token {
             words.pop();
         }
-        let raw = words.join(" ");
+        let words: Vec<String> = words.into_iter().map(|(word, _)| word).collect();
+        let raw = trimmed.to_owned();
         if raw.is_empty() {
             return None;
         }
@@ -208,11 +211,56 @@ impl ConsoleCommand {
     }
 
     pub fn parse_script(line: &str) -> Vec<Self> {
-        line.split(';').filter_map(Self::parse).collect()
+        let mut commands = Vec::new();
+        let mut quoted = false;
+        let mut start = 0;
+        let mut chars = line.char_indices().peekable();
+        while let Some((index, ch)) = chars.next() {
+            match ch {
+                '\\' if quoted && chars.peek().is_some_and(|(_, c)| matches!(c, '\\' | '"')) => { chars.next(); }
+                '"' => quoted = !quoted,
+                ';' if !quoted => {
+                    if let Some(command) = Self::parse(&line[start..index]) {
+                        commands.push(command);
+                    }
+                    start = index + 1;
+                }
+                _ => {}
+            }
+        }
+        if let Some(command) = Self::parse(&line[start..]) {
+            commands.push(command);
+        }
+        commands
     }
 }
 
 pub type SubmittedCommand = ConsoleCommand;
+
+fn command_words(line: &str) -> Vec<(String, bool)> {
+    let mut words = Vec::new();
+    let mut chars = line.chars().peekable();
+    while chars.peek().is_some() {
+        while chars.peek().is_some_and(|c| c.is_whitespace()) { chars.next(); }
+        if chars.peek().is_none() { break; }
+        let mut word = String::new();
+        let mut quoted = false;
+        let mut had_quote = false;
+        while let Some(&ch) = chars.peek() {
+            if ch.is_whitespace() && !quoted { break; }
+            chars.next();
+            match ch {
+                '"' => { quoted = !quoted; had_quote = true; }
+                '\\' if quoted && chars.peek().is_some_and(|c| matches!(c, '\\' | '"')) => {
+                    if let Some(ch) = chars.next() { word.push(ch); }
+                }
+                _ => word.push(ch),
+            }
+        }
+        words.push((word, had_quote));
+    }
+    words
+}
 
 #[derive(Resource, Debug, Default)]
 pub struct ConsoleQueue {

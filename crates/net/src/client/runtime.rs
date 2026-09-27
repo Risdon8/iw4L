@@ -752,6 +752,7 @@ pub fn sample_client_input(
     mut request_ids: Option<ResMut<crate::ActionRequestIds>>,
     view: Option<Res<frame::ViewSubject>>,
     trace: Option<ResMut<ClientPhaseTrace>>,
+    mut cursor: Local<LocationCursor>,
 ) {
     push_phase(trace, "Input");
     if !gate.local_cmds_enabled {
@@ -775,6 +776,16 @@ pub fn sample_client_input(
         actions.mouse_x = 0.0;
         actions.mouse_y = 0.0;
     }
+    let selecting = presented
+        .snapshot()
+        .and_then(|snapshot| snapshot.meta.for_client(local.0))
+        .is_some_and(|meta| meta.location_selection.is_some());
+    let location_mouse = selecting.then(|| {
+        let mouse = (actions.mouse_x, actions.mouse_y);
+        actions.mouse_x = 0.0;
+        actions.mouse_y = 0.0;
+        mouse
+    });
     let remote_mouse = presented
         .snapshot()
         .and_then(|snapshot| snapshot.meta.for_client(local.0))
@@ -925,8 +936,47 @@ pub fn sample_client_input(
             cmd.off_hand_index = loadout.tactical as u16;
         }
     }
+    match location_mouse {
+        Some((mouse_x, mouse_y)) => {
+            cmd.selected_location = cursor.step(&actions, mouse_x, mouse_y);
+            let held = cmd.buttons;
+            cmd.buttons &= playerstate_iw4::buttons::CROUCH | playerstate_iw4::buttons::PRONE;
+            if held & playerstate_iw4::buttons::ATTACK != 0 {
+                cmd.buttons |= playerstate_iw4::buttons::LOCATION_SELECT;
+            } else if held
+                & (playerstate_iw4::buttons::ADS | playerstate_iw4::buttons::MELEE_CHARGE)
+                != 0
+            {
+                cmd.buttons |= playerstate_iw4::buttons::LOCATION_CANCEL;
+            }
+        }
+        None => *cursor = LocationCursor::default(),
+    }
     template.cmd = cmd;
     template.ready = true;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LocationCursor {
+    pub at: [f32; 2],
+}
+
+impl Default for LocationCursor {
+    fn default() -> Self {
+        Self { at: [0.5, 0.5] }
+    }
+}
+
+const LOCATION_CURSOR_SPEED: f32 = 0.6;
+
+impl LocationCursor {
+    fn step(&mut self, input: &ClientActionInput, mouse_x: f32, mouse_y: f32) -> [u8; 3] {
+        let scale = LOCATION_CURSOR_SPEED * input.sensitivity * 0.002;
+        self.at[0] = (self.at[0] + mouse_x * scale).clamp(0.0, 1.0);
+        self.at[1] = (self.at[1] + mouse_y * scale).clamp(0.0, 1.0);
+        let byte = |v: f32| ((v * 255.0 - 128.0).round() as i32).clamp(-128, 127) as i8 as u8;
+        [byte(self.at[0]), byte(self.at[1]), 0]
+    }
 }
 
 /// A stall is a stretch in which the authority acked none of the local client's

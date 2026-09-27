@@ -44,7 +44,8 @@ use crate::{
     adapters::fx::{
         present::{
             FxDrawCull, FxScene, boot_createfx_effects, build_fx_verts,
-            play_named_oriented_in_world, restamp_missing_packed_lighting, tick_fx_non_dependent,
+            play_named_oriented_at_msec, play_named_oriented_in_world,
+            restamp_missing_packed_lighting, spawn_named_oriented_in_world, tick_fx_non_dependent,
             tick_fx_remaining,
         },
         tracer::present_tracer_beams,
@@ -106,6 +107,7 @@ pub(crate) fn register_combat_fx_systems(app: &mut App) {
             Update,
             (
                 boot_createfx_oneshots,
+                sync_script_fx,
                 crate::assemble::drawsurf::tess::glass::apply_glass_host,
                 tick_fx_non_dependent_update,
             )
@@ -277,11 +279,20 @@ fn boot_createfx_oneshots(
     mut cursor: ResMut<FxJournalCursor>,
     fx_world: FxSceneAccess,
     cgame_active: Res<CgameActive>,
+    adopted: Option<Res<LastAdoptedSnapshot>>,
 ) {
     if cursor.createfx_booted {
         return;
     }
     if !cgame_active.get() {
+        return;
+    }
+    if adopted
+        .as_ref()
+        .and_then(|a| a.next())
+        .is_some_and(|snap| snap.meta.objectives.scripted_effects)
+    {
+        cursor.createfx_booted = true;
         return;
     }
     let Some(catalog) = catalog else {
@@ -2640,6 +2651,124 @@ fn stop_killcam_explosion_fx(
             continue;
         };
         host.0.kill_def_newer_than(&effect.name, newer_than);
+    }
+}
+
+#[derive(Default)]
+struct ScriptFxRow {
+    effect: u8,
+    start: Option<i32>,
+    held: Option<u16>,
+    next_ms: i32,
+}
+
+fn fx_axis(forward: [f32; 3], up: [f32; 3]) -> [[f32; 3]; 3] {
+    let forward = Vec3::from_array(forward);
+    let up = Vec3::from_array(up);
+    [
+        forward.to_array(),
+        up.cross(forward).to_array(),
+        up.to_array(),
+    ]
+}
+
+fn sync_script_fx(
+    adopted: Option<Res<LastAdoptedSnapshot>>,
+    catalog: Option<Res<PreparedFxCatalog>>,
+    mut elem_infos: ResMut<PreparedFxElemInfos>,
+    mut host: ResMut<HostFxSystem>,
+    camera: Option<Res<FxCameraOrigin>>,
+    fx_world: FxSceneAccess,
+    mut rows: Local<HashMap<u32, ScriptFxRow>>,
+) {
+    let (Some(adopted), Some(catalog)) = (adopted, catalog) else {
+        return;
+    };
+    let Some(snap) = adopted.next() else {
+        return;
+    };
+    let effects = &snap.meta.objectives.effects;
+    rows.retain(|id, row| {
+        let keep = effects
+            .iter()
+            .any(|fx| fx.id == *id && fx.effect == row.effect);
+        if !keep && let Some(handle) = row.held {
+            host.0.stop_owned(handle);
+        }
+        keep
+    });
+    if effects.is_empty() {
+        return;
+    }
+    let server_now = sim::level_time_ms(snap.tick);
+    let offset = host.0.msec_now.wrapping_sub(server_now);
+    let eye = camera.map(|c| Vec3::from_array(c.0));
+    elem_infos.0.sync(&catalog.0);
+    let scene = fx_world.view();
+    let scene = scene.as_ref().map(|s| s as &dyn FxScene);
+    for fx in effects {
+        let row = rows.entry(fx.id).or_insert_with(|| ScriptFxRow {
+            effect: fx.effect,
+            ..Default::default()
+        });
+        let Some(name) = adopted.effect_name(fx.effect) else {
+            continue;
+        };
+        let name = catalog.0.map_fx_name(name);
+        let axis = fx_axis(fx.forward, fx.up);
+        let retriggered = row.start != fx.start_ms;
+        row.start = fx.start_ms;
+        let Some(start) = fx.start_ms else {
+            continue;
+        };
+        if fx.repeat_ms <= 0 {
+            if retriggered {
+                if let Some(handle) = row.held.take() {
+                    host.0.stop_owned(handle);
+                }
+                row.held = spawn_named_oriented_in_world(
+                    &mut host.0,
+                    &catalog.0,
+                    &elem_infos.0,
+                    name,
+                    fx.origin,
+                    axis,
+                    start.wrapping_add(offset),
+                    scene,
+                )
+                .and_then(|result| match result {
+                    PlayResult::Held { handle } => Some(handle),
+                    _ => None,
+                });
+            }
+            continue;
+        }
+        if retriggered {
+            row.next_ms = start;
+        }
+        let behind = server_now.saturating_sub(row.next_ms);
+        if behind > fx.repeat_ms.saturating_mul(4) {
+            row.next_ms = server_now - behind % fx.repeat_ms;
+        }
+        while row.next_ms <= server_now {
+            let culled = fx.cull_distance > 0.0
+                && eye.is_some_and(|eye| {
+                    eye.distance(Vec3::from_array(fx.origin)) > fx.cull_distance
+                });
+            if !culled {
+                play_named_oriented_at_msec(
+                    &mut host.0,
+                    &catalog.0,
+                    &elem_infos.0,
+                    name,
+                    fx.origin,
+                    axis,
+                    row.next_ms.wrapping_add(offset),
+                    scene,
+                );
+            }
+            row.next_ms = row.next_ms.saturating_add(fx.repeat_ms);
+        }
     }
 }
 

@@ -17,7 +17,7 @@ use frame::{AppScreen, HasWorld};
 use input_iw4::{SCRIPT_KEYNUM, cl_input_cmd, cl_key_event, command_names, key_up_command_id};
 use net::{ClientActionInput, ClientSet, PresentedSnapshot, com_frame_time_msec, key_frame_msec};
 use render_frontend::prepare::scene::world::WorldScene;
-use ui::{MenuEnabled, UiLayer};
+use ui::UiLayer;
 
 use crate::{
     BINDABLE_KEYS, ConsoleCommand, ConsoleEditor, ConsoleInputState, KeyBinds,
@@ -326,10 +326,12 @@ impl Plugin for ConsolePlugin {
                     (
                         drain_startup_queue.before(dispatch_console_command),
                         dispatch_console_command.in_set(ConsoleDispatchSet),
+                        dispatch_menu_commands,
                         handle_input_commands,
                         apply_console_os_paste,
                         crate::feature_dispatch::route_replay_commands,
                         crate::feature_dispatch::route_ui_commands,
+                        (crate::frontend::route, crate::class_menu::route).chain(),
                         crate::feature_dispatch::route_capture_commands,
                         crate::feature_dispatch::route_state_dump_commands,
                         crate::feature_dispatch::route_hitvol_commands,
@@ -368,7 +370,11 @@ impl Plugin for ConsolePlugin {
                         crate::debug_cl_yawspeed::route_cl_yawspeed_commands,
                         crate::debug_fx::route_debug_fx_commands,
                         crate::debug_fx_marks::route_fx_mark_commands,
-                        crate::user_settings::consume_menu_binding,
+                        (
+                            crate::user_settings::native_menu_settings,
+                            crate::user_settings::consume_menu_binding,
+                        )
+                            .chain(),
                         crate::user_settings::sync_binding_view,
                         crate::user_settings::apply_master_volume,
                         crate::user_settings::sync_player_name,
@@ -394,17 +400,47 @@ impl Plugin for ConsolePlugin {
 
 fn drain_startup_queue(
     mut startup: ResMut<crate::ConsoleQueue>,
-    mut menu_exec: MessageReader<frame::UiExecCommand>,
     mut queue: ResMut<ConsoleCommandQueue>,
 ) {
     for command in startup.drain() {
         queue.0.push_back(command);
     }
-    for exec in menu_exec.read() {
-        for mut command in ConsoleCommand::parse_script(&exec.text) {
-            command.interactive = true;
-            queue.0.push_back(command);
+}
+
+fn dispatch_menu_commands(
+    mut incoming: MessageReader<frame::UiExecCommand>,
+    mut pending: Local<std::collections::VecDeque<ConsoleCommand>>,
+    mut submitted: MessageWriter<ConsoleCommand>,
+    registry: Res<ConsoleRegistry>,
+    time: Res<Time>,
+    mut delay: Local<f32>,
+    mut reported: Local<std::collections::HashSet<String>>,
+) {
+    for exec in incoming.read() {
+        pending.extend(ConsoleCommand::parse_script(&exec.text));
+    }
+    if *delay > 0.0 {
+        *delay = (*delay - time.delta_secs()).max(0.0);
+        return;
+    }
+    while let Some(mut command) = pending.pop_front() {
+        if command.name.eq_ignore_ascii_case("wait") {
+            *delay = command
+                .args
+                .first()
+                .and_then(|s| s.trim_end_matches('s').parse().ok())
+                .unwrap_or(0.0);
+            break;
         }
+        if registry.resolve(&command.name).is_none() {
+            if reported.insert(command.name.clone()) {
+                diag::warn!(Ui, "menu: unsupported engine command `{}`", command.name);
+            }
+            continue;
+        }
+        command.interactive = true;
+        command.background = true;
+        submitted.write(command);
     }
 }
 
@@ -428,13 +464,11 @@ fn publish_client_action_input(
     binds: Res<KeyBinds>,
     mut scripted: ResMut<ConsoleInputState>,
     console: Res<ConsoleState>,
-    menu: Res<MenuEnabled>,
     script_menus: Option<Res<hud::ScriptMenus>>,
     mut hud_input: ResMut<frame::HudInputView>,
     settings: Res<frame::GameSettings>,
     mut out: ResMut<ClientActionInput>,
 ) {
-    hud_input.menu_open = menu.0;
     hud_input.console_open = console.open;
     let script_menu = script_menus.is_some_and(|m| m.captures_input());
     if binds.is_changed() || hud_input.use_key.is_none() {
@@ -474,7 +508,7 @@ fn publish_client_action_input(
     let now = out.now_msec;
     let frame = out.frame_msec;
 
-    if console.open || menu.0 || script_menu || keys.just_pressed(KeyCode::Escape) {
+    if console.open || script_menu || keys.just_pressed(KeyCode::Escape) {
         for _ in motion.read() {}
         for key_num in 0..input_iw4::KEY_COUNT {
             if out.client.keys[key_num].down != 0 {
@@ -546,7 +580,6 @@ fn publish_client_action_input(
 /// every key, and the console, still work.
 fn sync_cursor_grab(
     console: Res<ConsoleState>,
-    menu: Option<Res<MenuEnabled>>,
     script_menus: Option<Res<hud::ScriptMenus>>,
     screen: Option<Res<AppScreen>>,
     mut focused: MessageReader<WindowFocused>,
@@ -559,8 +592,7 @@ fn sync_cursor_grab(
     }
     returned |= entered.read().count() > 0;
 
-    let menu_open =
-        menu.map(|m| m.0).unwrap_or(false) || script_menus.is_some_and(|m| m.captures_input());
+    let menu_open = script_menus.is_some_and(|m| m.captures_input());
     let in_game = screen
         .as_ref()
         .is_some_and(|s| matches!(**s, AppScreen::InGame));
@@ -613,7 +645,7 @@ fn setup_console(
     if registry.resolve("mousemove").is_none() {
         registry.register(
             crate::CommandSpec::new("mousemove")
-                .usage("mousemove <dx> [dy] — inject one-shot mouse pixels into CL_MouseMove"),
+                .usage("mousemove <dx> [dy] — inject one-shot mouse pixels"),
         );
     }
     if registry.resolve("mouserate").is_none() {
@@ -719,6 +751,8 @@ fn setup_console(
         .map(|root| assets::list_mp_maps(&root))
         .unwrap_or_default();
     crate::feature_dispatch::register_feature_commands(&mut registry, &maps);
+    crate::frontend::register(&mut registry);
+    crate::class_menu::register(&mut registry);
     let font = fonts.add(Font::from_bytes(EMBEDDED_FONT.to_vec()));
     commands.insert_resource(ConsoleFont(font.clone()));
 

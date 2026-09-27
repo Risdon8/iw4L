@@ -155,16 +155,16 @@ pub(crate) fn fx_world_color_images(
     );
     diag::info!(
         World,
-        "fx tracer color maps by asset: {tracer_unique} unique / {tracer_bound} bound defs (CG_DrawTracer)",
+        "fx tracer color maps by asset: {tracer_unique} unique / {tracer_bound} bound defs",
     );
     diag::info!(
         World,
-        "fx elem color maps by asset: {} unique / {elem_bound} bound visuals (FX_GenerateSpriteVerts)",
+        "fx elem color maps by asset: {} unique / {elem_bound} bound visuals",
         colors_by_asset.len()
     );
     diag::info!(
         World,
-        "fx mark color maps by asset: {} unique / {mark_bound} unique Bound (FX_ImpactMark) — not sprite colors_by_asset",
+        "fx mark color maps by asset: {} unique / {mark_bound} unique Bound — not sprite colors_by_asset",
         mark_colors_by_asset.len()
     );
     if let Some(fx) = fx_catalog {

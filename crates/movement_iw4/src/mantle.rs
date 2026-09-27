@@ -699,7 +699,7 @@ pub fn mantle_clear_hint(ps: &mut PlayerState) {
 pub fn mantle_cap_view(ps: &mut PlayerState, context: MantleCapViewContext) {
     debug_assert!(
         (ps.pm_flags & PMF_MANTLE) != 0,
-        "Mantle_CapView requires PMF_MANTLE"
+        "mantle view cap requires PMF_MANTLE"
     );
     if !context.mantle_enable {
         return;
@@ -751,7 +751,7 @@ pub fn mantle_move(
 ) {
     debug_assert!(
         (ps.pm_flags & PMF_MANTLE) != 0,
-        "Mantle_Move requires PMF_MANTLE"
+        "mantle move requires PMF_MANTLE"
     );
     if !context.mantle_enable {
         return;

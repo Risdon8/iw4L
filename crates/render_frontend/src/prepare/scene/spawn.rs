@@ -744,7 +744,7 @@ pub(crate) fn spawn_world_finish(
         job.gpu_wait.arm(progress.as_ref());
         diag::info!(
             World,
-            "world spawn: Camera3d up; overlay holds for GPU images/pipelines (R_EndRegistration/RB_TouchAllImages) last_slice={:.1}ms images={}/{}",
+            "world spawn: Camera3d up; overlay holds for GPU images/pipelines last_slice={:.1}ms images={}/{}",
             job.last_work_ms,
             job.images.done,
             job.images.total
@@ -933,7 +933,7 @@ pub(crate) fn shutdown_world_on_teardown(
     perf::world_hold(spawned, 0, 0);
     diag::info!(
         World,
-        "world: shutdown (R_ShutdownWorld) — leftover geometry, tess plans, and model lighting dropped"
+        "world: shutdown — leftover geometry, tess plans, and model lighting dropped"
     );
 }
 

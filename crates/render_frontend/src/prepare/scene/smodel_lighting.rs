@@ -289,7 +289,7 @@ pub(crate) fn update_smodel_lighting(
         lighting.warned_too_much = true;
         diag::error!(
             World,
-            "smodel lighting: R_WarnOncePerFrame 0x{SMODEL_LIGHTING_WARN_TOO_MUCH:x} — \
+            "smodel lighting: warning 0x{SMODEL_LIGHTING_WARN_TOO_MUCH:x} — \
              {failed} visible lit smodel(s) skipped this frame (atlas full, entryLimit={})",
             lighting.smodel_entry_limit
         );

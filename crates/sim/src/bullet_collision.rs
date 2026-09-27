@@ -14,6 +14,8 @@ pub const MASK_PLAYER_SOLID: u32 = 0x0281_0011;
 
 pub const MASK_SHOT: u32 = 0x0280_6831;
 
+pub const CONTENTS_BODY: u32 = 0x0200_0000;
+
 pub const MASK_BULLET_WORLD: u32 = MASK_SHOT;
 
 const LINK_BOUNDS_PAD: f32 = 1.0;
@@ -371,6 +373,31 @@ impl AuthorityDObjState {
         self.pose_request = xmodel_runtime::DObjPoseRequest::bind_pose();
     }
 
+    pub fn set_attachments(&mut self, attachments: &[(&str, &str)]) {
+        let mut models = vec![xmodel_runtime::DObjModelDescriptor {
+            model: self.current_model.clone(),
+            parent_model: None,
+            attach_tag: None,
+            ignore_collision: false,
+        }];
+        models.extend(
+            attachments
+                .iter()
+                .map(|(model, tag)| xmodel_runtime::DObjModelDescriptor {
+                    model: (*model).to_owned(),
+                    parent_model: Some(0),
+                    attach_tag: Some((*tag).to_owned()),
+                    ignore_collision: true,
+                }),
+        );
+        if self.semantic_state.composition.models == models {
+            return;
+        }
+        let composition = &mut self.semantic_state.composition;
+        composition.revision = composition.revision.wrapping_add(1);
+        composition.models = models;
+    }
+
     /// Put the model a destructible state asks for on this dobj.
     pub fn set_stage_model(&mut self, model: &str) {
         if self.current_model == model {
@@ -633,7 +660,7 @@ impl AuthorityDObjState {
         }
     }
 
-    pub fn tag_world_pose(&self, tag: &str) -> Option<([f32; 3], [f32; 3])> {
+    pub fn tag_world_matrix(&self, tag: &str) -> Option<glam::Mat4> {
         let capability = self.capability.as_ref()?;
         let bone = capability
             .pose
@@ -643,7 +670,11 @@ impl AuthorityDObjState {
         let posed = capability
             .pose(&self.pose_request, self.world_from_model)
             .ok()?;
-        let matrix = posed.get(bone)?;
+        posed.get(bone).copied()
+    }
+
+    pub fn tag_world_pose(&self, tag: &str) -> Option<([f32; 3], [f32; 3])> {
+        let matrix = self.tag_world_matrix(tag)?;
         let origin = matrix.w_axis.truncate().to_array();
         let forward = matrix.x_axis.truncate();
         let direction = if forward.length_squared() > 1e-8 {
@@ -872,6 +903,7 @@ pub struct BulletTraceQuery {
     pub ignore: Option<ClientId>,
 
     pub ignore_hit: Option<ClientId>,
+    pub ignore_model: Option<ScriptModelId>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -1255,7 +1287,10 @@ fn bullet_trace_filtered(
         query.end
     };
     for pose in players {
-        if query.ignore == Some(pose.client) || query.ignore_hit == Some(pose.client) {
+        if query.ignore == Some(pose.client)
+            || query.ignore_hit == Some(pose.client)
+            || query.mask & CONTENTS_BODY == 0
+        {
             continue;
         }
         if !pose.bones.is_empty() {
@@ -1303,6 +1338,9 @@ fn bullet_trace_filtered(
     }
 
     for geom in script_models {
+        if query.ignore_model.is_some() && geom.owner.script_model() == query.ignore_model {
+            continue;
+        }
         if let Some((mins, maxs)) = geom_abs_aabb(geom, cmodels) {
             if matches!(
                 ray_aabb_box(query.start, query.end, mins, maxs),
@@ -1779,6 +1817,7 @@ fn fire_penetrate(
             mask: query.mask,
             ignore: query.ignore,
             ignore_hit: rev_ignore,
+            ignore_model: query.ignore_model,
         };
         let rev = bullet_trace_filtered(
             world.brushes,
@@ -1913,6 +1952,7 @@ fn trace_from(
             mask: query.mask,
             ignore: query.ignore,
             ignore_hit,
+            ignore_model: query.ignore_model,
         },
         world.glass_is_solid,
     )
@@ -2583,16 +2623,16 @@ pub const COLLISION_COVERAGE: &[CollisionCoverageRow] = &[
     CollisionCoverageRow {
         id: "glass_destructibles",
         support: CoverageSupport::Supported,
-        note: "MASK_SHOT includes CONTENTS_GLASS; mid-trace on_glass_hit updates solidity before the next hop; CG_Glass/tess apply is presentation",
+        note: "MASK_SHOT includes CONTENTS_GLASS; mid-trace on_glass_hit updates solidity before the next hop; glass tess apply is presentation",
     },
     CollisionCoverageRow {
         id: "mask_shot_material_surface",
         support: CoverageSupport::Locked,
-        note: "MASK_SHOT is 0x02806831 (Bullet_Trace); material surface table unproven",
+        note: "material surface table is not modelled",
     },
     CollisionCoverageRow {
         id: "projectile_sweep",
         support: CoverageSupport::Supported,
-        note: "G_RunMissile world half is the same zero-extent brush∪mesh ray as hitscan; plantable G_TraceCapsule hull and TR_STATIONARY rest stay open",
+        note: "the missile world trace is the same zero-extent brush∪mesh ray as hitscan; plantable capsule hull and TR_STATIONARY rest stay open",
     },
 ];

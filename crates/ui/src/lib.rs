@@ -10,19 +10,10 @@ mod layers;
 mod load_table;
 mod loading;
 mod menu;
-mod menu_import;
 mod menu_load;
-mod menu_shots;
-mod model;
-mod nav;
 mod options;
 mod plugin;
-mod render;
-mod retail_font;
-mod retail_menu;
 mod screen;
-mod screens;
-mod stack;
 
 pub use class_icons::{
     ClassSelectIconCache, UiAssetRoot, cac_attachment_image, cac_material_iwd_stem,
@@ -35,7 +26,7 @@ pub use class_select::{
     PendingClassEquip, accept_class_equip, class_index_by_name, commit_class_equip,
     reject_class_equip,
 };
-pub use class_setup::{ClassEditRow, ClassLoadoutCatalog, ClassSetupScratch, ClassSlotState};
+pub use class_setup::{ClassEditRow, ClassLoadoutCatalog, ClassPickerFolder, ClassSlotState};
 pub use class_store::SessionClassStore;
 pub use equip_txn::{
     EquipTxnWatch, apply_pending_class_equip, resolve_class_equip_transaction,
@@ -48,17 +39,9 @@ pub use layers::{
     ApplyUiLayers, GameUiFont, UiDraw, UiLayer, UiLayerVisibility, UiLayers, game_text_font,
 };
 pub use loading::{LoadProgress, LoadingPreviewSource, LoadingScreen};
-pub use menu::{
-    GameLobbyRole, GamePrivacy, GameSetupDraft, MenuBackground, MenuEnabled, MenuMapList,
-    PendingMenuBgPixels, PendingMenuMap,
-};
-pub use menu_shots::MenuShotPlan;
-pub use model::{Content, Screen, ScreenCmd, SettingKey, SettingValue, UiIntent, Widget};
-pub use nav::{Focus, Hover, MenuShellCmd, NavDir};
-pub use options::{
-    BindingView, OptionsControlGroup, OptionsDepth, OptionsState, OptionsTab, PresentModeOverride,
-};
+pub use menu::MenuMapList;
+pub use options::{BindingView, PresentModeOverride};
 pub use plugin::UiPlugin;
-pub use retail_menu::{MenuFrontend, RetailMenuStack};
 pub use screen::{layers_for_screen, sync_ui_layers};
-pub use screens::{PlayMapLayout, play_map_layout};
+
+pub use menu::install_frontend_menus;

@@ -257,10 +257,7 @@ pub const CROSSHAIR_POS_X_SCALE: f32 = -320.0;
 pub const CROSSHAIR_POS_Y_SCALE: f32 = -240.0;
 
 #[must_use]
-#[expect(
-    clippy::too_many_arguments,
-    reason = "preserves CG_CalcCrosshairPosition scalar and view-axis inputs"
-)]
+#[expect(clippy::too_many_arguments, reason = "scalar and view-axis inputs")]
 pub fn cg_calc_crosshair_position(
     gun_pitch: f32,
     gun_yaw: f32,

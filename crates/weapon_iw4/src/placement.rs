@@ -804,9 +804,7 @@ pub fn weapon_placement_assemble(
 }
 
 pub fn weapon_placement_jump_land_ofs() -> [f32; 3] {
-    panic!(
-        "jump/land gun path UNLOCATED (V-JUMP-01/V-LAND-01); eye bob is CG_OffsetFirstPersonView"
-    );
+    panic!("jump/land gun path is not modelled; eye bob is the first-person view offset");
 }
 
 pub const DUAL_WIELD_VIEW_MODEL_OFFSET_LEFT_SCALE: f32 = 2.0;

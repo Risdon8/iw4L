@@ -283,7 +283,6 @@ pub fn radar_line_margin(bounds: CompassMapBounds, compass_max_range: f32) -> f3
     for_radar.max(for_map) * 0.5
 }
 
-/// `GetRadarLine`: `dot(pos, line.xy) - line[2]` changes sign as the sweep passes `pos`.
 #[must_use]
 pub fn radar_line(bounds: CompassMapBounds, compass_max_range: f32, progress: f32) -> [f32; 3] {
     let margin = radar_line_margin(bounds, compass_max_range);
@@ -302,7 +301,6 @@ pub fn radar_lines_surround_point(a: [f32; 3], b: [f32; 3], pos: [f32; 2]) -> bo
     side(a) != side(b)
 }
 
-/// `CG_CompassDrawRadarEffects` partial compass: S of the line texture at the compass centre.
 #[must_use]
 pub fn radar_line_texture_center_s(
     line: [f32; 3],

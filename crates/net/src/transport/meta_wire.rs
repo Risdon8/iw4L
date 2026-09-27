@@ -487,6 +487,11 @@ pub(crate) fn encode_action(out: &mut WireWriter, action: &ClientAction) {
             out.put_bytes(&menu);
             out.put_bytes(&response);
         }
+        ClientAction::GiveKillstreak { request_id, name } => {
+            out.put_u8(18);
+            out.put_u32(request_id);
+            out.put_bytes(&name);
+        }
     }
 }
 
@@ -562,6 +567,12 @@ pub(crate) fn decode_action(input: &mut WireReader<'_>) -> Result<ClientAction, 
                 menu,
                 response,
             })
+        }
+        18 => {
+            let request_id = input.get_u32()?;
+            let mut name = [0u8; sim::MENU_RESPONSE_BYTES];
+            input.get_bytes(&mut name)?;
+            Ok(ClientAction::GiveKillstreak { request_id, name })
         }
         14 => {
             let request_id = input.get_u32()?;
@@ -1249,6 +1260,23 @@ fn encode_client_meta(out: &mut WireWriter, meta: &ClientSnapshotMeta) {
             }
             sim::MenuCommandKind::ClosePopup => out.put_u8(1),
             sim::MenuCommandKind::CloseInGame => out.put_u8(2),
+            sim::MenuCommandKind::Client { name, args } => {
+                out.put_u8(3);
+                put_text(out, name);
+                out.put_u8(args.len().min(u8::MAX as usize) as u8);
+                for arg in args.iter().take(u8::MAX as usize) {
+                    put_text(out, arg);
+                }
+            }
+        }
+    }
+    match &meta.location_selection {
+        None => out.put_u8(0),
+        Some(selection) => {
+            out.put_u8(1);
+            put_text(out, &selection.material);
+            out.put_u8(selection.choose_direction.into());
+            out.put_f32(selection.radius);
         }
     }
     let lock = meta.weapon_lock;
@@ -1359,10 +1387,28 @@ fn decode_client_meta(input: &mut WireReader<'_>) -> Result<ClientSnapshotMeta, 
             0 => sim::MenuCommandKind::Open(get_text(input)?),
             1 => sim::MenuCommandKind::ClosePopup,
             2 => sim::MenuCommandKind::CloseInGame,
+            3 => {
+                let name = get_text(input)?;
+                let count = input.get_u8()?;
+                let mut args = Vec::with_capacity(count.into());
+                for _ in 0..count {
+                    args.push(get_text(input)?);
+                }
+                sim::MenuCommandKind::Client { name, args }
+            }
             _ => return Err(WireError::Malformed("bad menu command tag")),
         };
         menu_commands.push(sim::MenuCommand { serial, kind });
     }
+    let location_selection = match input.get_u8()? {
+        0 => None,
+        1 => Some(sim::LocationSelection {
+            material: get_text(input)?,
+            choose_direction: input.get_u8()? != 0,
+            radius: input.get_f32()?,
+        }),
+        _ => return Err(WireError::Malformed("bad location selection tag")),
+    };
     let weapon_lock = sim::WeaponLock {
         weapon: input.get_u32()?,
         life: input.get_u32()?,
@@ -1411,6 +1457,7 @@ fn decode_client_meta(input: &mut WireReader<'_>) -> Result<ClientSnapshotMeta, 
         client_dvars,
         shellshock,
         menu_commands,
+        location_selection,
     })
 }
 
@@ -2662,6 +2709,20 @@ fn encode_objectives(out: &mut WireWriter, state: &sim::ObjectiveMatch) {
         put_text(out, value);
     }
     out.put_i32(state.game_end_time);
+    out.put_u8(u8::from(state.scripted_effects));
+    debug_assert!(state.effects.len() <= u16::MAX as usize);
+    out.put_u16(state.effects.len() as u16);
+    for fx in &state.effects {
+        out.put_u32(fx.id);
+        out.put_u8(fx.effect);
+        for v in fx.origin.iter().chain(&fx.forward).chain(&fx.up) {
+            out.put_f32(*v);
+        }
+        out.put_u8(u8::from(fx.start_ms.is_some()));
+        out.put_i32(fx.start_ms.unwrap_or(0));
+        out.put_i32(fx.repeat_ms);
+        out.put_f32(fx.cull_distance);
+    }
 }
 
 fn decode_objectives(input: &mut WireReader<'_>) -> Result<sim::ObjectiveMatch, WireError> {
@@ -2691,5 +2752,27 @@ fn decode_objectives(input: &mut WireReader<'_>) -> Result<sim::ObjectiveMatch, 
         state.server_info.push((get_text(input)?, get_text(input)?));
     }
     state.game_end_time = input.get_i32()?;
+    state.scripted_effects = input.get_u8()? != 0;
+    let count = input.get_u16()?;
+    for _ in 0..count {
+        let id = input.get_u32()?;
+        let effect = input.get_u8()?;
+        let mut v = [0.0f32; 9];
+        for slot in &mut v {
+            *slot = input.get_f32()?;
+        }
+        let triggered = input.get_u8()? != 0;
+        let start = input.get_i32()?;
+        state.effects.push(sim::ScriptEffect {
+            id,
+            effect,
+            origin: [v[0], v[1], v[2]],
+            forward: [v[3], v[4], v[5]],
+            up: [v[6], v[7], v[8]],
+            start_ms: triggered.then_some(start),
+            repeat_ms: input.get_i32()?,
+            cull_distance: input.get_f32()?,
+        });
+    }
     Ok(state)
 }

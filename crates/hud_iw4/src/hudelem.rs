@@ -128,7 +128,6 @@ pub const HE_TYPE_MATERIAL: i32 = 4;
 
 pub const HE_TYPE_WAYPOINT: i32 = 13;
 
-/// Bits of a waypoint's `value`. No script can set them.
 pub const WAYPOINT_CONSTANT_SIZE: i32 = 0x1;
 pub const WAYPOINT_PULSE_OFFSCREEN: i32 = 0x2;
 pub const WAYPOINT_HIDE_OFFSCREEN: i32 = 0x4;

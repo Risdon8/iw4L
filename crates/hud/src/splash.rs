@@ -36,6 +36,7 @@ struct SplashExprHost<'a> {
     ms: i32,
     slots: &'a [SplashSlot; SPLASH_SLOT_COUNT],
     table: Option<&'a CapturedStringTable>,
+    catalog: Option<&'a MenuCatalog>,
     localize: Option<&'a assets::LocalizeCatalog>,
     input: Option<&'a frame::HudInputView>,
 }
@@ -121,8 +122,18 @@ impl ExprHost for SplashExprHost<'_> {
     fn other_team_field(&self, _field: &str) -> Result<Operand, ExprError> {
         Err(ExprError::Host("other team field"))
     }
-    fn local_var_string(&self, _name: &str) -> Result<Operand, ExprError> {
-        Ok(Operand::Str(String::new()))
+    // The menu's onOpen setLocalVar* expressions only read the live slot, so evaluating
+    // them on demand gives the value they would have stored at open.
+    fn local_var_string(&self, name: &str) -> Result<Operand, ExprError> {
+        let Some(var) = self
+            .menu
+            .on_open_local_vars
+            .iter()
+            .find(|v| v.name.eq_ignore_ascii_case(name))
+        else {
+            return Ok(Operand::Str(String::new()));
+        };
+        hud_iw4::expr::evaluate(&var.expr, self)
     }
     fn time_left(&self) -> Result<i32, ExprError> {
         Err(ExprError::Host("timeleft"))
@@ -196,6 +207,22 @@ impl ExprHost for SplashExprHost<'_> {
             return Ok(Operand::Int(0));
         }
         Ok(Operand::Int(s.row))
+    }
+    fn table_lookup(
+        &self,
+        table: &str,
+        col0: i32,
+        key: &str,
+        result_col: i32,
+    ) -> Result<Operand, ExprError> {
+        let Some(t) = self.catalog.and_then(|c| c.string_table(table)) else {
+            return Err(ExprError::Host("string table"));
+        };
+        Ok(Operand::Str(
+            t.lookup_row_in_col(col0, key)
+                .map(|row| t.cell(row, result_col).to_owned())
+                .unwrap_or_default(),
+        ))
     }
     fn table_lookup_by_row(&self, table: &str, row: i32, col: i32) -> Result<Operand, ExprError> {
         match self.table {
@@ -332,6 +359,7 @@ pub(crate) fn update_splash(
         ms: now_ms,
         slots: &slots.slots,
         table: Some(table),
+        catalog: catalog.as_deref(),
         localize: strings.as_ref().map(|s| &s.0),
         input: input.as_deref(),
     };

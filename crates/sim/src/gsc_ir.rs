@@ -1,6 +1,8 @@
 mod compiler;
+mod controls;
 mod entities;
 mod entity_damage;
+mod guidance;
 mod hud;
 mod iw4_builtins;
 mod iw4_natives;
@@ -13,9 +15,11 @@ mod objectives;
 mod physics;
 mod players;
 mod presence;
+mod restart;
 mod runtime;
 mod t5_builtins;
 mod triggers;
+mod turrets;
 mod vehicles;
 mod weapons;
 
@@ -23,6 +27,7 @@ use bevy_ecs::prelude::{Component, Resource};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
+pub(crate) use controls::{SCRIPT_LOCK, select_location};
 pub use entities::{LevelData, StringTable, parse_entity_string};
 pub(crate) use entity_damage::{
     EntityHit, HitTarget, ScriptBlast, ScriptHit, damage_entity, radius_targets,
@@ -31,13 +36,15 @@ pub(crate) use iw4_natives::set_dvar;
 pub use natives::{Builtin, Catalog, Namespace, Owner};
 pub use natives_engine::{EXIT_LEVEL, MAP_RESTART};
 pub(crate) use players::{
-    answer_join, answer_menu, choose_class, choose_default_class, describe_players, flashbang,
-    force_death, note_team_answer, player_damage, script_seats, sync_players,
+    answer_join, answer_menu, choose_class, choose_default_class, flashbang, force_death,
+    give_killstreak, note_team_answer, player_damage, script_seats, sync_players,
 };
 pub(crate) use presence::sync_presence;
+pub(crate) use restart::restart_level;
 pub use runtime::{Native, NativeRegistry};
 pub(crate) use runtime::{
-    advance_scheduler, copy_state, healthy, install, preflight, reset, start, take_signals,
+    advance_scheduler, copy_state, healthy, install, preflight, reset, skip_prematch, start,
+    take_signals,
 };
 pub(crate) use weapons::sync_engine_events;
 
@@ -394,10 +401,8 @@ pub(crate) struct Runtime {
     dvars: BTreeMap<String, String>,
     loading: bool,
     precached: BTreeMap<(&'static str, String), i32>,
-    /// Client-facing state a script sets and the simulation never reads; last write wins.
     presented: BTreeMap<&'static str, Vec<Value>>,
     budget: usize,
-    /// Threads suspended in a `thread` call, innermost last, and their frame count.
     suspended: Vec<u64>,
     suspended_frames: usize,
     /// Endons that fired on a suspended thread; applied when its child yields.
@@ -413,6 +418,7 @@ pub(crate) struct Runtime {
     engine: entities::EngineState,
     players: BTreeMap<u32, players::PlayerSlot>,
     menu_answers: BTreeMap<u32, VecDeque<players::MenuAnswer>>,
+    weapon_bridge: BTreeMap<u32, Vec<(u32, u32)>>,
     joined: std::collections::BTreeSet<u32>,
     current_hit: Option<crate::script_player::Hit>,
     deaths: VecDeque<(u32, &'static str, Vec<Value>)>,
@@ -433,6 +439,10 @@ pub(crate) struct Runtime {
     vehicles: BTreeMap<u64, vehicles::Heli>,
     use_selected: BTreeMap<u32, u64>,
     t5: natives_t5::T5State,
+    restart: Option<Arc<restart::RestartPlan>>,
+    finished: bool,
+    pending_restart: Option<bool>,
+    restored_pers: BTreeMap<u32, restart::Detached>,
 }
 
 impl Runtime {

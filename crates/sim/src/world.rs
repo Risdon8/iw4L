@@ -2,7 +2,6 @@ use anim_iw4::{PLAYER_ANIM_RAW_MASK, PlayerAnimValue};
 use bevy_ecs::prelude::Component;
 use playerstate_iw4::{AnimPair, PlayerState};
 
-use crate::anim_script_gap::PlayerAnimScriptGap;
 use crate::bullet_collision::{
     CollisionHistory, EntityCollisionCapabilities, EntityCollisionHistory,
     EntityCollisionTraceGeom, LinkedBrushCollisionBrush,
@@ -269,6 +268,13 @@ impl SimContent {
 }
 
 /// Installation work. Consuming this builder closes all definition writers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WeaponSetup {
+    pub realm: crate::gsc_ir::Realm,
+    pub base: String,
+    pub attachments: Vec<String>,
+}
+
 #[derive(Debug, Default)]
 pub struct SimContentBuilder {
     clip_brushes: Vec<SimBrush>,
@@ -287,6 +293,7 @@ pub struct SimContentBuilder {
     player_anim_node_names: Vec<String>,
     mantle_xanims: Arc<crate::MantleXAnimBind>,
     weapon_script_names: Arc<[String]>,
+    weapon_setups: Arc<[Option<WeaponSetup>]>,
     weapon_world_models: Vec<(String, Vec<String>)>,
     weapon_projectile_models: Vec<String>,
     weapon_melee_only: Vec<bool>,
@@ -359,6 +366,10 @@ impl SimContentBuilder {
 
     pub fn set_weapon_script_names(&mut self, names: Vec<String>) {
         self.weapon_script_names = names.into();
+    }
+
+    pub fn set_weapon_setups(&mut self, setups: Vec<Option<WeaponSetup>>) {
+        self.weapon_setups = setups.into();
     }
 
     pub fn set_weapon_world_models(&mut self, models: Vec<(String, Vec<String>)>) {
@@ -495,8 +506,6 @@ pub struct SimState {
 
     pellet_fx: Vec<crate::PelletFxRecord>,
 
-    anim_script_gap: PlayerAnimScriptGap,
-
     world_objects: WorldObjectState,
 
     script_gaps: ScriptGaps,
@@ -602,7 +611,6 @@ impl Default for SimState {
             entity_events: Vec::new(),
             next_entity_event: EventSequence(1),
             pellet_fx: Vec::new(),
-            anim_script_gap: PlayerAnimScriptGap::default(),
             world_objects: WorldObjectState::default(),
             script_gaps: ScriptGaps::default(),
             sound_alias_cs: crate::SoundAliasCs::default(),
@@ -850,6 +858,15 @@ impl SimState {
         self.clients.clone()
     }
 
+    pub(crate) fn restart_level_phase(&mut self) {
+        self.phase = MatchPhase::Warmup;
+        self.match_elapsed_ms = 0;
+        self.prematch = gamemode_iw4::PrematchStep::default();
+        self.max_alive_seen = 0;
+        self.game_win_winner = None;
+        self.pending_final_kill = None;
+    }
+
     pub(crate) fn set_phase(&mut self, phase: MatchPhase) {
         if phase == MatchPhase::Playing && self.phase == MatchPhase::Warmup {
             self.prematch = gamemode_iw4::PrematchStep::Done;
@@ -1006,6 +1023,14 @@ impl SimState {
 
     pub fn weapon_script_names(&self) -> Arc<[String]> {
         Arc::clone(&self.content.data.weapon_script_names)
+    }
+
+    pub(crate) fn weapon_setup(&self, weapon: u32) -> Option<&WeaponSetup> {
+        self.content
+            .data
+            .weapon_setups
+            .get(weapon as usize)?
+            .as_ref()
     }
 
     pub fn weapon_script_name(&self, weapon: u32) -> &str {
@@ -1273,7 +1298,7 @@ impl SimState {
             origin[2] + maxs[2] + 1.0,
         ];
         let bounds = clipmap_iw4::AreaBounds::from_mins_maxs(absmin, absmax).unwrap_or_else(|_| {
-            panic!("SV_LinkEntity player Bounds are invalid");
+            panic!("player link Bounds are invalid");
         });
         area_world
             .link(
@@ -2818,14 +2843,6 @@ impl SimState {
 
     pub(crate) fn push_pellet_fx(&mut self, record: crate::PelletFxRecord) {
         self.pellet_fx.push(record);
-    }
-
-    pub fn anim_script_gap(&self) -> PlayerAnimScriptGap {
-        self.anim_script_gap
-    }
-
-    pub(crate) fn count_fire_anim_gap(&mut self) {
-        self.anim_script_gap.fire_inputs += 1;
     }
 
     pub(crate) fn scales_for(&self, weapon: u32) -> (f32, f32, f32) {

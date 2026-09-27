@@ -349,7 +349,8 @@ pub fn present_list(input: PresentInput<'_>) -> usize {
         let Some(clipped) = clip_aa_quad(quad) else {
             continue;
         };
-        let Some(texture) = hud_images.get(clipped.material_namespace, &clipped.material, images)
+        let Some(texture) =
+            hud_images.get_native(clipped.material_namespace, &clipped.material, images)
         else {
             continue;
         };

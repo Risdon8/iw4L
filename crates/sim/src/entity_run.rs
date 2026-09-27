@@ -167,7 +167,7 @@ fn think_parent_link(world: &mut FrameWorld, time_ms: i32, entity: crate::Entity
     };
     let tag = view.relations.parent_tag;
     let Some((origin, angles)) = parent_world_pose(world, parent, time_ms) else {
-        panic!("parented G_RunThink has no parent currentOrigin/angles");
+        panic!("parented think has no parent currentOrigin/angles");
     };
     let (origin, angles) = if tag >= 0 {
         let Some(mat) = world.dobj_anim_mat(parent.number(), tag) else {
@@ -230,7 +230,7 @@ fn apply_parent_link_pose(
                 g_parent_link_pose(&mut mover.state, origin, angles);
                 let snapped = snap_angles(angles);
                 if sv_link_entity_needs_rotated_radius(snapped, mover.box_half) {
-                    panic!("SV_LinkEntity yaw/pitch radius Bounds when r.half is non-zero");
+                    panic!("link yaw/pitch radius Bounds when r.half is non-zero");
                 }
                 let bounds = sv_link_entity_world_bounds(origin, mover.box_mid, mover.box_half);
                 mover.link_mid = bounds.mid;

@@ -758,7 +758,7 @@ impl ZoneLane for Iw5Lane {
         ));
         let gun_named = weapons.gun_xmodel_count();
         report.push(format!(
-        "common_mp weapons: {captured} captures -> {} unique catalog ids (sorted; not retail bg_weaponIndex); {gun_named} with gunXModel[0]; {} with szXAnims[IDLE]; {} with any szXAnims slot",
+        "common_mp weapons: {captured} captures -> {} unique catalog ids (sorted); {gun_named} with gunXModel[0]; {} with szXAnims[IDLE]; {} with any szXAnims slot",
         weapons.len(),
         weapons.idle_anim_count(),
         weapons.sz_xanims_count()

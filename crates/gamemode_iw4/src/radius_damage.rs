@@ -40,7 +40,7 @@ pub(crate) const G_CAN_DAMAGE_HALF_HEIGHT_SCALE: f32 = 0.5;
 
 pub(crate) const G_CAN_DAMAGE_PARTIAL_DIVISOR: f32 = 3.0;
 
-pub(crate) fn g_can_damage_player_sample_points(
+pub(crate) fn can_damage_player_sample_points(
     origin: [f32; 3],
     view_height: f32,
     right: [f32; 3],
@@ -69,7 +69,7 @@ pub(crate) fn g_can_damage_player_sample_points(
     ]
 }
 
-pub(crate) fn g_can_damage_hits_to_scale(hits: u32) -> f32 {
+pub(crate) fn can_damage_hits_to_scale(hits: u32) -> f32 {
     if hits == 0 {
         0.0
     } else if hits < 4 {
@@ -86,12 +86,12 @@ pub fn g_can_damage_player_vis_scale(
     inflictor: [f32; 3],
     mut trace_passed: impl FnMut([f32; 3], [f32; 3]) -> bool,
 ) -> f32 {
-    let samples = g_can_damage_player_sample_points(origin, view_height, right);
+    let samples = can_damage_player_sample_points(origin, view_height, right);
     let mut hits = 0u32;
     for sample in samples {
         if trace_passed(inflictor, sample) {
             hits += 1;
         }
     }
-    g_can_damage_hits_to_scale(hits)
+    can_damage_hits_to_scale(hits)
 }

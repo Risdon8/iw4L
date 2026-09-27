@@ -332,7 +332,7 @@ impl Parser {
         } else if !digits.bytes().all(|b| b.is_ascii_digit()) {
             Err(self.error("invalid integer literal"))
         } else {
-            // Retail's CRT scanf accumulates %d in 32 bits: long literals wrap, never saturate.
+            // Long literals wrap to 32 bits, never saturate.
             let n = digits.bytes().fold(0u32, |n, b| {
                 n.wrapping_mul(10).wrapping_add(u32::from(b - b'0'))
             }) as i32;

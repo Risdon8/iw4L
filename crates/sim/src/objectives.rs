@@ -6,6 +6,20 @@ pub struct ObjectiveMatch {
     pub compass: Vec<CompassObjective>,
     pub server_info: Vec<(String, String)>,
     pub game_end_time: i32,
+    pub scripted_effects: bool,
+    pub effects: Vec<ScriptEffect>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ScriptEffect {
+    pub id: u32,
+    pub effect: u8,
+    pub origin: [f32; 3],
+    pub forward: [f32; 3],
+    pub up: [f32; 3],
+    pub start_ms: Option<i32>,
+    pub repeat_ms: i32,
+    pub cull_distance: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -69,14 +83,6 @@ impl ObjectiveMatch {
 
     pub fn time_left_ms(&self, now_ms: i32) -> i32 {
         self.game_end_time.saturating_sub(now_ms)
-    }
-
-    pub fn server_info_int(&self, name: &str) -> Option<i32> {
-        let value = self.server_info(name)?.trim();
-        value
-            .parse::<i32>()
-            .ok()
-            .or_else(|| value.parse::<f32>().ok().map(|v| v as i32))
     }
 }
 

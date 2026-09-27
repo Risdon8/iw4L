@@ -27,7 +27,7 @@ pub(crate) fn fire_accepted_shot(world: &mut FrameWorld, tick: crate::Tick, shot
             );
         }
         Some(FireWeaponKind::Missile) => {
-            g_fire_missile(world, tick, shot);
+            fire_missile(world, tick, shot);
         }
         Some(FireWeaponKind::ThrownGrenade) => {
             spawn_grenade_projectile(
@@ -80,7 +80,7 @@ pub(crate) fn magic_bullet(
         spread_degrees: 0.0,
     };
     let launched = match fire_weapon_kind(combat.weap_type, combat.weap_class) {
-        Some(FireWeaponKind::Missile) => Some(g_fire_missile(world, tick, &shot)),
+        Some(FireWeaponKind::Missile) => Some(fire_missile(world, tick, &shot)),
         Some(kind @ (FireWeaponKind::GrenadeLauncher | FireWeaponKind::ThrownGrenade)) => {
             let launch = if kind == FireWeaponKind::GrenadeLauncher {
                 GrenadeLaunchKind::Launcher
@@ -115,15 +115,9 @@ pub(crate) fn magic_bullet(
     launched.ok_or_else(|| format!("weapon {weapon} launched no projectile"))
 }
 
-fn g_fire_missile(
-    world: &mut FrameWorld,
-    tick: crate::Tick,
-    shot: &AcceptedShot,
-) -> ProjectileState {
+fn fire_missile(world: &mut FrameWorld, tick: crate::Tick, shot: &AcceptedShot) -> ProjectileState {
     let Some(facts) = world.missile_launch_facts(shot.weapon) else {
-        panic!(
-            "G_FireMissile needs iProjectileSpeed@+0x404 on the equipment row; RPG is not an offhand"
-        );
+        panic!("a missile needs iProjectileSpeed on the equipment row; RPG is not an offhand");
     };
     let mut rng = MatchRng::new(shot.combat_seed as u64);
     let dir = spread_direction_on_plane(
@@ -137,7 +131,7 @@ fn g_fire_missile(
     let id = world.allocate_projectile_id();
     let entnum = world
         .allocate_dynamic_entity(crate::gentity::EntityRunKind::Missile)
-        .expect("G_Spawn exhausted dynamic entity slots for missile")
+        .expect("no free dynamic entity slot for a missile")
         .number();
     let time_ms = crate::level_time_ms(tick);
     let velocity = truncated_tr_delta([

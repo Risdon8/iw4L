@@ -17,10 +17,8 @@ const NAMES: &[&str] = &[
 pub(crate) fn register(registry: &mut ConsoleRegistry) {
     for &name in NAMES {
         if registry.resolve(name).is_none() {
-            registry.register(
-                crate::CommandSpec::new(name)
-                    .usage(format!("{name} [value] — glow (`R_SetGlowInfo`)")),
-            );
+            registry
+                .register(crate::CommandSpec::new(name).usage(format!("{name} [value] — glow")));
         }
     }
 }

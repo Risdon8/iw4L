@@ -44,19 +44,32 @@ pub(crate) fn load_user_settings(
 }
 
 pub(crate) fn consume_menu_binding(
-    mut intents: MessageReader<ui::UiIntent>,
+    mut intents: MessageReader<frame::UiBindRequest>,
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut pending: ResMut<PendingMenuBinding>,
+    mut capture: ResMut<frame::UiBindingCapture>,
     mut binds: ResMut<KeyBinds>,
     mut view: ResMut<ui::BindingView>,
 ) {
+    capture.consumed_input = false;
+    if capture.command.is_none() {
+        pending.id = None;
+        view.listening = None;
+    }
     let mut began = false;
     for intent in intents.read() {
-        if let ui::UiIntent::BeginBinding { id } = intent {
-            pending.id = Some(*id);
+        if let Some(id) = input_iw4::command_id_lookup(&intent.command) {
+            capture.command = Some(intent.command.clone());
+            pending.id = Some(id);
+            view.listening = Some(id);
+            view.revision = view.revision.wrapping_add(1);
             pending.armed = false;
             began = true;
+        } else {
+            capture.command = None;
+            pending.id = None;
+            view.listening = None;
         }
     }
     let Some(id) = pending.id else { return };
@@ -65,6 +78,8 @@ pub(crate) fn consume_menu_binding(
         return;
     }
     if keys.just_pressed(KeyCode::Escape) {
+        capture.command = None;
+        capture.consumed_input = true;
         pending.id = None;
         pending.armed = false;
         view.listening = None;
@@ -84,6 +99,8 @@ pub(crate) fn consume_menu_binding(
                 .next()
         });
     let Some(button) = button else { return };
+    capture.command = None;
+    capture.consumed_input = true;
     binds.clear_command(id);
     binds.set(button, id);
     pending.id = None;
@@ -92,7 +109,11 @@ pub(crate) fn consume_menu_binding(
     view.revision = view.revision.wrapping_add(1);
 }
 
-pub(crate) fn sync_binding_view(binds: Res<KeyBinds>, mut view: ResMut<ui::BindingView>) {
+pub(crate) fn sync_binding_view(
+    binds: Res<KeyBinds>,
+    mut view: ResMut<ui::BindingView>,
+    mut dvars: ResMut<frame::UiMenuDvars>,
+) {
     if !binds.is_changed() {
         return;
     }
@@ -105,6 +126,11 @@ pub(crate) fn sync_binding_view(binds: Res<KeyBinds>, mut view: ResMut<ui::Bindi
         names.sort();
         names.dedup();
         view.chords.insert(id, names.join(" OR "));
+    }
+    // Native key-binding items store the command name in their dvar field.
+    // Publish every command so removing its last binding clears the old label.
+    for (id, command) in input_iw4::INPUT_COMMAND_NAMES.iter().enumerate().skip(1) {
+        dvars.set(&format!("ui_bind_{command}"), view.chord(id as u32));
     }
     view.revision = view.revision.wrapping_add(1);
 }
@@ -298,4 +324,39 @@ fn parse_settings(source: &str, settings: &mut frame::GameSettings, binds: &mut 
     {
         binds.set(BindButton::Key(KeyCode::Digit4), 21);
     }
+}
+
+pub(crate) fn native_menu_settings(
+    mut events: MessageReader<crate::ConsoleCommand>,
+    mut settings: ResMut<frame::GameSettings>,
+    mut dvars: ResMut<frame::UiMenuDvars>,
+) {
+    for command in events.read() {
+        if !matches!(command.name.as_str(), "set" | "seta") {
+            continue;
+        }
+        let [name, value, ..] = command.args.as_slice() else {
+            continue;
+        };
+        match name.as_str() {
+            "ui_r_mode" => {
+                if let Some((w, h)) = value.split_once('x')
+                    && let (Ok(w), Ok(h)) = (w.parse(), h.parse())
+                {
+                    settings.resolution = frame::DisplayResolution::new(w, h);
+                }
+            }
+            "ui_r_displayMode" => settings.fullscreen = value == "1",
+            "ui_r_vsync" => settings.vsync = value == "1",
+            _ => continue,
+        }
+        settings.sanitize();
+        settings.touch();
+    }
+    dvars.set("ui_r_mode", settings.resolution.to_string());
+    dvars.set(
+        "ui_r_displayMode",
+        if settings.fullscreen { "1" } else { "0" },
+    );
+    dvars.set("ui_r_vsync", if settings.vsync { "1" } else { "0" });
 }

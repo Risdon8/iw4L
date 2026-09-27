@@ -150,14 +150,6 @@ impl SimWorld {
             .program_fingerprint()
     }
 
-    pub fn gsc_fault(&self) -> Option<&crate::gsc_ir::Fault> {
-        self.ecs.resource::<crate::gsc_ir::Runtime>().fault.as_ref()
-    }
-
-    pub fn gsc_players(&mut self) -> Vec<String> {
-        crate::gsc_ir::describe_players(&mut self.ecs)
-    }
-
     pub fn script_seats(&self) -> Vec<(ClientId, crate::ScriptSeat)> {
         crate::gsc_ir::script_seats(&self.ecs)
     }

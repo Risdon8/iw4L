@@ -92,6 +92,11 @@ pub enum ClientAction {
         menu: [u8; MENU_RESPONSE_BYTES],
         response: [u8; MENU_RESPONSE_BYTES],
     },
+
+    GiveKillstreak {
+        request_id: ActionRequestId,
+        name: [u8; MENU_RESPONSE_BYTES],
+    },
 }
 
 pub const MENU_RESPONSE_BYTES: usize = 48;
@@ -157,6 +162,7 @@ pub fn action_request_id(action: &ClientAction) -> ActionRequestId {
         | ClientAction::SetName { request_id, .. }
         | ClientAction::UseCopycat { request_id }
         | ClientAction::ChooseDefaultClass { request_id, .. }
-        | ClientAction::MenuResponse { request_id, .. } => request_id,
+        | ClientAction::MenuResponse { request_id, .. }
+        | ClientAction::GiveKillstreak { request_id, .. } => request_id,
     }
 }

@@ -352,6 +352,11 @@ pub fn apply_prepared_match(
 
     let world_report = std::mem::take(&mut prepared.report);
     log_world_report(&world_report);
+    let map_shocks: Vec<(String, String)> = prepared
+        .scripts
+        .shocks()
+        .map(|(name, text)| (name.to_owned(), text.to_owned()))
+        .collect();
 
     let plan = match preflight_match_install(
         prepared,
@@ -479,12 +484,29 @@ pub fn apply_prepared_match(
                 .map(|clip| (*clip).clone())
         }));
         content.set_weapon_script_names(weapons.0.script_names_table());
+        content.set_weapon_setups(
+            (0..weapons.0.script_names_table().len() as u32)
+                .map(|id| {
+                    let selection = weapons.0.describe_configuration(id)?;
+                    let family = selection.family.as_ref()?;
+                    Some(sim::WeaponSetup {
+                        realm: match family.namespace {
+                            assets::AssetNamespace::T5 => sim::gsc_ir::Realm::T5,
+                            assets::AssetNamespace::Iw5 => sim::gsc_ir::Realm::Iw5,
+                            _ => sim::gsc_ir::Realm::Iw4,
+                        },
+                        base: family.base.clone(),
+                        attachments: selection.attachments.clone(),
+                    })
+                })
+                .collect(),
+        );
         content.set_weapon_world_models(weapons.0.world_models_table());
         content.set_weapon_projectile_models(weapons.0.projectile_models_table());
         content.set_weapon_melee_only(combat_table::melee_only_from_registry(&weapons.0));
         content.set_weapon_script_sounds(combat_table::script_sounds_from_registry(&weapons.0));
         install_team_voice_prefixes(&mut content, catalog.as_deref(), identity.as_deref(), &zone);
-        install_shocks(&mut content, catalog.as_deref());
+        install_shocks(&mut content, catalog.as_deref(), &map_shocks);
         let equipment = combat_table::equipment_from_registry(&weapons.0);
         content.set_equipment_runtime_table(equipment.clone());
         let mut primary = Vec::new();
@@ -592,13 +614,13 @@ pub fn apply_prepared_match(
         spawn_script_model_movers(&mut sim, &model_spawns);
         for (id, cmodel, origin, angles) in brush_movers {
             sim.spawn_brush_mover(id, cmodel, origin, angles)
-                .expect("G_Spawn exhausted dynamic entity slots while installing brush models");
+                .expect("no free dynamic entity slot for a brush model");
         }
         stamp_script_mover_numbers(&mut scene, &sim);
         if !model_spawns.is_empty() {
             diag::info!(
                 World,
-                "script_model G_Spawn: {} ET_SCRIPTMOVER from {}",
+                "script_model spawn: {} ET_SCRIPTMOVER from {}",
                 sim.script_mover_count(),
                 sim::gentity_spawn_base()
             );
@@ -1112,7 +1134,7 @@ fn spawn_script_model_movers(
 ) {
     for (id, origin, angles) in models {
         sim.spawn_script_mover(*id, *origin, *angles)
-            .expect("G_Spawn exhausted dynamic entity slots while installing script models");
+            .expect("no free dynamic entity slot for a script model");
     }
 }
 
@@ -1548,22 +1570,29 @@ pub(crate) fn bootstrap_class_rows(host: Option<&HostClassLoadouts>) -> Vec<Clas
         .collect()
 }
 
-fn install_shocks(world: &mut sim::SimContentBuilder, catalog: Option<&assets::MenuCatalog>) {
-    let Some(catalog) = catalog else {
-        return;
-    };
+fn install_shocks(
+    world: &mut sim::SimContentBuilder,
+    catalog: Option<&assets::MenuCatalog>,
+    map_shocks: &[(String, String)],
+) {
+    let common = catalog.into_iter().flat_map(|catalog| {
+        catalog.rawfiles.iter().filter_map(|(path, text)| {
+            let lower = path.to_ascii_lowercase();
+            let name = lower
+                .strip_prefix("shock/")?
+                .strip_suffix(".shock")?
+                .to_owned();
+            Some((name, text.as_str()))
+        })
+    });
+    let map = map_shocks
+        .iter()
+        .map(|(name, text)| (name.clone(), text.as_str()));
     let mut shocks = std::collections::BTreeMap::new();
-    for (path, text) in &catalog.rawfiles {
-        let lower = path.to_ascii_lowercase();
-        let Some(name) = lower
-            .strip_prefix("shock/")
-            .and_then(|rest| rest.strip_suffix(".shock"))
-        else {
-            continue;
-        };
+    for (name, text) in common.chain(map) {
         match hud_iw4::ShockParams::parse(text) {
             Ok(params) => {
-                shocks.insert(name.to_owned(), params);
+                shocks.insert(name, params);
             }
             Err(error) => diag::warn!(Zone, "shock/{name}.shock: {error}"),
         }

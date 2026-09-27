@@ -26,6 +26,6 @@ pub use session::{
 };
 pub use settings::{DisplayResolution, GameSettings};
 pub use ui_sound::{
-    UiExecCommand, UiMenuKey, UiMenuRequest, UiPlayMusic, UiPlaySound, UiStopMusic,
-    register_ui_sound,
+    UiBindRequest, UiBindingCapture, UiExecCommand, UiMenuDvars, UiMenuKey, UiMenuRequest,
+    UiPartyState, UiPlayMusic, UiPlaySound, UiStopMusic, register_ui_sound,
 };

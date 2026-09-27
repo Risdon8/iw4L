@@ -25,14 +25,9 @@ pub fn sync_ui_layers(
     ui_draw: Res<UiDraw>,
     loading: Option<Res<LoadingScreen>>,
     mut layers: ResMut<UiLayers>,
-    menu: Res<crate::MenuEnabled>,
 ) {
     let set = layers_for_screen(*screen, ui_draw.0, loading.is_some());
-    layers.show_only(
-        set.iter()
-            .copied()
-            .chain((menu.0 && *screen == AppScreen::InGame).then_some(UiLayer::Shell)),
-    );
+    layers.show_only(set.iter().copied());
 }
 
 pub(crate) fn register_screen_systems(app: &mut App) {

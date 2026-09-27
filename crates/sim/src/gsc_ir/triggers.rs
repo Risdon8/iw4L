@@ -76,7 +76,6 @@ enum Volume<'f> {
     },
     Hulls {
         origin: [f32; 3],
-        // Hull planes are relative to this origin.
         hulls: &'f [crate::SimTriggerHull],
     },
 }
@@ -165,6 +164,24 @@ fn toucher(runtime: &mut Runtime, frame: &FrameWorld, object: u64) -> ([f32; 3],
         _ => [0.0; 3],
     };
     (origin, origin)
+}
+
+pub(super) fn entity_bounds(world: &mut World, object: u64) -> ([f32; 3], [f32; 3]) {
+    let runtime = world.resource::<Runtime>();
+    if runtime.player_client(object).is_some() {
+        return (PLAYER_MINS, PLAYER_MAXS);
+    }
+    let Some(entity) = runtime.entities.get(&object) else {
+        return ([0.0; 3], [0.0; 3]);
+    };
+    if let Some((radius, height)) = entity.cylinder {
+        return ([-radius, -radius, 0.0], [radius, radius, height]);
+    }
+    let brush = entity.brush;
+    let frame = FrameWorld::from_world(world);
+    brush
+        .and_then(|n| frame.clip_cmodels().models.get(n as usize))
+        .map_or(([0.0; 3], [0.0; 3]), |model| (model.mins, model.maxs))
 }
 
 pub(super) fn is_touching(world: &mut World, a: u64, b: u64) -> bool {

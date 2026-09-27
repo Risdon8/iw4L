@@ -160,7 +160,7 @@ fn table_search(table: &StringTable, column: usize, value: &str) -> Option<usize
     })
 }
 
-fn table_lookup(world: &World, args: &[Value]) -> Result<String, String> {
+pub(super) fn table_lookup(world: &World, args: &[Value]) -> Result<String, String> {
     if args.len() != 4 {
         return Err("wrong number of parameters".into());
     }

@@ -8,7 +8,7 @@ use natives::Namespace::{Function, Method};
 
 pub(super) const DAMAGE: &str = "maps/mp/gametypes/_callbacksetup::codecallback_vehicledamage";
 
-const MPH: f32 = 17.6; // miles per hour, not units per second
+const MPH: f32 = 17.6;
 const TICK_S: f32 = crate::MATCH_TICK_MS as f32 / 1000.0;
 const ARRIVED: f32 = 4.0;
 

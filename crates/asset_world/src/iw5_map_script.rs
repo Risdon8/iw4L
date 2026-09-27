@@ -1,6 +1,3 @@
-//! MW3 map scripts ship as bytecode this VM does not run. A stand-in source
-//! is written from the zone's string literals and entity string.
-
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
@@ -122,8 +119,6 @@ impl Iw5MapDeclarations {
         out
     }
 
-    // A prop names its animation, not its module. Match by that name first; leftover
-    // modules pair in zone order, then fall back to the animation they are named after.
     fn prop_models(&self, entities: &str) -> BTreeMap<String, (String, String)> {
         let mut modules: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         for block in entity_blocks(entities) {
@@ -143,33 +138,20 @@ impl Iw5MapDeclarations {
                 .or_default()
                 .insert(model.clone());
         }
-        let mut used = vec![false; self.props.len()];
-        let mut chosen: BTreeMap<&str, (String, String)> = BTreeMap::new();
-        for module in modules.keys() {
-            if let Some(at) = self.props.iter().position(|(anim, _)| anim == module) {
-                used[at] = true;
-                chosen.insert(module, self.props[at].clone());
-            }
-        }
-        let rest_modules: Vec<&String> = modules
+        // A module is bound only to the prop script that names it; equal counts
+        // of leftovers prove nothing about which belongs to which.
+        let chosen: BTreeMap<&str, (String, String)> = modules
             .keys()
-            .filter(|m| !chosen.contains_key(m.as_str()))
+            .map(|module| {
+                let prop = self
+                    .props
+                    .iter()
+                    .find(|(anim, _)| anim == module)
+                    .cloned()
+                    .unwrap_or_else(|| (module.clone(), "default".to_owned()));
+                (module.as_str(), prop)
+            })
             .collect();
-        let rest_props: Vec<&(String, String)> = self
-            .props
-            .iter()
-            .zip(&used)
-            .filter(|(_, used)| !**used)
-            .map(|(prop, _)| prop)
-            .collect();
-        for (at, module) in rest_modules.iter().enumerate() {
-            let prop = if rest_modules.len() == rest_props.len() {
-                rest_props[at].clone()
-            } else {
-                ((*module).clone(), "default".to_owned())
-            };
-            chosen.insert(module, prop);
-        }
         let mut models = BTreeMap::new();
         for (module, names) in &modules {
             for model in names {
@@ -180,11 +162,8 @@ impl Iw5MapDeclarations {
     }
 }
 
-/// This precache key's script string has no name in the zone.
 const PRECACHE_KEY: &str = "2818";
 
-/// `[mp_, animated_props,] animation, key, animation, key`: the two assignments of an
-/// animated prop script, one for each of SP and MP.
 fn prop_script(literals: &[String]) -> Option<(String, String)> {
     let body = match literals {
         [mp, tree, body @ ..] if mp == "mp_" && tree == "animated_props" => body,
@@ -198,8 +177,6 @@ fn prop_script(literals: &[String]) -> Option<(String, String)> {
     }
 }
 
-/// The NUL-terminated printable runs of an inflated script stack. Single bytes are
-/// dropped: sizes in the stack can read as one printable byte.
 pub fn stack_literals(stack: &[u8]) -> Vec<String> {
     stack
         .split(|&b| b == 0)

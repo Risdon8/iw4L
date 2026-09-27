@@ -462,7 +462,6 @@ fn merge_column(nodes: &mut Vec<[f32; 3]>, dedupe: &mut Buckets, floors: &[Floor
     boundary || nodes.len() == before
 }
 
-/// Columns are traced in parallel batches so a cap wastes at most one batch.
 fn sample_columns(
     world: &impl BakeTraces,
     positions: &[[f32; 3]],
