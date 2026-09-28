@@ -396,6 +396,7 @@ fn fpv_occupy_submission(
 }
 
 pub fn occupy_fpv_scene(
+    skate: Res<frame::SkateMode>,
     mut submissions: MessageWriter<AnimDObjSceneSubmission>,
     presented: Res<PresentedSnapshot>,
     local: Res<LocalPresentClient>,
@@ -406,7 +407,8 @@ pub fn occupy_fpv_scene(
     tess: Option<Res<render_scene::TessMaterials>>,
     fpv_meshes: Option<Res<PreparedFpvMeshes>>,
 ) {
-    if presented.viewweapon_player(local.0).is_none()
+    if (skate.active && !skate.bones.is_empty())
+        || presented.viewweapon_player(local.0).is_none()
         || presented_is_third_person(&presented, local.0, view.in_killcam())
     {
         return;

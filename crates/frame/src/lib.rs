@@ -31,3 +31,6 @@ pub use ui::{
     HostMatchRules, UiBindRequest, UiBindingCapture, UiExecCommand, UiMenuDvars, UiMenuKey,
     UiMenuRequest, UiPartyState, UiPlayMusic, UiPlaySound, UiStopMusic, register_ui_contracts,
 };
+
+pub mod skate;
+pub use skate::SkateMode;

@@ -7,6 +7,7 @@ use render_frontend::prepare::scene::world::WorldScene;
 use crate::LiveWorldIdentity;
 
 pub fn update_admission(
+    skate: Option<Res<frame::SkateMode>>,
     mut signon: ResMut<SignonState>,
     mut admission: ResMut<ClientAdmission>,
     role: Res<RuntimeRole>,
@@ -24,8 +25,12 @@ pub fn update_admission(
         live.load_key = installed;
     }
     let audio_ready = audio.is_none_or(|ready| ready.0);
-    let presentation_ready =
-        headless.is_some() || (scene.is_some_and(|scene| scene.spawned) && audio_ready);
+    // Local Skate data belongs to map preparation, so the first J press does
+    // not perform loading after the player has entered the game.
+    let skate_ready =
+        *role != RuntimeRole::Listen || skate.is_none_or(|skate| !skate.preload_pending);
+    let presentation_ready = headless.is_some()
+        || (scene.is_some_and(|scene| scene.spawned) && audio_ready && skate_ready);
     if presentation_ready && let Some(live) = live.as_ref() {
         admission.core.apply_presentation(live.load_key);
     }

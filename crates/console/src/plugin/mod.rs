@@ -80,6 +80,7 @@ pub struct ConsolePlugin;
 impl Plugin for ConsolePlugin {
     fn build(&self, app: &mut App) {
         crate::startup::install_stdin(app);
+        app.add_systems(Update, crate::debug_move::update_skate_overlay.in_set(ClientSet::Ui));
         app.init_resource::<ConsoleSettings>()
             .init_resource::<ConsoleState>()
             .init_resource::<frame::HudInputView>()
@@ -259,6 +260,7 @@ fn isolate_gameplay_input(
 }
 
 fn publish_client_action_input(
+    mut skate: ResMut<frame::SkateMode>,
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
@@ -273,25 +275,11 @@ fn publish_client_action_input(
     settings: Res<frame::GameSettings>,
     mut out: ResMut<ClientActionInput>,
 ) {
-    hud_input.console_open = console.open;
-    if binds.is_changed() || hud_input.binding_keys.is_empty() {
-        hud_input.binding_keys.clear();
-        for (button, _) in binds.iter() {
-            if let Some(command) = binds.binding_name(button) {
-                let key = crate::binds::display_button(button).to_uppercase();
-                hud_input
-                    .binding_keys
-                    .entry(command.to_owned())
-                    .and_modify(|label| {
-                        if key < *label {
-                            *label = key.clone();
-                        }
-                    })
-                    .or_insert(key);
-            }
-        }
-    }
     let script_menu = script_menus.is_some_and(|m| m.captures_input());
+    skate.input_blocked = console.open;
+    if !skate.input_blocked && keys.just_pressed(KeyCode::KeyJ) {
+        skate.toggle_requested = true;
+    }
     if binds.is_changed() || hud_input.use_key.is_none() {
         hud_input.use_key = binds
             .iter()

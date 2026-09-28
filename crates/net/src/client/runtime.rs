@@ -762,6 +762,7 @@ fn apply_weapon_switch_requests(
 }
 
 pub fn sample_client_input(
+    skate: Option<Res<frame::SkateMode>>,
     time: Res<Time>,
     mut actions: ResMut<ClientActionInput>,
     mut look: ResMut<LookState>,
@@ -771,8 +772,7 @@ pub fn sample_client_input(
     presented: Res<PresentedSnapshot>,
     local: Res<LocalPresentClient>,
     gate: Res<AuthorityInputGate>,
-    cls: Res<ClientRealtime>,
-    clock: Res<FrameClock>,
+    (cls, clock): (Res<ClientRealtime>, Res<FrameClock>),
     mut action_inbox: Option<ResMut<ClientActionInbox>>,
     mut request_ids: Option<ResMut<crate::ActionRequestIds>>,
     view: Option<Res<frame::ViewSubject>>,
@@ -1031,6 +1031,11 @@ pub fn sample_client_input(
     {
         cmd.melee_charge_yaw = yaw;
         cmd.melee_charge_dist = dist;
+    }
+    if skate.as_ref().is_some_and(|s| s.active) {
+        cmd.forwardmove = 0;
+        cmd.rightmove = 0;
+        cmd.buttons = 0;
     }
     template.cmd = cmd;
     template.ready = true;

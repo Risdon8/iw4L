@@ -1,5 +1,8 @@
 mod artifact_cache;
 mod asset_graph;
+
+pub mod bot_model;
+pub mod skate_board;
 mod gltf_export;
 mod iwd;
 mod lane;

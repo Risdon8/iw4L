@@ -36,3 +36,5 @@ pub use occupancy::{
     spawn_pending_fpv, stamp_fpv_placement_matrix, sync_camera_from_presented, tick_fpv_viewmodel,
 };
 pub use plugin::RenderAnimPlugin;
+
+pub mod skate;

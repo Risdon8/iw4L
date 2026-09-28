@@ -256,6 +256,10 @@ impl SimWorld {
         }
     }
 
+    pub fn set_external_motion(&mut self, id: ClientId, enabled: bool) {
+        if enabled { self.frame().external_motion.insert(id); } else { self.frame().external_motion.remove(&id); }
+    }
+
     pub fn set_origin(&mut self, id: ClientId, origin: [f32; 3]) -> bool {
         self.frame().set_origin(id, origin)
     }

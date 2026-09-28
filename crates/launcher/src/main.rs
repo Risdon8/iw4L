@@ -2,6 +2,9 @@ use std::path::PathBuf;
 
 use asset_transport::{ensure_artifacts_dir, games_root_from_env};
 
+#[cfg(windows)]
+mod first_run;
+
 #[global_allocator]
 static PROCESS_ALLOCATOR: diag::ProcessCountingAllocator = diag::ProcessCountingAllocator;
 
@@ -10,10 +13,17 @@ fn main() {
     prepare_process_root().unwrap_or_else(|e| {
         diag::exit_launch_error(&e);
     });
+    #[cfg_attr(not(windows), allow(unused_mut))]
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    #[cfg(windows)]
+    if args.is_empty() {
+        first_run::prepare().unwrap_or_else(|e| first_run::fail(&e));
+        args.push("menu".into());
+    }
     let artifacts = ensure_artifacts_dir().unwrap_or_else(|e| diag::exit_launch_error(&e));
     announce_log(diag::init_log(&artifacts));
-    let (mode, acceptance) = bootstrap::parse_cli(std::env::args().skip(1))
-        .unwrap_or_else(|e| diag::exit_launch_error(&e));
+    let (mode, acceptance) =
+        bootstrap::parse_cli(args.into_iter()).unwrap_or_else(|e| diag::exit_launch_error(&e));
     let games = games_root_from_env().unwrap_or_else(|e| diag::exit_launch_error(&e));
     bootstrap::launch(games, artifacts, mode, acceptance);
 }

@@ -193,6 +193,21 @@ pub fn prepare_model_materials(
     let started = std::time::Instant::now();
     let mut by_name = HashMap::new();
     let mut refused = Vec::new();
+    for model in [
+        assets::bot_model::local_bot_model(),
+        assets::bot_model::local_skate_board(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        admit_names(
+            model.surfaces.iter().map(|s| s.material.as_str()),
+            &atlas,
+            &tess.catalog,
+            &mut by_name,
+            &mut refused,
+        );
+    }
     for name in bodies.0.names() {
         if let Some(entry) = bodies.0.get(name) {
             admit_names(

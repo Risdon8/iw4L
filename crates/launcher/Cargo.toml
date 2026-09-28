@@ -19,5 +19,8 @@ asset_transport.workspace = true
 assets.workspace = true
 bootstrap = { path = "../bootstrap" }
 
+[target.'cfg(windows)'.dependencies]
+rfd = { version = "0.15", default-features = false }
+
 [lints]
 workspace = true

@@ -75,13 +75,17 @@ pub(crate) fn update_reticle(
     aim: Res<ViewweaponAim>,
     cg_clock: Res<FrameClock>,
     mut quads: Query<(&ReticleQuad, &mut Node, &mut ImageNode, &mut UiTransform)>,
-    life: (MessageReader<LifeStarted>, Res<ViewSubject>),
+    life: (MessageReader<LifeStarted>, Res<ViewSubject>, Option<Res<frame::SkateMode>>),
 ) {
-    let (mut started, view) = life;
+    let (mut started, view, skate) = life;
     for ev in started.read() {
         if ev.client == local.0.0 {
             *ads_latch = ReticleAdsLatch::default();
         }
+    }
+    if skate.is_some_and(|mode| mode.active) {
+        hide_all(&mut quads);
+        return;
     }
     if !surface.is_ready() {
         return;

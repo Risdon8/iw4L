@@ -567,6 +567,8 @@ pub struct SimState {
 
     pending_final_kill: Option<(ClientId, ClientId)>,
 
+    pub(crate) external_motion: std::collections::HashSet<ClientId>,
+
     last_pmove_walking: HashMap<ClientId, i32>,
 
     stuck_holdrand: u32,
@@ -663,6 +665,7 @@ impl Default for SimState {
             pending_prints: Vec::new(),
             pending_local_sounds: Vec::new(),
             pending_final_kill: None,
+            external_motion: Default::default(),
             last_pmove_walking: HashMap::new(),
             stuck_holdrand: 0,
             last_stuck_ejects: Vec::new(),
@@ -1411,6 +1414,7 @@ impl SimState {
         self.player_dobjs.remove(&id.0);
         self.lagcomp_sample.remove(&id);
         self.lagcomp_commands.retain(|(client, _), _| *client != id);
+        self.external_motion.remove(&id);
         self.last_pmove_walking.remove(&id);
         self.last_anim_movetype.remove(&id);
     }

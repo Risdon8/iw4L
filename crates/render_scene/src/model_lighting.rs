@@ -6,6 +6,7 @@ use bevy::prelude::*;
 pub enum ModelLightingOwner {
     Eye,
     RemoteClient(u16),
+    LocalBotOverride(u16),
     Corpse(Entity),
     ScriptModel(Entity),
 

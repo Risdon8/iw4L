@@ -32,9 +32,11 @@ fx_iw4.workspace = true
 bevy.workspace = true
 frame.workspace = true
 bcdec_rs.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 async-lock.workspace = true
 png.workspace = true
+half = "2.7.1"
 
 # `load_pool` puts its workers back on the process's CPUs (`session_load`).
 [target.'cfg(target_os = "linux")'.dependencies]
