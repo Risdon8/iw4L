@@ -26,6 +26,7 @@ mod frontend;
 pub mod input;
 mod layout;
 mod movement;
+mod music;
 pub mod plugin;
 pub mod registry;
 mod startup;
