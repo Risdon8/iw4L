@@ -13,7 +13,7 @@ use bevy::prelude::*;
 
 use crate::pcm::{PcmAudio, decode_audio_bytes};
 
-const DEFAULT_VOLUME: f32 = 0.55;
+const DEFAULT_VOLUME: f32 = 1.0;
 const START_TIMEOUT_SECS: f32 = 1.5;
 
 const EXTENSIONS: &[&str] = &["mp3", "wav", "ogg", "flac"];
@@ -290,7 +290,10 @@ fn start(
             return;
         }
     };
-    let Some(pcm) = decode_audio_bytes(&bytes) else {
+    // Music files are typically mastered well below the game's effects, so
+    // peak-normalise each track before it enters the mixer. The console volume
+    // then scales that.
+    let Some(pcm) = decode_audio_bytes(&bytes).map(|pcm| pcm.normalized(0.95)) else {
         player.status = format!("music: cannot decode {} (unsupported codec)", path.display());
         player.enabled = false;
         diag::warn!(Audio, "{}", player.status);
