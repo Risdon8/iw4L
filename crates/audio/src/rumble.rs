@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bevy::input::gamepad::{GamepadRumbleIntensity, GamepadRumbleRequest};
 use bevy::prelude::*;
-use net::{CgFrameClock, LocalPresentClient, PresentedSnapshot};
+use net::{FrameClock, LocalPresentClient, PresentedSnapshot};
 
 #[derive(Clone, Debug)]
 pub(crate) struct Rumble {
@@ -13,8 +13,8 @@ pub(crate) struct Rumble {
 
 impl Rumble {
     pub(crate) fn prepare(
-        bank: &assets::SoundCatalog,
-        namespace: assets::AssetNamespace,
+        bank: &asset_audio::SoundCatalog,
+        namespace: asset_core::AssetNamespace,
         name: &str,
     ) -> Result<Arc<Self>, String> {
         let text = |name: &str| -> Result<&str, String> {
@@ -147,7 +147,7 @@ fn update(
     presented: Res<PresentedSnapshot>,
     local: Res<LocalPresentClient>,
     generation: Res<frame::WorldGeneration>,
-    clock: Res<CgFrameClock>,
+    clock: Res<FrameClock>,
     gamepads: Query<Entity, With<Gamepad>>,
     mut state: Local<RumblePlayback>,
     mut output: MessageWriter<GamepadRumbleRequest>,

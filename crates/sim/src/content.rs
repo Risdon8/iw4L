@@ -3,7 +3,7 @@ use crate::spawn::{AuthoredSpawnPoint, MatchBootstrap};
 use crate::world::SimBrush;
 use weapon_iw4::WeaponCombatFacts;
 
-pub const CONTENT_DIGEST_SCHEME: u64 = 14;
+pub const CONTENT_DIGEST_SCHEME: u64 = 15;
 
 #[derive(Clone, Copy)]
 struct Digest(u64);
@@ -74,12 +74,12 @@ fn hash_combat(h: &mut Digest, combat: &[WeaponCombatFacts]) {
         h.i32(row.inventory_type);
         h.i32(row.weap_class);
         h.i32(row.player_anim_type);
-        h.byte(match row.select_requires_ammo_at_0x667 {
+        h.byte(match row.select_requires_ammo {
             None => 0,
             Some(false) => 1,
             Some(true) => 2,
         });
-        h.byte(match row.offhand_hold_is_cancelable_at_0x681 {
+        h.byte(match row.offhand_hold_is_cancelable {
             None => 0,
             Some(false) => 1,
             Some(true) => 2,
@@ -266,7 +266,6 @@ pub fn content_digest_v1(
     hash_classes(&mut h, &bootstrap.classes);
     hash_spawns(&mut h, &bootstrap.spawns);
     hash_collision(&mut h, clip_brushes);
-    h.u32(bootstrap.respawn_delay_ticks);
     h.finish()
 }
 
@@ -333,7 +332,6 @@ pub fn content_digest_v2(
     hash_spawns(&mut h, &bootstrap.spawns);
     hash_collision(&mut h, clip_brushes);
     hash_script_models(&mut h, script_models);
-    h.u32(bootstrap.respawn_delay_ticks);
     h.finish()
 }
 
@@ -378,7 +376,6 @@ pub fn content_components_v2(
 
     let mut classes = component(b'C');
     hash_classes(&mut classes, &bootstrap.classes);
-    classes.u32(bootstrap.respawn_delay_ticks);
 
     ContentComponents {
         map: map.finish(),

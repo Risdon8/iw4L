@@ -1,11 +1,11 @@
-use std::collections::HashSet;
+use bevy::platform::collections::HashSet;
 
 use bevy::prelude::*;
 use dpvs_iw4::{
     Bounds, DpvsPlanes, GFX_CFG_ENT_COUNT, dyn_brush_scene_list_admits, dyn_ent_in_cell,
-    filter_bmodel_into_cells, filter_dyn_ent_into_cells, filter_scene_ent_into_cells, msb_iter,
-    scene_ent_cell_bits_len, scene_ent_cell_row, scene_ent_cell_row_second_pass,
-    scene_ent_cell_walk_bits, scene_ent_inner_planes, write_dyn_brush_vis,
+    filter_bmodel_into_cells, filter_dyn_ent_into_cells, msb_iter, scene_ent_cell_bits_len,
+    scene_ent_cell_row, scene_ent_cell_row_second_pass, scene_ent_cell_walk_bits,
+    scene_ent_inner_planes, write_dyn_brush_vis,
 };
 use render_frontend::{
     CellFrustumWorkerCmd, DpvsEntWorkerCmd, SCENE_INDEX_EMPTY, WORKER_CMD_CELL_DYN_BRUSH,
@@ -207,17 +207,6 @@ fn exec_cell_dyn_brush_cmds(
     let Some(scene) = scene.as_mut() else {
         return;
     };
-    let baked_material_keys: Vec<Option<u64>> = scene
-        .runtime_material_catalog
-        .materials
-        .iter()
-        .map(|material| material.baked_draw_surf)
-        .collect();
-    let batch_primary_lights: Vec<u8> = scene
-        .batches
-        .iter()
-        .map(|batch| batch.primary_light_index)
-        .collect();
     let admitted: Vec<u16> = scene
         .dyn_ent_brushes
         .iter()
@@ -229,6 +218,20 @@ fn exec_cell_dyn_brush_cmds(
                 None
             }
         })
+        .collect();
+    if admitted.iter().all(|&brush_model| brush_model == 0) {
+        return;
+    }
+    let baked_material_keys: Vec<Option<u64>> = scene
+        .runtime_material_catalog
+        .materials
+        .iter()
+        .map(|material| material.baked_draw_surf)
+        .collect();
+    let batch_primary_lights: Vec<u8> = scene
+        .batches
+        .iter()
+        .map(|batch| batch.primary_light_index)
         .collect();
     let Some(cull) = scene.cull.as_mut() else {
         return;
@@ -279,10 +282,48 @@ fn size_scene_ent_cell_bits(scene: Option<Res<WorldScene>>, mut bits: ResMut<Sce
     bits.ensure(cull.dpvs.cell_count);
 }
 
+#[derive(Default)]
+struct SceneEntCellCache {
+    tree: (usize, usize),
+    by_ent: bevy::platform::collections::HashMap<u32, ([u32; 6], Vec<u32>)>,
+    linked: HashSet<u32>,
+}
+
+impl SceneEntCellCache {
+    fn link(&mut self, dpvs: &DpvsPlanes<'_>, bits: &mut [u32], bounds: Bounds, ent_id: u32) {
+        let (mid, half) = (bounds.mid(), bounds.half());
+        let key = [
+            mid[0].to_bits(),
+            mid[1].to_bits(),
+            mid[2].to_bits(),
+            half[0].to_bits(),
+            half[1].to_bits(),
+            half[2].to_bits(),
+        ];
+        if !self.linked.insert(ent_id) {
+            dpvs_iw4::unfilter_scene_ent_from_cells_view0(bits, dpvs.cell_count as usize, ent_id);
+        }
+        let entry = self
+            .by_ent
+            .entry(ent_id)
+            .or_insert_with(|| (key, Vec::new()));
+        if entry.0 != key || entry.1.is_empty() {
+            entry.0 = key;
+            entry.1.clear();
+            let cells = &mut entry.1;
+            dpvs_iw4::scene_ent_cells(dpvs, bounds, &mut |cell| cells.push(cell));
+        }
+        for &cell in &entry.1 {
+            dpvs_iw4::add_scene_ent_to_cell(bits, cell as usize, ent_id);
+        }
+    }
+}
+
 fn link_scene_ents(
     scene: Option<Res<WorldScene>>,
     gfx: Res<HostGfxScene>,
     mut bits: ResMut<SceneEntCellBits>,
+    mut cache: Local<SceneEntCellCache>,
 ) {
     if !bits.is_ready() {
         return;
@@ -303,25 +344,24 @@ fn link_scene_ents(
         nodes: &cull.dpvs.nodes,
         cell_count: cull.dpvs.cell_count as u32,
     };
+    let tree = (cull.dpvs.nodes.as_ptr() as usize, cull.dpvs.nodes.len());
+    if cache.tree != tree {
+        *cache = SceneEntCellCache {
+            tree,
+            ..SceneEntCellCache::default()
+        };
+    }
+    cache.linked.clear();
     for model in &gfx.scene.scene_models {
-        link_scene_ent_pose(
-            &dpvs,
-            &mut bits.bits,
-            model.origin,
-            model.radius,
-            model.posed_bounds,
-            scene_info_entnum(model.info),
-        );
+        if let Some(bounds) = scene_ent_pose_bounds(model.origin, model.radius, model.posed_bounds)
+        {
+            cache.link(&dpvs, &mut bits.bits, bounds, scene_info_entnum(model.info));
+        }
     }
     for dobj in &gfx.scene.scene_dobjs {
-        link_scene_ent_pose(
-            &dpvs,
-            &mut bits.bits,
-            dobj.origin,
-            dobj.radius,
-            dobj.posed_bounds,
-            scene_info_entnum(dobj.info),
-        );
+        if let Some(bounds) = scene_ent_pose_bounds(dobj.origin, dobj.radius, dobj.posed_bounds) {
+            cache.link(&dpvs, &mut bits.bits, bounds, scene_info_entnum(dobj.info));
+        }
     }
     for brush in &gfx.scene.scene_brushes {
         let Some(ent_id) = brush.param_4.map(u32::from) else {
@@ -343,23 +383,12 @@ fn link_scene_ents(
     }
 }
 
-fn link_scene_ent_pose(
-    dpvs: &DpvsPlanes<'_>,
-    bits: &mut [u32],
+fn scene_ent_pose_bounds(
     origin: [f32; 3],
     radius: Option<f32>,
     posed_bounds: Option<Bounds>,
-    ent_id: u32,
-) {
-    let bounds = if let Some(b) = posed_bounds {
-        b
-    } else {
-        let Some(r) = radius else {
-            return;
-        };
-        Bounds::from_mid_half(origin, [r, r, r])
-    };
-    filter_scene_ent_into_cells(dpvs, bounds, bits, ent_id);
+) -> Option<Bounds> {
+    posed_bounds.or_else(|| radius.map(|r| Bounds::from_mid_half(origin, [r, r, r])))
 }
 
 fn reaches_cell(dpvs: Option<&DpvsPlanes<'_>>, bounds: Bounds, cell: usize) -> bool {

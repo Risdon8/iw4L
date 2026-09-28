@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use asset_iw4::{SND_ENTCHANNEL_MAX, snd_entity_channel_matches};
+use asset_iw4::{SND_ENTCHANNEL_MAX, entity_channel_matches};
 use bevy::prelude::*;
 
 #[derive(Component, Clone, Copy, Debug)]
@@ -51,7 +51,7 @@ impl VoiceOccupancy {
             let Some(occupant_ent) = lease.snd_ent else {
                 return true;
             };
-            if snd_entity_channel_matches(occupant_ent, lease.channel, snd_ent, channel) {
+            if entity_channel_matches(occupant_ent, lease.channel, snd_ent, channel) {
                 if let Some(count) = self.counts.get_mut(lease.channel as usize) {
                     *count = (*count - 1).max(0);
                 }

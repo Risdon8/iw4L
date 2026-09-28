@@ -158,7 +158,7 @@ pub mod weap_flags {
 }
 
 #[must_use]
-pub fn bg_get_viewmodel_weapon_index(ps: &PlayerState) -> u32 {
+pub fn get_viewmodel_weapon_index(ps: &PlayerState) -> u32 {
     if (ps.weap_flags & weap_flags::OFFHAND_VIEW) != 0 {
         u32::try_from(ps.off_hand_index).unwrap_or(0)
     } else {

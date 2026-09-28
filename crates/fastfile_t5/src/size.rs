@@ -555,6 +555,10 @@ pub const WEAPON_DEF_SND_FIRE_OFF: usize = 0x98;
 pub const WEAPON_DEF_SND_FIRE_PLAYER_OFF: usize = 0x9c;
 pub const WEAPON_DEF_SND_EMPTY_FIRE_OFF: usize = 0xc0;
 pub const WEAPON_DEF_SND_EMPTY_FIRE_PLAYER_OFF: usize = 0xc4;
+pub const WEAPON_DEF_SND_MELEE_SWIPE_OFF: usize = 0xd0;
+pub const WEAPON_DEF_SND_MELEE_SWIPE_PLAYER_OFF: usize = 0xd4;
+pub const WEAPON_DEF_SND_MELEE_HIT_OFF: usize = 0xd8;
+pub const WEAPON_DEF_SND_MELEE_MISS_OFF: usize = 0xdc;
 pub const WEAPON_DEF_SND_RECHAMBER_OFF: usize = 0xe0;
 pub const WEAPON_DEF_SND_RECHAMBER_PLAYER_OFF: usize = 0xe4;
 pub const WEAPON_DEF_SND_RELOAD_OFF: usize = 0xe8;
@@ -577,6 +581,14 @@ pub const WEAPON_DEF_SHOT_COUNT_OFF: usize = 0x348;
 pub const WEAPON_DEF_DAMAGE_OFF: usize = 0x35c;
 
 pub const WEAPON_DEF_FIRE_DELAY_OFF: usize = 0x378;
+pub const WEAPON_DEF_MELEE_DAMAGE_OFF: usize = 0x36c;
+pub const WEAPON_DEF_MELEE_DELAY_OFF: usize = 0x37c;
+pub const WEAPON_DEF_MELEE_CHARGE_DELAY_OFF: usize = 0x380;
+pub const WEAPON_DEF_MELEE_TIME_OFF: usize = 0x3c4;
+pub const WEAPON_DEF_MELEE_CHARGE_TIME_OFF: usize = 0x3c8;
+pub const WEAPON_DEF_USE_AS_MELEE_OFF: usize = 0x64c;
+const _: () = assert!(WEAPON_DEF_MELEE_DELAY_OFF + 4 == WEAPON_DEF_MELEE_CHARGE_DELAY_OFF);
+const _: () = assert!(WEAPON_DEF_MELEE_TIME_OFF + 4 == WEAPON_DEF_MELEE_CHARGE_TIME_OFF);
 pub const WEAPON_DEF_RELOAD_ADD_TIME_OFF: usize = 0x3dc;
 
 pub const WEAPON_DEF_RELOAD_EMPTY_ADD_TIME_OFF: usize = 0x3e0;

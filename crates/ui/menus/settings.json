@@ -1,0 +1,199 @@
+[
+  {
+    "name": "pc_options_video",
+    "base": "pc_options_video",
+    "fields": {"handlers": {"open": [{"Script": "focusFirst;"}], "close": [], "esc": [{"Script": "close self;"}]}},
+    "item_overrides": [
+      {"index": 25, "fields": {"vis_exp": "0"}},
+      {"index": 26, "fields": {"vis_exp": "0"}},
+      {"index": 27, "fields": {"vis_exp": "1", "disabled_exp": "0"}},
+      {"index": 28, "fields": {"vis_exp": "1"}},
+      {"index": 22, "fields": {"handlers": {"action": [{"Script": "play mouse_click; open video_resolution_list;"}]}, "disabled_exp": "0", "item_type": 1, "text_key": "", "text_exp": "op 38 s:75695f725f6d6f6465 op 1", "dvar": "", "text_align_mode": 10, "text_align_x": -8, "text_align_y": 0}},
+      {"index": 27, "fields": {"choices": [["@MENU_MODE_WINDOWED", "0"], ["@MENU_FULLSCREEN", "1"]], "handlers": {"action": [{"Script": "play mouse_click;"}]}, "disabled_exp": "0", "text_align_mode": 10, "text_align_x": -8, "text_align_y": 0}},
+      {"index": 20, "fields": {"handlers": {"action": [{"Script": "close self;"}]}}},
+      {"index": 24, "fields": {"item_type": 10, "static_flags": 0, "dvar": "ui_brightness", "choices": [], "vis_exp": "1", "disabled_exp": "0", "text_key": "", "text_exp": "", "text_align_mode": 10, "text_align_x": -8, "text_align_y": 0, "fore_color": [1, 1, 1, 1], "rect": {"x": 420, "y": 68, "w": 112, "h": 20}, "handlers": {"focus": [{"Script": "play mouse_over;"}]}, "text_scale": 0.375, "style": 1, "background": "", "back_color": [0, 0, 0, 0], "slider": {"min": -0.2, "max": 0.2, "step": 0.004, "display_range": [50, 150], "suffix": "%"}}},
+      {"index": 29, "fields": {"vis_exp": "1", "fore_color": [1, 1, 1, 1]}},
+      {"index": 30, "fields": {"rect": {"x": 260, "y": 128, "w": 225, "h": 20}}}
+    ],
+    "item_copies": [{"index": 24, "fields": {"item_type": 10, "static_flags": 0, "dvar": "ui_fov", "choices": [], "vis_exp": "1", "disabled_exp": "0", "text_key": "", "text_exp": "", "text_align_mode": 10, "text_align_x": -8, "text_align_y": 0, "fore_color": [1, 1, 1, 1], "rect": {"x": 420, "y": 88, "w": 112, "h": 20}, "handlers": {"focus": [{"Script": "play mouse_over;"}]}, "text_scale": 0.375, "style": 1, "background": "", "back_color": [0, 0, 0, 0], "slider": {"min": 65, "max": 120, "step": 1, "suffix": "°"}}}, {"index": 29, "fields": {"text_key": "FOV", "vis_exp": "1", "rect": {"x": 232, "y": 88, "w": 344, "h": 20}}}]
+  },
+  {
+    "name": "video_resolution_list",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "w": 640,
+      "h": 480,
+      "horz_align": 1,
+      "vert_align": 1
+    },
+    "handlers": {
+      "open": [
+        {
+          "Script": "focusFirst; setFocusByDvar ui_r_mode;"
+        }
+      ],
+      "esc": [
+        {
+          "Script": "close self;"
+        }
+      ]
+    },
+    "items": [
+      {"name": "panel", "background": "white", "rect": {"x": 416, "y": 48, "w": 160, "h": 208, "horz_align": 1, "vert_align": 1}, "fore_color": [0.12, 0.12, 0.12, 1], "static_flags": 1048576},
+      {"name": "resolution_800x600", "item_type": 1, "style": 1, "background": "white", "rect": {"x": 418, "y": 50, "w": 156, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [1, 1, 1, 1], "back_color": [0, 0, 0, 0], "text_key": "800x600", "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "text_align_x": 24, "dvar_flags": 16, "dvar_test": "ui_r_mode", "enable_dvar": "800x600", "handlers": {"action": [{"Script": "play mouse_click; exec \"set ui_r_mode 800x600\"; close self;"}], "focus": [{"Script": "play mouse_over; setItemColor self backcolor 0 0 0 1;"}], "leave_focus": [{"Script": "setItemColor self backcolor 0 0 0 0;"}]}},
+      {"name": "selected_800x600", "text_key": "*", "rect": {"x": 422, "y": 50, "w": 16, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [0.9, 0.85, 0.3, 1], "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "static_flags": 1048576, "vis_exp": "op 38 s:75695f725f6d6f6465 op 1 op 12 s:38303078363030"},
+      {"name": "resolution_1024x768", "item_type": 1, "style": 1, "background": "white", "rect": {"x": 418, "y": 70, "w": 156, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [1, 1, 1, 1], "back_color": [0, 0, 0, 0], "text_key": "1024x768", "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "text_align_x": 24, "dvar_flags": 16, "dvar_test": "ui_r_mode", "enable_dvar": "1024x768", "handlers": {"action": [{"Script": "play mouse_click; exec \"set ui_r_mode 1024x768\"; close self;"}], "focus": [{"Script": "play mouse_over; setItemColor self backcolor 0 0 0 1;"}], "leave_focus": [{"Script": "setItemColor self backcolor 0 0 0 0;"}]}},
+      {"name": "selected_1024x768", "text_key": "*", "rect": {"x": 422, "y": 70, "w": 16, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [0.9, 0.85, 0.3, 1], "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "static_flags": 1048576, "vis_exp": "op 38 s:75695f725f6d6f6465 op 1 op 12 s:3130323478373638"},
+      {"name": "resolution_1280x720", "item_type": 1, "style": 1, "background": "white", "rect": {"x": 418, "y": 90, "w": 156, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [1, 1, 1, 1], "back_color": [0, 0, 0, 0], "text_key": "1280x720", "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "text_align_x": 24, "dvar_flags": 16, "dvar_test": "ui_r_mode", "enable_dvar": "1280x720", "handlers": {"action": [{"Script": "play mouse_click; exec \"set ui_r_mode 1280x720\"; close self;"}], "focus": [{"Script": "play mouse_over; setItemColor self backcolor 0 0 0 1;"}], "leave_focus": [{"Script": "setItemColor self backcolor 0 0 0 0;"}]}},
+      {"name": "selected_1280x720", "text_key": "*", "rect": {"x": 422, "y": 90, "w": 16, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [0.9, 0.85, 0.3, 1], "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "static_flags": 1048576, "vis_exp": "op 38 s:75695f725f6d6f6465 op 1 op 12 s:3132383078373230"},
+      {"name": "resolution_1280x800", "item_type": 1, "style": 1, "background": "white", "rect": {"x": 418, "y": 110, "w": 156, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [1, 1, 1, 1], "back_color": [0, 0, 0, 0], "text_key": "1280x800", "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "text_align_x": 24, "dvar_flags": 16, "dvar_test": "ui_r_mode", "enable_dvar": "1280x800", "handlers": {"action": [{"Script": "play mouse_click; exec \"set ui_r_mode 1280x800\"; close self;"}], "focus": [{"Script": "play mouse_over; setItemColor self backcolor 0 0 0 1;"}], "leave_focus": [{"Script": "setItemColor self backcolor 0 0 0 0;"}]}},
+      {"name": "selected_1280x800", "text_key": "*", "rect": {"x": 422, "y": 110, "w": 16, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [0.9, 0.85, 0.3, 1], "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "static_flags": 1048576, "vis_exp": "op 38 s:75695f725f6d6f6465 op 1 op 12 s:3132383078383030"},
+      {"name": "resolution_1366x768", "item_type": 1, "style": 1, "background": "white", "rect": {"x": 418, "y": 130, "w": 156, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [1, 1, 1, 1], "back_color": [0, 0, 0, 0], "text_key": "1366x768", "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "text_align_x": 24, "dvar_flags": 16, "dvar_test": "ui_r_mode", "enable_dvar": "1366x768", "handlers": {"action": [{"Script": "play mouse_click; exec \"set ui_r_mode 1366x768\"; close self;"}], "focus": [{"Script": "play mouse_over; setItemColor self backcolor 0 0 0 1;"}], "leave_focus": [{"Script": "setItemColor self backcolor 0 0 0 0;"}]}},
+      {"name": "selected_1366x768", "text_key": "*", "rect": {"x": 422, "y": 130, "w": 16, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [0.9, 0.85, 0.3, 1], "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "static_flags": 1048576, "vis_exp": "op 38 s:75695f725f6d6f6465 op 1 op 12 s:3133363678373638"},
+      {"name": "resolution_1600x900", "item_type": 1, "style": 1, "background": "white", "rect": {"x": 418, "y": 150, "w": 156, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [1, 1, 1, 1], "back_color": [0, 0, 0, 0], "text_key": "1600x900", "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "text_align_x": 24, "dvar_flags": 16, "dvar_test": "ui_r_mode", "enable_dvar": "1600x900", "handlers": {"action": [{"Script": "play mouse_click; exec \"set ui_r_mode 1600x900\"; close self;"}], "focus": [{"Script": "play mouse_over; setItemColor self backcolor 0 0 0 1;"}], "leave_focus": [{"Script": "setItemColor self backcolor 0 0 0 0;"}]}},
+      {"name": "selected_1600x900", "text_key": "*", "rect": {"x": 422, "y": 150, "w": 16, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [0.9, 0.85, 0.3, 1], "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "static_flags": 1048576, "vis_exp": "op 38 s:75695f725f6d6f6465 op 1 op 12 s:3136303078393030"},
+      {"name": "resolution_1920x1080", "item_type": 1, "style": 1, "background": "white", "rect": {"x": 418, "y": 170, "w": 156, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [1, 1, 1, 1], "back_color": [0, 0, 0, 0], "text_key": "1920x1080", "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "text_align_x": 24, "dvar_flags": 16, "dvar_test": "ui_r_mode", "enable_dvar": "1920x1080", "handlers": {"action": [{"Script": "play mouse_click; exec \"set ui_r_mode 1920x1080\"; close self;"}], "focus": [{"Script": "play mouse_over; setItemColor self backcolor 0 0 0 1;"}], "leave_focus": [{"Script": "setItemColor self backcolor 0 0 0 0;"}]}},
+      {"name": "selected_1920x1080", "text_key": "*", "rect": {"x": 422, "y": 170, "w": 16, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [0.9, 0.85, 0.3, 1], "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "static_flags": 1048576, "vis_exp": "op 38 s:75695f725f6d6f6465 op 1 op 12 s:313932307831303830"},
+      {"name": "resolution_2560x1440", "item_type": 1, "style": 1, "background": "white", "rect": {"x": 418, "y": 190, "w": 156, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [1, 1, 1, 1], "back_color": [0, 0, 0, 0], "text_key": "2560x1440", "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "text_align_x": 24, "dvar_flags": 16, "dvar_test": "ui_r_mode", "enable_dvar": "2560x1440", "handlers": {"action": [{"Script": "play mouse_click; exec \"set ui_r_mode 2560x1440\"; close self;"}], "focus": [{"Script": "play mouse_over; setItemColor self backcolor 0 0 0 1;"}], "leave_focus": [{"Script": "setItemColor self backcolor 0 0 0 0;"}]}},
+      {"name": "selected_2560x1440", "text_key": "*", "rect": {"x": 422, "y": 190, "w": 16, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [0.9, 0.85, 0.3, 1], "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "static_flags": 1048576, "vis_exp": "op 38 s:75695f725f6d6f6465 op 1 op 12 s:323536307831343430"},
+      {"name": "resolution_3840x2160", "item_type": 1, "style": 1, "background": "white", "rect": {"x": 418, "y": 210, "w": 156, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [1, 1, 1, 1], "back_color": [0, 0, 0, 0], "text_key": "3840x2160", "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "text_align_x": 24, "dvar_flags": 16, "dvar_test": "ui_r_mode", "enable_dvar": "3840x2160", "handlers": {"action": [{"Script": "play mouse_click; exec \"set ui_r_mode 3840x2160\"; close self;"}], "focus": [{"Script": "play mouse_over; setItemColor self backcolor 0 0 0 1;"}], "leave_focus": [{"Script": "setItemColor self backcolor 0 0 0 0;"}]}},
+      {"name": "selected_3840x2160", "text_key": "*", "rect": {"x": 422, "y": 210, "w": 16, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [0.9, 0.85, 0.3, 1], "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "static_flags": 1048576, "vis_exp": "op 38 s:75695f725f6d6f6465 op 1 op 12 s:333834307832313630"},
+      {"name": "cancel", "item_type": 1, "style": 1, "background": "white", "rect": {"x": 418, "y": 234, "w": 156, "h": 20, "horz_align": 1, "vert_align": 1}, "fore_color": [1, 1, 1, 1], "back_color": [0, 0, 0, 0], "text_key": "@MENU_CANCEL", "font_enum": 3, "text_scale": 0.375, "text_align_mode": 8, "text_align_x": 24, "dvar_flags": 0, "dvar_test": "", "enable_dvar": "", "handlers": {"action": [{"Script": "play mouse_click; close self;"}], "focus": [{"Script": "play mouse_over; setItemColor self backcolor 0 0 0 1;"}], "leave_focus": [{"Script": "setItemColor self backcolor 0 0 0 0;"}]}}
+    ]
+  },
+  {
+    "name": "pc_options_audio",
+    "base": "pc_options_audio",
+    "fields": {"handlers": {"open": [{"Script": "focusFirst;"}], "close": [], "esc": [{"Script": "close self;"}]}},
+    "item_overrides": [
+      {"index": 25, "fields": {"item_type": 12, "static_flags": 0, "dvar": "ui_volume", "choices": [["0%", "0.0"], ["10%", "0.1"], ["20%", "0.2"], ["30%", "0.3"], ["40%", "0.4"], ["50%", "0.5"], ["60%", "0.6"], ["70%", "0.7"], ["80%", "0.8"], ["90%", "0.9"], ["100%", "1.0"]], "vis_exp": "1", "disabled_exp": "0", "text_key": "", "text_exp": "", "text_align_mode": 10, "text_align_x": -8, "text_align_y": 0, "fore_color": [1, 1, 1, 1], "rect": {"x": 232, "y": 28, "w": 344, "h": 20}, "handlers": {"action": [{"Script": "play mouse_click;"}], "focus": [{"Script": "play mouse_over; setItemColor self backcolor 0 0 0 1;"}], "leave_focus": [{"Script": "setItemColor self backcolor 0 0 0 0;"}]}, "text_scale": 0.375, "style": 1, "background": "menu_button_selection_bar", "back_color": [0, 0, 0, 0]}},
+      {"index": 27, "fields": {"item_type": 0, "static_flags": 1048576, "dvar": "", "choices": [], "text_key": "Системная (стерео)", "text_exp": "", "disabled_exp": "1", "vis_exp": "1", "text_align_mode": 10, "text_align_x": -8, "fore_color": [1, 1, 1, 0.5], "handlers": {"action": []}}}
+    ]
+  },
+  {
+    "name": "pc_options_advanced_video",
+    "base": "pc_options_video",
+    "fields": {"handlers": {"open": [{"Script": "focusFirst;"}], "close": [], "esc": [{"Script": "close self;"}]}},
+    "item_overrides": [
+      {"index": 22, "fields": {"vis_exp": "0"}},
+      {"index": 23, "fields": {"vis_exp": "0"}},
+      {"index": 24, "fields": {"vis_exp": "0"}},
+      {"index": 25, "fields": {"vis_exp": "0"}},
+      {"index": 26, "fields": {"vis_exp": "0"}},
+      {"index": 27, "fields": {"vis_exp": "0"}},
+      {"index": 28, "fields": {"vis_exp": "0"}},
+      {"index": 29, "fields": {"vis_exp": "0"}},
+      {"index": 30, "fields": {"vis_exp": "0"}},
+      {"index": 31, "fields": {"vis_exp": "0"}},
+      {"index": 32, "fields": {"vis_exp": "0"}},
+      {"index": 21, "fields": {"text_key": "@MENU_ADVANCED_VIDEO"}}
+    ],
+    "item_copies": [
+      {"index": 27, "fields": {"item_type": 12, "static_flags": 0, "dvar": "ui_r_vsync", "choices": [["@MENU_DISABLED", "0"], ["@MENU_ENABLED", "1"]], "vis_exp": "1", "disabled_exp": "0", "text_key": "", "text_exp": "", "text_align_mode": 10, "text_align_x": -8, "text_align_y": 0, "fore_color": [1, 1, 1, 1], "rect": {"x": 232, "y": 28, "w": 344, "h": 20}, "handlers": {"action": [{"Script": "play mouse_click;"}], "focus": [{"Script": "play mouse_over; setItemColor self backcolor 0 0 0 1;"}], "leave_focus": [{"Script": "setItemColor self backcolor 0 0 0 0;"}]}, "text_scale": 0.375, "style": 1, "background": "menu_button_selection_bar", "back_color": [0, 0, 0, 0]}},
+      {"index": 28, "fields": {"vis_exp": "1", "text_key": "Вертикальная синхронизация", "rect": {"x": 232, "y": 28, "w": 344, "h": 20}, "text_scale": 0.32}},
+      {"index": 27, "fields": {"item_type": 12, "static_flags": 0, "dvar": "ui_shadows", "choices": [["@MENU_DISABLED", "0"], ["@MENU_ENABLED", "1"]], "vis_exp": "1", "disabled_exp": "0", "text_key": "", "text_exp": "", "text_align_mode": 10, "text_align_x": -8, "text_align_y": 0, "fore_color": [1, 1, 1, 1], "rect": {"x": 232, "y": 48, "w": 344, "h": 20}, "handlers": {"action": [{"Script": "play mouse_click;"}], "focus": [{"Script": "play mouse_over; setItemColor self backcolor 0 0 0 1;"}], "leave_focus": [{"Script": "setItemColor self backcolor 0 0 0 0;"}]}, "text_scale": 0.375, "style": 1, "background": "menu_button_selection_bar", "back_color": [0, 0, 0, 0]}},
+      {"index": 28, "fields": {"vis_exp": "1", "text_key": "Тени", "rect": {"x": 232, "y": 48, "w": 344, "h": 20}, "text_scale": 0.32}},
+      {"index": 27, "fields": {"item_type": 12, "static_flags": 0, "dvar": "ui_dof", "choices": [["@MENU_DISABLED", "0"], ["@MENU_ENABLED", "1"]], "vis_exp": "1", "disabled_exp": "0", "text_key": "", "text_exp": "", "text_align_mode": 10, "text_align_x": -8, "text_align_y": 0, "fore_color": [1, 1, 1, 1], "rect": {"x": 232, "y": 68, "w": 344, "h": 20}, "handlers": {"action": [{"Script": "play mouse_click;"}], "focus": [{"Script": "play mouse_over; setItemColor self backcolor 0 0 0 1;"}], "leave_focus": [{"Script": "setItemColor self backcolor 0 0 0 0;"}]}, "text_scale": 0.375, "style": 1, "background": "menu_button_selection_bar", "back_color": [0, 0, 0, 0]}},
+      {"index": 28, "fields": {"vis_exp": "1", "text_key": "Глубина резкости", "rect": {"x": 232, "y": 68, "w": 344, "h": 20}, "text_scale": 0.32}},
+      {"index": 27, "fields": {"item_type": 12, "static_flags": 0, "dvar": "ui_bloom", "choices": [["@MENU_DISABLED", "0"], ["@MENU_ENABLED", "1"]], "vis_exp": "1", "disabled_exp": "0", "text_key": "", "text_exp": "", "text_align_mode": 10, "text_align_x": -8, "text_align_y": 0, "fore_color": [1, 1, 1, 1], "rect": {"x": 232, "y": 88, "w": 344, "h": 20}, "handlers": {"action": [{"Script": "play mouse_click;"}], "focus": [{"Script": "play mouse_over; setItemColor self backcolor 0 0 0 1;"}], "leave_focus": [{"Script": "setItemColor self backcolor 0 0 0 0;"}]}, "text_scale": 0.375, "style": 1, "background": "menu_button_selection_bar", "back_color": [0, 0, 0, 0]}},
+      {"index": 28, "fields": {"vis_exp": "1", "text_key": "Свечение", "rect": {"x": 232, "y": 88, "w": 344, "h": 20}, "text_scale": 0.32}}
+    ]
+  }
+,
+{
+  "name": "options_multi",
+  "base": "options_multi",
+  "fields": {
+    "handlers": {
+      "open": [
+        {
+          "Script": "focusFirst;"
+        }
+      ],
+      "close": [],
+      "esc": [
+        {
+          "Script": "close self;"
+        }
+      ]
+    }
+  },
+  "item_overrides": [
+    {
+      "index": 22,
+      "fields": {
+        "vis_exp": "0"
+      }
+    },
+    {
+      "index": 23,
+      "fields": {
+        "vis_exp": "0"
+      }
+    },
+    {
+      "index": 24,
+      "fields": {
+        "vis_exp": "0"
+      }
+    },
+    {
+      "index": 25,
+      "fields": {
+        "vis_exp": "0"
+      }
+    },
+    {
+      "index": 28,
+      "fields": {
+        "vis_exp": "0"
+      }
+    },
+    {
+      "index": 29,
+      "fields": {
+        "vis_exp": "0"
+      }
+    },
+    {
+      "index": 26,
+      "fields": {
+        "dvar": "ui_player_name",
+        "vis_exp": "1",
+        "disabled_exp": "0",
+        "edit_field": {
+          "max_chars": 16
+        },
+        "rect": {
+          "x": 420,
+          "y": 28,
+          "w": 156,
+          "h": 20
+        },
+        "text_key": "",
+        "text_exp": "",
+        "text_align_x": -8,
+        "text_align_mode": 10,
+        "text_align_y": 0,
+        "handlers": {
+          "action": [],
+          "accept": []
+        }
+      }
+    },
+    {
+      "index": 27,
+      "fields": {
+        "vis_exp": "1",
+        "rect": {
+          "x": 232,
+          "y": 28,
+          "w": 344,
+          "h": 20
+        }
+      }
+    }
+  ]
+}
+]

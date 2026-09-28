@@ -41,7 +41,7 @@ pub struct ExtractedPostFx {
     pub sampler: Option<super::DecodedSampler>,
     pub depth_sampler: Option<super::DecodedSampler>,
     pub frame: DofFrame,
-    pub vision: Option<assets::FilmVision>,
+    pub vision: Option<asset_world::FilmVision>,
 }
 
 struct PreparedPostFxGpu {
@@ -479,7 +479,7 @@ fn create_postfx_gpu(
 }
 
 fn packed_fullscreen_vertices(width: u32, height: u32) -> Vec<u8> {
-    hud_iw4::rb_draw_stretch_pic_pack(
+    hud_iw4::draw_stretch_pic_pack(
         0.0,
         0.0,
         width as f32,

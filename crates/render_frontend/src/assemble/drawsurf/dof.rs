@@ -132,7 +132,7 @@ fn update_dof(
     presented: Res<net::PresentedSnapshot>,
     local: Res<net::LocalPresentClient>,
     weapons: Option<Res<assets::PreparedWeapons>>,
-    clock: Res<net::CgFrameClock>,
+    clock: Res<net::FrameClock>,
     mut frame: ResMut<DofFrame>,
     mut scene: Local<DepthOfField>,
     clip: Res<crate::adapters::anim::dyn_ent::DynEntPhysClip>,
@@ -195,6 +195,19 @@ fn update_dof(
         scene.near_blur = approach(scene.near_blur, 6.0, 0.1, dt);
         scene.far_blur = approach(scene.far_blur, 0.0, 0.1, dt);
     }
+    if let Some(script) = presented
+        .snapshot()
+        .and_then(|snapshot| snapshot.meta.for_client(local.0))
+        .map(|meta| meta.view_effects.depth_of_field)
+        .filter(sim::ScriptDepthOfField::overrides_scene)
+    {
+        scene.near_start = script.near_start;
+        scene.near_end = script.near_end;
+        scene.far_start = script.far_start;
+        scene.far_end = script.far_end;
+        scene.near_blur = script.near_blur;
+        scene.far_blur = script.far_blur;
+    }
 
     scene.view_model_start = 0.0;
     scene.view_model_end = 0.0;
@@ -205,7 +218,7 @@ fn update_dof(
     ) {
         if let Some(range) = weapons
             .as_ref()
-            .and_then(|w| w.0.facts_of(weapon_iw4::bg_get_viewmodel_weapon_index(ps)))
+            .and_then(|w| w.0.facts_of(weapon_iw4::get_viewmodel_weapon_index(ps)))
             .and_then(|w| w.ads_dof)
         {
             scene.view_model_start = range[0] * ads;

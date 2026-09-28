@@ -1,6 +1,6 @@
 use playerstate_iw4::PlayerState;
 
-use crate::{Pml, add_predictable_event, pm_ground_surface_type};
+use crate::{Pml, add_predictable_event, jump};
 
 const EV_FOOTSTEP_RUN: i32 = 0x6c;
 const EV_FOOTSTEP_WALK: i32 = 0x6d;
@@ -25,11 +25,11 @@ const NEG_ONE: f32 = -1.0;
 
 /// `keep_speed` (mod: surf) keeps the landing events but skips the hard-land
 /// velocity cut, which otherwise fires on every ordinary jump.
-pub fn pm_crash_land(ps: &mut PlayerState, pml: &Pml, keep_speed: bool) {
+pub fn crash_land(ps: &mut PlayerState, pml: &Pml, keep_speed: bool) {
     let Some(fall_height) = crash_land_fall_height(ps, pml) else {
         return;
     };
-    let surface = pm_ground_surface_type(pml.ground_trace[4]);
+    let surface = jump::ground_surface_type(pml.ground_trace[4]);
     crash_land_apply_sfx(ps, fall_height, surface, keep_speed);
 }
 

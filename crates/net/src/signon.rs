@@ -1,8 +1,7 @@
 use bevy::prelude::Resource;
-use frame::{AdmissionKey, MatchInstalled, MatchKey, MatchTornDown};
+use frame::{AdmissionKey, MatchInstalled, MatchKey, MatchTornDown, RuntimeRole};
 use sim::ClientId;
 
-use crate::role::RuntimeRole;
 use crate::session_core::{
     ClientMatchCore, FailStage, HostWorldReady, SessionFail, confirm_keyed_world_ready,
     format_session_transition,

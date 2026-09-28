@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use net::{CgFrameClock, LocalPresentClient, PresentedSnapshot};
+use net::{FrameClock, LocalPresentClient, PresentedSnapshot};
 
 use crate::{AliasCommand, PlayAlias, SND_ENT_LOCAL};
 
@@ -26,7 +26,7 @@ fn present(
     presented: Res<PresentedSnapshot>,
     local: Res<LocalPresentClient>,
     generation: Res<frame::WorldGeneration>,
-    clock: Res<CgFrameClock>,
+    clock: Res<FrameClock>,
     mut cursor: Local<LockAudio>,
     mut commands: MessageWriter<AliasCommand>,
 ) {
@@ -49,7 +49,7 @@ fn present(
         if cursor.stage != 0 {
             for alias in ALIASES {
                 commands.write(AliasCommand::Stop {
-                    namespace: assets::AssetNamespace::Iw4,
+                    namespace: asset_core::AssetNamespace::Iw4,
                     alias: alias.to_owned(),
                     snd_ent: Some(SND_ENT_LOCAL),
                 });
@@ -62,7 +62,7 @@ fn present(
     cursor.last_time = now;
     if stage != 0 && now >= cursor.next_ping {
         commands.write(AliasCommand::Play(PlayAlias {
-            namespace: assets::AssetNamespace::Iw4,
+            namespace: asset_core::AssetNamespace::Iw4,
             alias: ALIASES[usize::from(stage & 2 != 0)].to_owned(),
             fallback: None,
             origin_inches: None,

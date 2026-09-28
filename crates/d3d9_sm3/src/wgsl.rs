@@ -976,7 +976,7 @@ fn emit_texture_slot_prologue(
 
 fn attribute_wgsl_type(decl_type: DeclType) -> &'static str {
     match decl_type {
-        DeclType::Float2 => "vec2<f32>",
+        DeclType::Float2 | DeclType::Float16x2 => "vec2<f32>",
         DeclType::Float3 => "vec3<f32>",
 
         DeclType::Float4 | DeclType::D3dColor | DeclType::UByte4N => "vec4<f32>",
@@ -989,7 +989,7 @@ fn attribute_wgsl_type(decl_type: DeclType) -> &'static str {
 
 fn attribute_expansion(decl_type: DeclType, location: u32) -> String {
     match decl_type {
-        DeclType::Float2 => {
+        DeclType::Float2 | DeclType::Float16x2 => {
             format!("vec4<f32>(attribute_{location}.x, attribute_{location}.y, 0.0, 1.0)")
         }
         DeclType::Float3 => format!("vec4<f32>(attribute_{location}, 1.0)"),

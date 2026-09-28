@@ -3,9 +3,9 @@ use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::ui::{Display, FocusPolicy, ZIndex};
-use hud_iw4::{WeaponAdsOverlayFacts, cg_draw_ads_overlay_layout, cg_draw_weap_reticle};
-use net::{CgViewweaponAim, LocalPresentClient, PresentedSnapshot};
-use weapon_iw4::bg_get_viewmodel_weapon_index;
+use hud_iw4::{WeaponAdsOverlayFacts, draw_ads_overlay_layout, draw_weap_reticle};
+use net::{LocalPresentClient, PresentedSnapshot, ViewweaponAim};
+use weapon_iw4::get_viewmodel_weapon_index;
 
 use crate::gaps::{GapCause, HudGap, HudPresentationGaps};
 use crate::images::HudImages;
@@ -137,7 +137,7 @@ pub(crate) fn update_iris(
     mut images: ResMut<Assets<Image>>,
     mut gaps: ResMut<HudPresentationGaps>,
     mut fill: ResMut<IrisLetterboxFill>,
-    aim: Res<CgViewweaponAim>,
+    aim: Res<ViewweaponAim>,
     mut overlay: Query<
         (&mut Node, &mut ImageNode, &AdsIrisOverlay),
         (With<AdsIrisOverlay>, Without<AdsIrisLetterbox>),
@@ -159,7 +159,7 @@ pub(crate) fn update_iris(
         return;
     };
 
-    let viewmodel_index = bg_get_viewmodel_weapon_index(ps);
+    let viewmodel_index = get_viewmodel_weapon_index(ps);
     let Some(weapons) = weapons.as_ref() else {
         gaps.clear(HudGap::AdsOverlay);
         hide_overlay(&mut overlay);
@@ -197,7 +197,7 @@ pub(crate) fn update_iris(
         hide_letterbox(&mut letterbox);
         return;
     }
-    let frame = cg_draw_weap_reticle(
+    let frame = draw_weap_reticle(
         ps.f_weapon_pos_frac,
         ads_latch.position_to_ads,
         surface.height(),
@@ -265,7 +265,7 @@ pub(crate) fn update_iris(
         hide_letterbox(&mut letterbox);
         return;
     };
-    let layout = cg_draw_ads_overlay_layout(facts.ads_overlay_width, facts.ads_overlay_height);
+    let layout = draw_ads_overlay_layout(facts.ads_overlay_width, facts.ads_overlay_height);
     gaps.clear(HudGap::AdsOverlay);
 
     let inner_left = (cx + xhair.0 + layout.inner_x * factor).round();

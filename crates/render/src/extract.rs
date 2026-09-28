@@ -13,7 +13,7 @@ use render_frontend::assemble::drawsurf::tess::xmodel::XModelDrawPlan;
 use render_gpu::diag::render_frame_diag::SharedRenderStagesSlot;
 use render_gpu::{
     ExtractedRenderFrameProducts, ExtractedRuntimeImageHandles, InstalledRenderWorld,
-    PublishedRenderFrame, RetailSamplerTable,
+    PublishedRenderFrame, SamplerTable,
 };
 
 fn take_published<T>(share: Option<&Arc<Vec<T>>>) -> (Arc<Vec<T>>, u32) {
@@ -93,7 +93,7 @@ fn insert_empty_colour(commands: &mut Commands) {
 
 fn world_colour_extract_counts(plan: Option<&WorldDrawGpuPlan>) -> (usize, usize, usize) {
     match plan {
-        Some(plan) => match plan.exact_retail_vertices() {
+        Some(plan) => match plan.exact_packed_vertices() {
             Ok(vertices) => (
                 vertices.len(),
                 plan.indices().len(),
@@ -168,7 +168,7 @@ pub fn seal_render_frame(
     particle_cloud: Option<Res<FxParticleCloudPlan>>,
     mark_mesh: Option<Res<GfxMarkMeshPlan>>,
     glass_mesh: Option<Res<GfxGlassMeshPlan>>,
-    samplers: Option<Res<RetailSamplerTable>>,
+    samplers: Option<Res<SamplerTable>>,
     images: Option<Res<render_frontend::assemble::drawsurf::RuntimeImageHandles>>,
     spawn_job: Option<Res<render_gpu::GpuSubmitReady>>,
     sun: (
@@ -275,7 +275,7 @@ pub fn seal_render_frame(
             empty_static()
         } else {
             match world.as_ref() {
-                Some(plan) => match plan.exact_retail_vertices() {
+                Some(plan) => match plan.exact_packed_vertices() {
                     Ok(_) => {
                         let (verts, _) = take_published(plan.vertex_share.as_ref());
                         let (layer, _) = take_published(plan.layer_share.as_ref());
@@ -623,6 +623,10 @@ pub fn seal_render_frame(
         glass_mesh_surface_ranges,
         glass_mesh_revision,
         glass_mesh_vertex_refusal,
+        glass_mesh_bounds: glass_mesh
+            .as_ref()
+            .and_then(|plan| plan.bounds_share.clone())
+            .unwrap_or_default(),
     };
     if let Some(existing) = existing_world.as_ref() {
         reuse_installed_rows(
@@ -710,7 +714,7 @@ pub fn extract_image_handles(
 
 pub fn extract_postfx(
     runtime: Extract<Option<Res<render_frontend::assemble::drawsurf::MaterialGeneration>>>,
-    samplers: Extract<Option<Res<RetailSamplerTable>>>,
+    samplers: Extract<Option<Res<SamplerTable>>>,
     frame: Extract<Res<render_frontend::assemble::drawsurf::dof::DofFrame>>,
     film: Extract<Res<render_frontend::assemble::drawsurf::FilmVisionView>>,
     glow_dvars: Extract<Res<render_frontend::assemble::drawsurf::dof::GlowDvars>>,
@@ -892,4 +896,27 @@ pub fn extract_geometry(
     if let Some(slot) = slot {
         slot.stamp_extract_diag(started.elapsed().as_secs_f32() * 1000.0);
     }
+}
+
+pub fn extract_model_lighting_tiles(
+    mut main_world: ResMut<bevy::render::MainWorld>,
+    mut uploads: ResMut<render_gpu::ModelLightingTileUploads>,
+) {
+    let pending = main_world
+        .get_resource::<render_scene::ModelLightingAtlasTileWrites>()
+        .is_some_and(|writes| !writes.tiles.is_empty());
+    if !pending {
+        return;
+    }
+    let mut writes = main_world.resource_mut::<render_scene::ModelLightingAtlasTileWrites>();
+    uploads.tiles.extend(
+        writes
+            .tiles
+            .drain(..)
+            .map(|tile| render_gpu::ModelLightingTileUpload {
+                image: tile.image,
+                origin: tile.origin,
+                texels: tile.texels,
+            }),
+    );
 }

@@ -1,9 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use bevy::platform::collections::{HashMap, HashSet};
 
-use anim_iw4::{
-    DOBJ_COMPUTE_BOUNDS_MODEL_LIMIT, DOBJ_RADIUS_PARENT_ROOT, dobj_compute_bounds_radius,
-};
-use assets::FpvMeshCatalog;
+use anim_iw4::{DOBJ_COMPUTE_BOUNDS_MODEL_LIMIT, DOBJ_RADIUS_PARENT_ROOT, compute_bounds_radius};
+use asset_model::FpvMeshCatalog;
 use bevy::prelude::*;
 use lighting_iw4::{
     MODEL_LIGHTING_PIXEL_FREE_BITS_BUFFERS, ModelLightingCacheAlloc, ModelLightingCacheGlob,
@@ -18,8 +16,8 @@ use crate::prepare::scene::world::WorldScene;
 use render_anim::SessionViewmodel;
 
 pub use render_scene::{
-    ModelLightingOwner, ModelLightingRequest, ModelLightingRequests, ResolvedModelLighting,
-    ResolvedModelLightingTable,
+    ModelLightingAtlasTileWrites, ModelLightingOwner, ModelLightingRequest, ModelLightingRequests,
+    ResolvedModelLighting, ResolvedModelLightingTable,
 };
 
 #[derive(Resource)]
@@ -116,7 +114,7 @@ impl WorldModelLightingCache {
         origin: [f32; 3],
         atlas: &WorldModelLightingAtlas,
         scene: Option<&WorldScene>,
-        images: &mut Assets<Image>,
+        (images, tile_writes): (&mut Assets<Image>, &mut ModelLightingAtlasTileWrites),
         lookup_fallback: u8,
         allow_moved_reuse: bool,
     ) -> u32 {
@@ -195,7 +193,7 @@ impl WorldModelLightingCache {
                 self.body_handles.remove(&key);
                 return 0;
             };
-            match assets::sample_light_grid_with_lookup_fallback(
+            match asset_model::sample_light_grid_with_lookup_fallback(
                 &grid.view(),
                 origin,
                 lookup_fallback,
@@ -223,12 +221,13 @@ impl WorldModelLightingCache {
                             );
                         }
                     }
-                    if let (Some(entry), Some(mut img)) = (
+                    // Untracked: only `tile_writes` carries the tile to the GPU.
+                    if let (Some(entry), Some(img)) = (
                         ModelLightingTileIndex::from_handle(handle),
-                        images.get_mut(&atlas.image),
-                    ) {
-                        let _ =
-                            model_lighting_atlas_write_tile(&mut *img, dims, entry, &sampled.tile);
+                        images.get_mut_untracked(&atlas.image),
+                    ) && model_lighting_atlas_write_tile(img, dims, entry, &sampled.tile)
+                    {
+                        tile_writes.push(atlas.image.id(), entry, &sampled.tile);
                     }
                     self.lighting_info[slot as usize] = lighting_iw4::lighting_info_from_bytes(
                         sampled.picked_primary,
@@ -283,11 +282,11 @@ impl WorldModelLightingCache {
     }
 }
 
-pub(crate) fn dobj_lighting_box_half(radii: &[f32], parents: &[u8]) -> Option<[f32; 3]> {
+pub(crate) fn lighting_box_half(radii: &[f32], parents: &[u8]) -> Option<[f32; 3]> {
     if radii.is_empty() || radii.len() > DOBJ_COMPUTE_BOUNDS_MODEL_LIMIT {
         return None;
     }
-    Some(lighting_query_box_half(dobj_compute_bounds_radius(
+    Some(lighting_query_box_half(compute_bounds_radius(
         radii, parents,
     )))
 }
@@ -301,7 +300,7 @@ pub(crate) fn fpv_dobj_lighting_box_half(
     let gun = catalog.get_at(gun_index.order())?;
     let r_hands = hands.skel.radius?;
     let r_gun = gun.skel.radius?;
-    dobj_lighting_box_half(&[r_hands, r_gun], &[DOBJ_RADIUS_PARENT_ROOT, 0])
+    lighting_box_half(&[r_hands, r_gun], &[DOBJ_RADIUS_PARENT_ROOT, 0])
 }
 
 pub fn viewmodel_lighting_origin(
@@ -382,10 +381,19 @@ pub(crate) fn update_dirty_model_lighting(
     atlas: Option<Res<WorldModelLightingAtlas>>,
     scene: Option<Res<WorldScene>>,
     images: ResMut<Assets<Image>>,
+    tile_writes: ResMut<ModelLightingAtlasTileWrites>,
     requests: ResMut<ModelLightingRequests>,
     resolved: ResMut<ResolvedModelLightingTable>,
 ) {
-    drain_model_lighting_requests(cache, atlas, scene, images, requests, resolved, false);
+    drain_model_lighting_requests(
+        cache,
+        atlas,
+        scene,
+        (images, tile_writes),
+        requests,
+        resolved,
+        false,
+    );
 }
 
 pub(crate) fn update_glass_dyn_lighting(
@@ -393,10 +401,19 @@ pub(crate) fn update_glass_dyn_lighting(
     atlas: Option<Res<WorldModelLightingAtlas>>,
     scene: Option<Res<WorldScene>>,
     images: ResMut<Assets<Image>>,
+    tile_writes: ResMut<ModelLightingAtlasTileWrites>,
     requests: ResMut<ModelLightingRequests>,
     resolved: ResMut<ResolvedModelLightingTable>,
 ) {
-    drain_model_lighting_requests(cache, atlas, scene, images, requests, resolved, true);
+    drain_model_lighting_requests(
+        cache,
+        atlas,
+        scene,
+        (images, tile_writes),
+        requests,
+        resolved,
+        true,
+    );
 }
 
 pub(crate) fn update_fx_dyn_lighting(
@@ -404,17 +421,26 @@ pub(crate) fn update_fx_dyn_lighting(
     atlas: Option<Res<WorldModelLightingAtlas>>,
     scene: Option<Res<WorldScene>>,
     images: ResMut<Assets<Image>>,
+    tile_writes: ResMut<ModelLightingAtlasTileWrites>,
     requests: ResMut<ModelLightingRequests>,
     resolved: ResMut<ResolvedModelLightingTable>,
 ) {
-    drain_model_lighting_requests(cache, atlas, scene, images, requests, resolved, false);
+    drain_model_lighting_requests(
+        cache,
+        atlas,
+        scene,
+        (images, tile_writes),
+        requests,
+        resolved,
+        false,
+    );
 }
 
 fn drain_model_lighting_requests(
     cache: Option<ResMut<WorldModelLightingCache>>,
     atlas: Option<Res<WorldModelLightingAtlas>>,
     scene: Option<Res<WorldScene>>,
-    mut images: ResMut<Assets<Image>>,
+    (mut images, mut tile_writes): (ResMut<Assets<Image>>, ResMut<ModelLightingAtlasTileWrites>),
     mut requests: ResMut<ModelLightingRequests>,
     mut resolved: ResMut<ResolvedModelLightingTable>,
     prune_glass: bool,
@@ -453,7 +479,7 @@ fn drain_model_lighting_requests(
                 request.origin,
                 atlas,
                 scene,
-                &mut images,
+                (&mut images, &mut tile_writes),
                 request.lookup_fallback,
                 moving_glass,
             );

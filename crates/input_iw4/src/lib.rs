@@ -11,7 +11,7 @@ pub mod weapon_select;
 
 pub use adjust_angles::{
     AdjustAnglesInput, CL_ANGLESPEEDKEY_DEFAULT, CL_PITCHSPEED_DEFAULT, CL_YAWSPEED_DEFAULT,
-    cl_adjust_angles,
+    adjust_angles,
 };
 pub use names::{
     HOLD_PAIR_LIMIT, INPUT_COMMAND_NAMES, SCRIPT_KEYNUM, command_id_from_name, command_id_lookup,
@@ -242,6 +242,9 @@ pub struct ClientInput {
     pub action_slots: Vec<usize>,
 
     pub offhand_hold_cancel: bool,
+
+    pub stance_held: Option<(i32, i32)>,
+    pub center_view: bool,
 }
 
 impl Default for ClientInput {
@@ -254,11 +257,13 @@ impl Default for ClientInput {
             weapon_cycles: Vec::new(),
             action_slots: Vec::new(),
             offhand_hold_cancel: false,
+            stance_held: None,
+            center_view: false,
         }
     }
 }
 
-pub fn cl_set_ads(client: &mut ClientInput, ads: bool) {
+pub fn set_ads(client: &mut ClientInput, ads: bool) {
     client.using_ads = ads;
 }
 
@@ -274,21 +279,21 @@ fn apply_pair(btn: &mut Kbutton, cmd_id: u32, key: i32, now_msec: i32, frame_mse
     }
 }
 
-pub fn cl_input_cmd(
-    client: &mut ClientInput,
-    cmd_id: u32,
-    key: i32,
-    now_msec: i32,
-    frame_msec: u32,
-) {
+pub fn input_cmd(client: &mut ClientInput, cmd_id: u32, key: i32, now_msec: i32, frame_msec: u32) {
     match cmd_id {
         1 | 2 => apply_pair(&mut client.kb.attack, cmd_id, key, now_msec, frame_msec),
         3 | 4 => apply_pair(&mut client.kb.melee, cmd_id, key, now_msec, frame_msec),
         5 | 6 => apply_pair(&mut client.kb.frag, cmd_id, key, now_msec, frame_msec),
         7 | 8 => apply_pair(&mut client.kb.smoke, cmd_id, key, now_msec, frame_msec),
-        9 | 10 => panic!("+breath_sprint kbutton EAX unread; not merged with +sprint"),
+        9 | 10 => {
+            apply_pair(&mut client.kb.holdbreath, cmd_id, key, now_msec, frame_msec);
+            apply_pair(&mut client.kb.sprint, cmd_id, key, now_msec, frame_msec);
+        }
         11 | 12 => apply_pair(&mut client.kb.usereload, cmd_id, key, now_msec, frame_msec),
         13 | 14 => {
+            if pair_down(cmd_id) {
+                client.using_ads = false;
+            }
             apply_pair(&mut client.kb.speed, cmd_id, key, now_msec, frame_msec);
             apply_pair(&mut client.kb.throw_btn, cmd_id, key, now_msec, frame_msec);
         }
@@ -297,7 +302,7 @@ pub fn cl_input_cmd(
                 client.action_slots.push(((cmd_id - 15) / 2) as usize);
             }
         }
-        23 | 24 => panic!("+stance writes the stance latch; not a movedown alias"),
+        23 | 24 => stance_button(client, pair_down(cmd_id), now_msec),
         25 | 26 => {
             apply_pair(&mut client.kb.gostand, cmd_id, key, now_msec, frame_msec);
         }
@@ -325,20 +330,58 @@ pub fn cl_input_cmd(
         59 | 60 => apply_pair(&mut client.kb.sprint, cmd_id, key, now_msec, frame_msec),
         61 | 62 => apply_pair(&mut client.kb.scores, cmd_id, key, now_msec, frame_msec),
         63 | 64 => apply_pair(&mut client.kb.talk, cmd_id, key, now_msec, frame_msec),
-        65 => panic!("togglemenu not this slice"),
+        65 | 67 | 68 | 69 => {}
         66 | 70 => client.weapon_cycles.push(cmd_id == 66),
-        67 => panic!("pause has no case 0x43 in this switch"),
-        68 | 69 => panic!("chatmodepublic/chatmodeteam Cbuf not this slice"),
-        71 => panic!("centerview pitch = -kickAngles not this slice"),
-        72 | 73 => panic!("togglecrouch/toggleprone latch xor not this slice"),
-        74 | 75 => panic!("goprone/gocrouch not this slice"),
+        71 => client.center_view = true,
+        72 | 73 => {
+            let stance = if cmd_id == 72 {
+                buttons::CROUCH
+            } else {
+                buttons::PRONE
+            } as i32;
+            client.stance_latch = if client.stance_latch == stance {
+                0
+            } else {
+                stance
+            };
+        }
+        74 => client.stance_latch = buttons::PRONE as i32,
+        75 => client.stance_latch = buttons::CROUCH as i32,
         76 => client.using_ads = !client.using_ads,
-        77 => cl_set_ads(client, false),
-        _ => panic!("bind-id not in the 1..77 table"),
+        77 => set_ads(client, false),
+        _ => {}
     }
 }
 
-pub fn cl_key_event(
+const STANCE_HOLD_MS: i32 = 300;
+
+fn stance_button(client: &mut ClientInput, down: bool, now_msec: i32) {
+    if client.kb.prone.active || client.kb.movedown.active {
+        return;
+    }
+    let crouch = buttons::CROUCH as i32;
+    if down {
+        client.stance_held = Some((client.stance_latch, now_msec));
+        client.stance_latch = crouch;
+    } else if let Some((from, _)) = client.stance_held.take()
+        && from == crouch
+    {
+        client.stance_latch = 0;
+    }
+}
+
+fn stance_hold(client: &mut ClientInput, now_msec: i32) {
+    let Some((from, since)) = client.stance_held else {
+        return;
+    };
+    if now_msec.wrapping_sub(since) >= STANCE_HOLD_MS {
+        let prone = buttons::PRONE as i32;
+        client.stance_latch = if from == prone { 0 } else { prone };
+        client.stance_held = None;
+    }
+}
+
+pub fn key_event(
     client: &mut ClientInput,
     key_num: usize,
     down: bool,
@@ -353,14 +396,14 @@ pub fn cl_key_event(
         client.keys[key_num].repeats = client.keys[key_num].repeats.saturating_add(1);
         let id = client.keys[key_num].binding;
         if id != 0 {
-            cl_input_cmd(client, id, key_num as i32, now_msec, frame_msec);
+            input_cmd(client, id, key_num as i32, now_msec, frame_msec);
         }
     } else {
         client.keys[key_num].down = 0;
         client.keys[key_num].repeats = 0;
         let id = client.keys[key_num].binding;
         if let Some(up_id) = key_up_command_id(id) {
-            cl_input_cmd(client, up_id, key_num as i32, now_msec, frame_msec);
+            input_cmd(client, up_id, key_num as i32, now_msec, frame_msec);
         }
     }
 }
@@ -517,7 +560,14 @@ pub fn create_cmd(input: &CreateCmdInput) -> UserCmd {
 }
 
 pub fn sample_move(client: &mut ClientInput, now_msec: i32, frame_msec: u32) -> (u32, MoveAxes) {
-    let bits = key_move_bits(&client.kb, client.using_ads, cmd_buttons(&client.kb));
+    stance_hold(client, now_msec);
+    let mut bits = key_move_bits(&client.kb, client.using_ads, cmd_buttons(&client.kb));
+    if client.kb.gostand.active || client.kb.gostand.was_pressed {
+        client.stance_latch = 0;
+    }
+    if bits & buttons::STANCE_HELD == 0 {
+        bits |= client.stance_latch as u32;
+    }
     let axes = key_move_from_fractions(
         movement_key_state(&mut client.kb.forward, now_msec, frame_msec),
         movement_key_state(&mut client.kb.back, now_msec, frame_msec),

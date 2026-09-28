@@ -32,9 +32,8 @@ use bevy::render::{Render, RenderSystems};
 use super::ExtractedRenderFrameProducts;
 use super::backend::{
     ModelIndexRingCopyRefuse, ModelIndexStream, PackDraw, PackedEmit, PackedListKind,
-    SmodelRigidFlush, pack_sun_shadow_frontend, prim_args_from_world_flush,
-    prim_args_u32_index_span, r_draw_spot_shadow_map, r_draw_sun_shadow_map_forced,
-    r_draw_surf_list_work_colour,
+    SmodelRigidFlush, draw_spot_shadow_map, draw_sun_shadow_map_forced, draw_surf_list_work_colour,
+    pack_sun_shadow_frontend, prim_args_from_world_flush, prim_args_u32_index_span,
 };
 use super::depth_range::{
     GFX_DEPTH_RANGE_VIEWMODEL, depth_range_type_for_draw, reverse_z_viewport_depth,
@@ -50,8 +49,8 @@ use super::gpu_prepare::{
     ConstantPackRefusal, PassConstantBuffers, overlay_packed_code_on_banks, split_bind_layout,
 };
 use super::gpu_resources::{
-    RetailSamplerTable, RuntimeProgramPortGpuExt, RuntimeUploadedImageRegistry, TextureBindRefusal,
-    UploadedTextureBind, padded_upload_len, write_buffer_padded, write_buffer_range,
+    RuntimeProgramPortGpuExt, RuntimeUploadedImageRegistry, SamplerTable, TextureBindRefusal,
+    UploadedTextureBind, padded_upload_len, write_buffer_padded,
 };
 use super::shadowmap_spot_gpu::{
     SHADOWMAP_SPOT_COLOR_FORMAT, SHADOWMAP_SPOT_DEPTH_FORMAT, ShadowmapSpotGpu,
@@ -106,11 +105,11 @@ pub struct ExtractedStaticGeometry {
     pub world_layer: Arc<Vec<u8>>,
     pub world_indices: Arc<Vec<u32>>,
     pub world_surface_ranges: Arc<Vec<(u32, u32)>>,
-    pub world_vertex_refusal: Option<render_frame::RetailWorldVertexRefusal>,
+    pub world_vertex_refusal: Option<render_frame::WorldVertexRefusal>,
     pub smodel_vertices: Arc<Vec<[u8; asset_iw4::size::GFX_PACKED_VERTEX]>>,
     pub smodel_indices: Arc<Vec<u32>>,
     pub smodel_surface_ranges: Arc<Vec<(u32, u32)>>,
-    pub smodel_vertex_refusal: Option<render_frame::RetailPackedVertexRefusal>,
+    pub smodel_vertex_refusal: Option<render_frame::PackedVertexRefusal>,
     pub smodel_cached_vertices: Arc<Vec<[u8; asset_iw4::size::GFX_PACKED_VERTEX]>>,
     pub smodel_surface_verts: Arc<Vec<(u32, u32)>>,
 }
@@ -145,7 +144,7 @@ pub struct RenderWorldData {
     pub smodel_pretess_indices: std::sync::Arc<Vec<u16>>,
     pub smodel_index_layout_revision: u64,
     pub smc_index_baked: Arc<Vec<u16>>,
-    pub sampler_table: Option<RetailSamplerTable>,
+    pub sampler_table: Option<SamplerTable>,
     pub image_handles: super::gpu_resources::RuntimeImageHandles,
     pub catalog: Option<Arc<RuntimeMaterialCatalog>>,
     pub prepared: Option<Arc<PreparedMaterialTable>>,
@@ -199,11 +198,11 @@ pub struct RenderFrameData {
     pub xmodel_vertices: Arc<Vec<[u8; asset_iw4::size::GFX_PACKED_VERTEX]>>,
     pub xmodel_indices: Arc<Vec<u32>>,
     pub xmodel_surface_ranges: Arc<Vec<(u32, u32)>>,
-    pub xmodel_vertex_refusal: Option<render_frame::RetailPackedVertexRefusal>,
+    pub xmodel_vertex_refusal: Option<render_frame::PackedVertexRefusal>,
     pub fx_vertices: Arc<Vec<[u8; asset_iw4::size::GFX_PACKED_VERTEX]>>,
     pub fx_indices: Arc<Vec<u32>>,
     pub fx_surface_ranges: Arc<Vec<(u32, u32)>>,
-    pub fx_vertex_refusal: Option<render_frame::RetailPackedVertexRefusal>,
+    pub fx_vertex_refusal: Option<render_frame::PackedVertexRefusal>,
     pub fx_revision: u64,
     pub xmodel_revision: u64,
     pub xmodel_topology_revision: u64,
@@ -221,7 +220,8 @@ pub struct RenderFrameData {
     pub glass_mesh_indices: Arc<Vec<u32>>,
     pub glass_mesh_surface_ranges: Arc<Vec<(u32, u32)>>,
     pub glass_mesh_revision: u64,
-    pub glass_mesh_vertex_refusal: Option<render_frame::RetailPackedVertexRefusal>,
+    pub glass_mesh_vertex_refusal: Option<render_frame::PackedVertexRefusal>,
+    pub glass_mesh_bounds: Arc<Vec<[f32; 4]>>,
     pub exec_frame: MaterialExecFrame,
 }
 
@@ -255,6 +255,7 @@ struct ExactColourGeometry {
     world_products: frame::WorldProducts,
     world_vertex: Option<Buffer>,
     world_layer: Option<Buffer>,
+    world_effect: Option<Buffer>,
     world_index: Option<Buffer>,
     world_surface_ranges: Vec<(u32, u32)>,
     world_vertex_count: usize,
@@ -426,7 +427,7 @@ struct GpuConstantArena {
     capacity: u64,
     bind_group: Option<BindGroup>,
 
-    uploaded: Vec<u8>,
+    uploaded_len: usize,
 
     dirty_scratch: Vec<(usize, usize)>,
 }
@@ -434,7 +435,21 @@ struct GpuConstantArena {
 #[derive(Resource, Default)]
 struct ExactConstantArena {
     generation: MaterialGenerationId,
-    gpu: GpuConstantArena,
+    gpu: [GpuConstantArena; COLOUR_PREPARE_LANES],
+}
+
+const COLOUR_PREPARE_LANES: usize = 4;
+
+#[derive(Default)]
+struct ColourPrepareLane {
+    run_pack: RunPackCache,
+    arena_pack: ArenaPack,
+    executor: MaterialRunExecutor,
+    prepared: Vec<PreparedExactDraw>,
+    submitted_keys: Vec<u64>,
+    pending_viewmodel_prepared: Vec<PreparedExactDraw>,
+    pending_viewmodel_keys: Vec<u64>,
+    world_exec_ready_keys: Vec<u64>,
 }
 
 #[derive(Resource, Default)]
@@ -699,8 +714,8 @@ enum GpuSubmitRefusal {
     MultipleCameraViews {
         views: u32,
     },
-    WorldVertex(render_frame::RetailWorldVertexRefusal),
-    PackedVertex(render_frame::RetailPackedVertexRefusal),
+    WorldVertex(render_frame::WorldVertexRefusal),
+    PackedVertex(render_frame::PackedVertexRefusal),
     MissingSurfaceRange {
         surf: u16,
     },
@@ -1214,11 +1229,7 @@ struct ShadowExecScratch {
 
 #[derive(Resource, Default)]
 struct ColourSubmitScratch {
-    run_pack: RunPackCache,
-
-    arena_pack: ArenaPack,
-
-    executor: MaterialRunExecutor,
+    lanes: [ColourPrepareLane; COLOUR_PREPARE_LANES],
 
     world_exec_ready_keys: Vec<u64>,
     prepared: Vec<PreparedExactDraw>,
@@ -1232,6 +1243,8 @@ struct ColourSubmitScratch {
     skinned_tess: smodel_skinned::SmodelSkinnedTess,
 
     prepared_scene_epoch: TableEpoch,
+
+    logged_skinned: Option<(usize, usize)>,
 }
 
 #[derive(Resource, Default)]
@@ -1412,16 +1425,6 @@ struct CameraPrepareState {
     viewmodel_held: usize,
 }
 
-impl ColourSubmitScratch {
-    fn clear(&mut self) {
-        self.world_exec_ready_keys.clear();
-        self.prepared.clear();
-        self.submitted_keys.clear();
-        self.pending_viewmodel_prepared.clear();
-        self.pending_viewmodel_keys.clear();
-    }
-}
-
 pub fn bind_group_layout_from_entries(
     label: &'static str,
     entries: &[WgpuBindLayoutEntry],
@@ -1464,27 +1467,44 @@ pub fn bind_group_layout_from_entries(
 pub fn vertex_layouts_from_contract(
     layout: &super::gpu_contract::WgpuPassLayout,
 ) -> Vec<VertexBufferLayout> {
-    layout
+    let last_stream = layout
         .vertex_buffers
         .iter()
-        .map(|buffer| VertexBufferLayout {
-            array_stride: buffer.array_stride,
-            step_mode: VertexStepMode::Vertex,
-            attributes: buffer
-                .attributes
+        .map(|buffer| buffer.stream)
+        .max();
+    (0..last_stream.map_or(0, |stream| usize::from(stream) + 1))
+        .map(|stream| {
+            let Some(buffer) = layout
+                .vertex_buffers
                 .iter()
-                .map(|attribute| VertexAttribute {
-                    format: match attribute.format {
-                        WgpuVertexFormat::Float32x2 => VertexFormat::Float32x2,
-                        WgpuVertexFormat::Float32x3 => VertexFormat::Float32x3,
-                        WgpuVertexFormat::Float32x4 => VertexFormat::Float32x4,
-                        WgpuVertexFormat::Unorm8x4 => VertexFormat::Unorm8x4,
-                        WgpuVertexFormat::Uint8x4 => VertexFormat::Uint8x4,
-                    },
-                    offset: attribute.offset,
-                    shader_location: attribute.location,
-                })
-                .collect(),
+                .find(|buffer| usize::from(buffer.stream) == stream)
+            else {
+                return VertexBufferLayout {
+                    array_stride: 0,
+                    step_mode: VertexStepMode::Vertex,
+                    attributes: Vec::new(),
+                };
+            };
+            VertexBufferLayout {
+                array_stride: buffer.array_stride,
+                step_mode: VertexStepMode::Vertex,
+                attributes: buffer
+                    .attributes
+                    .iter()
+                    .map(|attribute| VertexAttribute {
+                        format: match attribute.format {
+                            WgpuVertexFormat::Float32x2 => VertexFormat::Float32x2,
+                            WgpuVertexFormat::Float16x2 => VertexFormat::Float16x2,
+                            WgpuVertexFormat::Float32x3 => VertexFormat::Float32x3,
+                            WgpuVertexFormat::Float32x4 => VertexFormat::Float32x4,
+                            WgpuVertexFormat::Unorm8x4 => VertexFormat::Unorm8x4,
+                            WgpuVertexFormat::Uint8x4 => VertexFormat::Uint8x4,
+                        },
+                        offset: attribute.offset,
+                        shader_location: attribute.location,
+                    })
+                    .collect(),
+            }
         })
         .collect()
 }
@@ -1837,6 +1857,16 @@ struct UnsupportedStateCensus {
 }
 
 impl UnsupportedStateCensus {
+    fn absorb(&mut self, other: Self) {
+        self.unknown_blend_factor = self
+            .unknown_blend_factor
+            .saturating_add(other.unknown_blend_factor);
+        self.unknown_blend_operation = self
+            .unknown_blend_operation
+            .saturating_add(other.unknown_blend_operation);
+        self.stencil = self.stencil.saturating_add(other.stencil);
+    }
+
     fn note(&mut self, fields: super::state::UnsupportedStateFields) {
         self.unknown_blend_factor = self
             .unknown_blend_factor
@@ -1983,6 +2013,7 @@ struct PreparedExactDraw {
     binds_spot_shadow: bool,
 
     indirect_arg: Option<u32>,
+    arena_lane: u8,
 }
 
 fn bsp_draw_source(kind: &RetainedDrawKind) -> (Option<BspCameraLane>, u16, u16, u16) {
@@ -2417,13 +2448,38 @@ impl ExactPrepare<'_> {
             },
             spot_shadow_select: self.spot_shadow_select,
         };
+        let scene_index = texture_table::scene_table_index(
+            after_scene_resolve,
+            GfxPassState::from_bits(executable.state).srgb_write_enable(),
+        );
+        let extracted = self.extracted;
+        let uploaded = self.uploaded;
+        let sampler_table = self.sampler_table;
+        let spot_shadow_select = self.spot_shadow_select;
+        let device = self.device;
+        let resolve = |table: &mut ExactTextureTable| -> Result<Arc<[u32]>, GpuSubmitRefusal> {
+            let textures = port_gpu
+                .port
+                .resolve_uploaded_texture_binds(
+                    executable,
+                    surface,
+                    &extracted.world.image_handles,
+                    extracted.world.generation,
+                    uploaded,
+                    sampler_table,
+                    spot_shadow_select,
+                )
+                .map_err(GpuSubmitRefusal::TextureBind)?;
+            texture_slot_words(device, table, &textures)
+        };
+        let mut shared_guard;
         let (texture_slots, table) = match &mut self.textures {
-            PrepareTextureTables::Scene { slots, tables } => {
-                let index = texture_table::scene_table_index(
-                    after_scene_resolve,
-                    GfxPassState::from_bits(executable.state).srgb_write_enable(),
-                );
-                (&mut slots[index], &mut tables[index])
+            PrepareTextureTables::SceneShared(shared) => {
+                shared_guard = shared
+                    .lock()
+                    .expect("scene texture tables are never poisoned");
+                let refs = &mut *shared_guard;
+                (&mut refs.slots[scene_index], &mut refs.tables[scene_index])
             }
             PrepareTextureTables::Shadow { slots, table } => (&mut **slots, &mut **table),
         };
@@ -2432,19 +2488,7 @@ impl ExactPrepare<'_> {
             return Ok(Arc::clone(slots));
         }
         self.cost.tex_bind_miss_n = self.cost.tex_bind_miss_n.saturating_add(1);
-        let textures = port_gpu
-            .port
-            .resolve_uploaded_texture_binds(
-                executable,
-                surface,
-                &self.extracted.world.image_handles,
-                self.extracted.world.generation,
-                self.uploaded,
-                self.sampler_table,
-                self.spot_shadow_select,
-            )
-            .map_err(GpuSubmitRefusal::TextureBind)?;
-        let slots = texture_slot_words(self.device, table, &textures)?;
+        let slots = resolve(table)?;
         texture_slots.insert(key, Arc::clone(&slots));
         Ok(slots)
     }
@@ -2476,11 +2520,14 @@ struct PrepareCost {
     intern_miss_n: u32,
 }
 
+#[derive(Default)]
+struct SceneTextureState {
+    slots: [HashMap<BoundTextureKey, Arc<[u32]>>; 4],
+    tables: [ExactTextureTable; 4],
+}
+
 enum PrepareTextureTables<'a> {
-    Scene {
-        slots: &'a mut [HashMap<BoundTextureKey, Arc<[u32]>>; 4],
-        tables: &'a mut [ExactTextureTable; 4],
-    },
+    SceneShared(&'a std::sync::Mutex<SceneTextureState>),
     Shadow {
         slots: &'a mut HashMap<BoundTextureKey, Arc<[u32]>>,
         table: &'a mut ExactTextureTable,
@@ -2498,7 +2545,7 @@ struct ExactPrepare<'a> {
     uploaded: &'a RuntimeUploadedImageRegistry,
 
     spot_shadow_select: Option<u8>,
-    sampler_table: &'a RetailSamplerTable,
+    sampler_table: &'a SamplerTable,
 
     textures: PrepareTextureTables<'a>,
 
@@ -2506,6 +2553,7 @@ struct ExactPrepare<'a> {
     run_pack: RunPackCache,
     cost: PrepareCost,
     skinned_tess: Option<&'a mut smodel_skinned::SmodelSkinnedTess>,
+    skinned_shared: Option<&'a std::sync::Mutex<smodel_skinned::SmodelSkinnedTess>>,
 }
 
 #[derive(Clone, Copy)]
@@ -2533,6 +2581,15 @@ impl PrepareCost {
             self.pack_walk_n = self.pack_walk_n.saturating_add(1);
         }
     }
+    fn absorb(&mut self, other: Self) {
+        self.pack_seed_n = self.pack_seed_n.saturating_add(other.pack_seed_n);
+        self.pack_walk_n = self.pack_walk_n.saturating_add(other.pack_walk_n);
+        self.tex_bind_hit_n = self.tex_bind_hit_n.saturating_add(other.tex_bind_hit_n);
+        self.tex_bind_miss_n = self.tex_bind_miss_n.saturating_add(other.tex_bind_miss_n);
+        self.intern_hit_n = self.intern_hit_n.saturating_add(other.intern_hit_n);
+        self.intern_miss_n = self.intern_miss_n.saturating_add(other.intern_miss_n);
+    }
+
     fn note_intern_hit(&mut self) {
         self.intern_hit_n = self.intern_hit_n.saturating_add(1);
     }
@@ -3058,7 +3115,11 @@ fn same_texture_slots(prev: &PreparedExactDraw, next: &PreparedExactDraw) -> boo
 fn same_packed_constants(prev: &PreparedExactDraw, next: &PreparedExactDraw) -> bool {
     match (&prev.constants, &next.constants) {
         (Some(left), Some(right)) => Arc::ptr_eq(left, right) || left == right,
-        (None, None) => prev.constant_base.is_some() && prev.constant_base == next.constant_base,
+        (None, None) => {
+            prev.constant_base.is_some()
+                && prev.constant_base == next.constant_base
+                && prev.arena_lane == next.arena_lane
+        }
         _ => false,
     }
 }
@@ -3346,7 +3407,8 @@ fn submit_exact_draw_run<'a>(
     let mut bound_tess = None;
     let mut bound_smc_off = None;
     let mut bound_depth = None;
-    let mut constants_bound = false;
+    let mut bound_arena = None;
+    let mut textures_bound = false;
 
     let indirect_args = indirect.buffer();
     let mut batch = indirect::IndirectBatch::default();
@@ -3386,9 +3448,13 @@ fn submit_exact_draw_run<'a>(
         if draw.count == 0 {
             continue;
         }
-        let (Some(constant_base), Some(constants_bind)) =
-            (draw.constant_base, constant_arena.gpu.bind_group.as_ref())
-        else {
+        let (Some(constant_base), Some(constants_bind)) = (
+            draw.constant_base,
+            constant_arena
+                .gpu
+                .get(usize::from(draw.arena_lane))
+                .and_then(|arena| arena.bind_group.as_ref()),
+        ) else {
             *refused_draws = refused_draws.saturating_add(1);
             *last_refusal = Some(GpuSubmitRefusal::ConstantArenaMissing);
             continue;
@@ -3450,6 +3516,11 @@ fn submit_exact_draw_run<'a>(
                 vertex.slice(..)
             };
             pass.set_vertex_buffer(0, vertex_slice);
+            if draw.tess == ExactTessBind::World
+                && let Some(effect) = geometry.world_effect.as_ref()
+            {
+                pass.set_vertex_buffer(2, effect.slice(..));
+            }
             record_n.state = record_n.state.saturating_add(2);
             if draw.tess == ExactTessBind::World {
                 if let Some(layer) = geometry.world_layer.as_ref() {
@@ -3478,11 +3549,15 @@ fn submit_exact_draw_run<'a>(
             bound_depth = Some((draw.depth_min, draw.depth_max));
         }
 
-        if !constants_bound {
+        if bound_arena != Some(draw.arena_lane) {
+            issue_indirect_batch!();
             pass.set_bind_group(0, constants_bind, &[]);
-            pass.set_bind_group(1, textures_bind, &[]);
-            constants_bound = true;
+            bound_arena = Some(draw.arena_lane);
             record_n.group0 = record_n.group0.saturating_add(1);
+        }
+        if !textures_bound {
+            pass.set_bind_group(1, textures_bind, &[]);
+            textures_bound = true;
             record_n.group1 = record_n.group1.saturating_add(1);
         }
         if draw.tess == ExactTessBind::World {
@@ -4403,6 +4478,11 @@ fn record_shadowmap_draws<'a>(
         {
             pass.set_render_pipeline(gpu_pipeline);
             pass.set_vertex_buffer(0, vertex.slice(..));
+            if draw.tess == ExactTessBind::World
+                && let Some(effect) = geometry.world_effect.as_ref()
+            {
+                pass.set_vertex_buffer(2, effect.slice(..));
+            }
             record_n.state = record_n.state.saturating_add(2);
             if draw.tess == ExactTessBind::World
                 && let Some(layer) = geometry.world_layer.as_ref()
@@ -4589,7 +4669,7 @@ fn prepare_shadowmap_spot(
     texture_table: &mut ExactTextureTable,
     shadow_arena: &mut ShadowmapSpotArena,
     shadowmap: &mut ShadowmapSpotGpu,
-    sampler_table: &RetailSamplerTable,
+    sampler_table: &SamplerTable,
     shadow_exec: &mut ShadowExecScratch,
     skinned_tess: &mut smodel_skinned::SmodelSkinnedTess,
 ) -> PreparedSpotWork {
@@ -4636,6 +4716,7 @@ fn prepare_shadowmap_spot(
         run_pack: RunPackCache::default(),
         cost: PrepareCost::default(),
         skinned_tess: Some(skinned_tess),
+        skinned_shared: None,
     };
     let target = ExactPrepareTarget {
         color: SHADOWMAP_SPOT_COLOR_FORMAT,
@@ -4659,7 +4740,7 @@ fn prepare_shadowmap_spot(
                 .or_default() += 1;
             continue;
         };
-        let envelope = r_draw_spot_shadow_map(emitted.slot_index, emitted.plan, Some(&slot.packed));
+        let envelope = draw_spot_shadow_map(emitted.slot_index, emitted.plan, Some(&slot.packed));
         let Some(work) = envelope.work.as_ref() else {
             miss = miss.saturating_add(1);
             *miss_rows.entry("MissingSpotShadowWork".into()).or_default() += 1;
@@ -5035,7 +5116,7 @@ fn prepare_shadowmap_sun(
     shadow_arena: &mut ShadowmapSunArena,
     shadowmap: &mut ShadowmapSunGpu,
     static_draws: &mut ResidentShadowStaticDraws,
-    sampler_table: &RetailSamplerTable,
+    sampler_table: &SamplerTable,
     shadow_exec: &mut ShadowExecScratch,
     skinned_tess: &mut smodel_skinned::SmodelSkinnedTess,
 ) -> PreparedSunWork {
@@ -5053,7 +5134,7 @@ fn prepare_shadowmap_sun(
     let Some(depth_view) = shadowmap.depth_view().cloned() else {
         return PreparedSunWork::done(SunShadowSubmit::refused("ShadowmapSunDepthMissing"));
     };
-    if r_draw_sun_shadow_map_forced(0, None).is_none() {
+    if draw_sun_shadow_map_forced(0, None).is_none() {
         return PreparedSunWork::done(SunShadowSubmit::refused("ShadowmapSunPartitionMissing"));
     }
     let generation = extracted.world.generation.0;
@@ -5100,6 +5181,7 @@ fn prepare_shadowmap_sun(
         run_pack: RunPackCache::default(),
         cost: PrepareCost::default(),
         skinned_tess: Some(skinned_tess),
+        skinned_shared: None,
     };
     let mut miss = 0u32;
     let mut miss_rows = BTreeMap::<String, u32>::new();
@@ -5146,7 +5228,7 @@ fn prepare_shadowmap_sun(
                 &packed_fallback
             }
         };
-        let Some(envelope) = r_draw_sun_shadow_map_forced(partition, Some(&packed)) else {
+        let Some(envelope) = draw_sun_shadow_map_forced(partition, Some(&packed)) else {
             continue;
         };
         let Some(work) = envelope.work.as_ref() else {
@@ -5672,7 +5754,7 @@ impl ExactPrepare<'_> {
         binds_spot_shadow: bool,
         out: &mut Vec<PreparedExactDraw>,
     ) -> Result<usize, GpuSubmitRefusal> {
-        let after_scene_resolve = matches!(self.textures, PrepareTextureTables::Scene { .. })
+        let after_scene_resolve = matches!(self.textures, PrepareTextureTables::SceneShared(_))
             && (item.camera_region == Some(asset_iw4::CAMERA_REGION_EMISSIVE)
                 || matches!(item.kind, RetainedDrawKind::CodeMesh { .. })
                 || matches!(item.kind, RetainedDrawKind::Glass { .. })
@@ -5698,7 +5780,7 @@ impl ExactPrepare<'_> {
                 }
                 if self.geometry.world_vertex.is_none() || self.geometry.world_index.is_none() {
                     return Err(GpuSubmitRefusal::WorldVertex(
-                        render_frame::RetailWorldVertexRefusal::ForeignLayout {
+                        render_frame::WorldVertexRefusal::ForeignLayout {
                             source_layout: "exact colour world buffers absent",
                         },
                     ));
@@ -5752,7 +5834,7 @@ impl ExactPrepare<'_> {
                     if self.geometry.smodel_vertex.is_none() || self.geometry.smodel_index.is_none()
                     {
                         return Err(GpuSubmitRefusal::PackedVertex(
-                            render_frame::RetailPackedVertexRefusal::ForeignLayout {
+                            render_frame::PackedVertexRefusal::ForeignLayout {
                                 source_layout: "exact colour smodel buffers absent",
                             },
                         ));
@@ -5765,12 +5847,18 @@ impl ExactPrepare<'_> {
                     )
                 }
                 Some(lighting_iw4::SmodelSurfPath::Skinned) => {
-                    let tess = self
-                        .skinned_tess
-                        .as_mut()
-                        .ok_or(GpuSubmitRefusal::SmodelSkinnedDestMissing { placement })?;
-                    let (start, count) =
-                        tess.append_draw(self.extracted, placement, surface, world_from_local)?;
+                    let (start, count) = match (self.skinned_tess.as_mut(), self.skinned_shared) {
+                        (Some(tess), _) => {
+                            tess.append_draw(self.extracted, placement, surface, world_from_local)?
+                        }
+                        (None, Some(shared)) => shared
+                            .lock()
+                            .expect("skinned static model cache is never poisoned")
+                            .append_draw(self.extracted, placement, surface, world_from_local)?,
+                        (None, None) => {
+                            return Err(GpuSubmitRefusal::SmodelSkinnedDestMissing { placement });
+                        }
+                    };
                     if count == 0 {
                         return Err(GpuSubmitRefusal::EmptySmodelIndexRange { surface });
                     }
@@ -5796,7 +5884,7 @@ impl ExactPrepare<'_> {
                 }
                 if !self.geometry.xmodel.drawable() {
                     return Err(GpuSubmitRefusal::PackedVertex(
-                        render_frame::RetailPackedVertexRefusal::ForeignLayout {
+                        render_frame::PackedVertexRefusal::ForeignLayout {
                             source_layout: "exact colour xmodel buffers absent",
                         },
                     ));
@@ -5822,7 +5910,7 @@ impl ExactPrepare<'_> {
                 }
                 if self.geometry.fx_vertex.is_none() || self.geometry.fx_index.is_none() {
                     return Err(GpuSubmitRefusal::PackedVertex(
-                        render_frame::RetailPackedVertexRefusal::ForeignLayout {
+                        render_frame::PackedVertexRefusal::ForeignLayout {
                             source_layout: "exact colour code-mesh buffers absent",
                         },
                     ));
@@ -5845,7 +5933,7 @@ impl ExactPrepare<'_> {
                 }
                 if !self.geometry.particle_cloud.drawable() {
                     return Err(GpuSubmitRefusal::PackedVertex(
-                        render_frame::RetailPackedVertexRefusal::ForeignLayout {
+                        render_frame::PackedVertexRefusal::ForeignLayout {
                             source_layout: "exact colour particle-cloud buffers absent",
                         },
                     ));
@@ -5868,7 +5956,7 @@ impl ExactPrepare<'_> {
                 }
                 if !self.geometry.mark_mesh.drawable() {
                     return Err(GpuSubmitRefusal::WorldVertex(
-                        render_frame::RetailWorldVertexRefusal::ForeignLayout {
+                        render_frame::WorldVertexRefusal::ForeignLayout {
                             source_layout: "exact colour mark-mesh buffers absent",
                         },
                     ));
@@ -5898,7 +5986,7 @@ impl ExactPrepare<'_> {
                 }
                 if !self.geometry.glass_mesh.drawable() {
                     return Err(GpuSubmitRefusal::PackedVertex(
-                        render_frame::RetailPackedVertexRefusal::ForeignLayout {
+                        render_frame::PackedVertexRefusal::ForeignLayout {
                             source_layout: "exact colour glass-mesh buffers absent",
                         },
                     ));
@@ -5919,7 +6007,7 @@ impl ExactPrepare<'_> {
             } = kind
             {
                 u64::from(
-                    lighting_iw4::r_smc_stream_source_byte_offset(cache_index)
+                    lighting_iw4::smc_stream_source_byte_offset(cache_index)
                         .ok_or(GpuSubmitRefusal::SmodelCacheIndicesMissing { cache_index })?,
                 )
             } else {
@@ -6060,6 +6148,7 @@ impl ExactPrepare<'_> {
                     binds_spot_shadow,
 
                     indirect_arg: None,
+                    arena_lane: 0,
                 });
             }
             Ok(())
@@ -6081,38 +6170,40 @@ fn resolve_arena_base(base: u32, identity_rows: u32) -> u32 {
     }
 }
 
-fn refill_arena_uploaded(uploaded: &mut Vec<u8>, identity: &[u8], placed: &[u8], reserved: usize) {
-    let reserved = reserved.max(identity.len());
-    uploaded.clear();
-    uploaded.extend_from_slice(identity);
-    uploaded.resize(reserved, 0);
-    uploaded.extend_from_slice(placed);
-}
-
-/// Refill `[start, end)` of the staging copy from the three regions behind it:
-/// the identity span, the zero padding up to `reserved`, then the placed span.
-/// Same result as writing the range one byte at a time, in whole-slice copies.
-fn refill_uploaded_span(
-    uploaded: &mut [u8],
+fn write_arena_span(
+    queue: &RenderQueue,
+    buffer: &Buffer,
     identity: &[u8],
     placed: &[u8],
     reserved: usize,
     start: usize,
     end: usize,
 ) {
+    let Some(size) = NonZeroU64::new(end.saturating_sub(start) as u64) else {
+        return;
+    };
+    let mut view = queue
+        .write_buffer_with(buffer, start as u64, size)
+        .expect("constant arena upload fits its buffer");
     let identity_end = end.min(identity.len());
     if start < identity_end {
-        uploaded[start..identity_end].copy_from_slice(&identity[start..identity_end]);
+        view.slice(0..identity_end - start)
+            .copy_from_slice(&identity[start..identity_end]);
     }
     let pad_start = start.max(identity.len());
     let pad_end = end.min(reserved);
     if pad_start < pad_end {
-        uploaded[pad_start..pad_end].fill(0);
+        view.slice(pad_start - start..pad_end - start).fill(0);
     }
     let placed_start = start.max(reserved);
-    if placed_start < end {
-        uploaded[placed_start..end]
-            .copy_from_slice(&placed[placed_start - reserved..end - reserved]);
+    let placed_end = end.min(reserved.saturating_add(placed.len()));
+    if placed_start < placed_end {
+        view.slice(placed_start - start..placed_end - start)
+            .copy_from_slice(&placed[placed_start - reserved..placed_end - reserved]);
+    }
+    let tail_start = start.max(placed_end).max(pad_end);
+    if tail_start < end {
+        view.slice(tail_start - start..end - start).fill(0);
     }
 }
 fn grow_identity_reserved(current: usize, needed: usize) -> usize {
@@ -6726,13 +6817,13 @@ fn upload_packed_arena<'a>(
             mapped_at_creation: false,
         }));
         arena.bind_group = None;
-        arena.uploaded.clear();
+        arena.uploaded_len = 0;
         perf::Counter::CounterArenaReallocN.emit(1.0);
     }
 
     // Taken where the upload is chosen, before any branch below: sizes the pack
     // selected against what the queue was handed.
-    let old_len = arena.uploaded.len();
+    let old_len = arena.uploaded_len;
     let plan = plan_arena_upload(old_len, total_len, resize, full_upload, dirty.is_empty());
     perf::Counter::CounterArenaUsedBytes.emit(total_len as f64);
     perf::Counter::CounterArenaCapacityBytes.emit(arena.capacity as f64);
@@ -6752,13 +6843,17 @@ fn upload_packed_arena<'a>(
         ArenaUploadPlan::Idle => {}
         ArenaUploadPlan::Full => {
             if total_len > 0 {
-                refill_arena_uploaded(&mut arena.uploaded, identity, placed, reserved);
-                write_buffer_padded(
+                write_arena_span(
                     queue,
                     arena.buffer.as_ref().expect("constant arena exists"),
-                    &arena.uploaded,
+                    identity,
+                    placed,
+                    reserved,
+                    0,
+                    padded_upload_len(total_len),
                 );
-                uploaded_bytes = arena.uploaded.len();
+                arena.uploaded_len = total_len;
+                uploaded_bytes = total_len;
                 upload_calls = 1;
                 if resize {
                     perf::Counter::CounterArenaFullResize.emit(1.0);
@@ -6774,11 +6869,7 @@ fn upload_packed_arena<'a>(
             // list; shrinkage truncates it, and the dropped tail is dead bytes
             // no draw addresses.
             let grew = total_len > old_len;
-            if grew {
-                arena.uploaded.resize(total_len, 0);
-            } else {
-                arena.uploaded.truncate(total_len);
-            }
+            arena.uploaded_len = total_len;
             let mut gpu_ranges = std::mem::take(&mut arena.dirty_scratch);
             gpu_ranges.clear();
             gpu_ranges.extend(
@@ -6792,18 +6883,19 @@ fn upload_packed_arena<'a>(
             }
             coalesce_gpu_dirty(&mut gpu_ranges);
             for &(start, end) in gpu_ranges.iter() {
-                let Some((start, end)) = aligned_backing_span(start, end, arena.uploaded.len())
-                else {
+                let Some((start, end)) = aligned_backing_span(start, end, total_len) else {
                     continue;
                 };
-                refill_uploaded_span(&mut arena.uploaded, identity, placed, reserved, start, end);
                 upload_calls = upload_calls.saturating_add(1);
                 uploaded_bytes = uploaded_bytes.saturating_add(end.saturating_sub(start));
-                write_buffer_range(
+                write_arena_span(
                     queue,
                     arena.buffer.as_ref().expect("constant arena exists"),
-                    start as u64,
-                    &arena.uploaded[start..end],
+                    identity,
+                    placed,
+                    reserved,
+                    start,
+                    end,
                 );
             }
             gpu_ranges.clear();

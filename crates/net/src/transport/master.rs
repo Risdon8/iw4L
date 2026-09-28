@@ -378,8 +378,8 @@ impl MasterLaunchIntent {
         Self(MasterLaunchMode::Disabled)
     }
 
-    pub const fn browser_available(&self) -> bool {
-        matches!(self.0, MasterLaunchMode::Browser(_))
+    pub const fn configured(&self) -> bool {
+        !matches!(self.0, MasterLaunchMode::Disabled)
     }
 }
 
@@ -754,7 +754,7 @@ impl MasterMatchStart {
 pub fn arm_master_bridge(
     settings: Res<frame::GameSettings>,
     intent: Res<MasterLaunchIntent>,
-    role: Res<crate::RuntimeRole>,
+    role: Res<frame::RuntimeRole>,
     authority: Option<Res<AuthorityWorld>>,
     prediction: Option<Res<crate::ClientPredictionState>>,
     descriptor: Option<Res<crate::MatchDescriptor>>,
@@ -806,7 +806,7 @@ pub fn arm_master_bridge(
     match &intent.0 {
         MasterLaunchMode::Disabled | MasterLaunchMode::Browser(_) => {}
         MasterLaunchMode::Host(config) => {
-            if *role != crate::RuntimeRole::Listen || udp_hub.is_some() {
+            if *role != frame::RuntimeRole::Listen || udp_hub.is_some() {
                 return;
             }
             let relay = spawn_host(config.clone(), settings.player_name.clone());
@@ -818,7 +818,7 @@ pub fn arm_master_bridge(
             commands.insert_resource(relay);
         }
         MasterLaunchMode::Join(config) => {
-            if *role != crate::RuntimeRole::Client || udp_link.is_some() {
+            if *role != frame::RuntimeRole::Client || udp_link.is_some() {
                 return;
             }
             let relay = spawn_join(config.clone(), settings.player_name.clone());
@@ -873,7 +873,7 @@ fn arm_master_browser(
 fn apply_master_menu_action(
     mut pending: ResMut<PendingMasterMenuAction>,
     mut intent: ResMut<MasterLaunchIntent>,
-    mut role: ResMut<crate::RuntimeRole>,
+    mut role: ResMut<frame::RuntimeRole>,
     browser: Option<Res<MasterBrowser>>,
     bridge: Option<Res<MasterBridge>>,
     mut commands: Commands,
@@ -934,7 +934,7 @@ fn apply_master_menu_action(
             if let Some(browser) = browser {
                 intent.0 = MasterLaunchMode::Browser(browser);
             }
-            *role = crate::RuntimeRole::Listen;
+            *role = frame::RuntimeRole::Listen;
             return;
         }
         MasterMenuAction::Host { .. } | MasterMenuAction::Join { .. } => {}
@@ -973,7 +973,7 @@ fn apply_master_menu_action(
                 requires,
                 have: browser.have,
             });
-            *role = crate::RuntimeRole::Listen;
+            *role = frame::RuntimeRole::Listen;
         }
         MasterMenuAction::Join {
             advert_id,
@@ -987,7 +987,7 @@ fn apply_master_menu_action(
                 mode,
                 have: browser.have,
             });
-            *role = crate::RuntimeRole::Client;
+            *role = frame::RuntimeRole::Client;
         }
     }
 }
@@ -1221,14 +1221,6 @@ fn apply_master_lifecycle(
                 Some(admission.connection_id),
                 client.map(|client| client.0).unwrap_or(0),
             );
-
-            if admission.first_commit
-                && let Some(client) = client
-                && let Some(authority) = authority.as_ref()
-                && let Some(pending) = pending_notify.as_mut()
-            {
-                pending.push_connected(crate::client_name_string(&authority.0, client));
-            }
         }
     }
     for fact in bridge.drain_facts() {
@@ -1399,6 +1391,29 @@ fn observe_master_bridge(
             );
         }
         _ => diag::info!(Net, "master relay: {current:?}"),
+    }
+    if let Some(path) = std::env::var_os("IW4L_MASTER_STATUS_FILE") {
+        let path = PathBuf::from(path);
+        let state = match &current {
+            MasterBridgeState::Hosting { .. } => "hosting",
+            MasterBridgeState::Joined { .. } => "joined",
+            MasterBridgeState::Failed { .. } => "failed",
+            MasterBridgeState::Closed { .. } => "closed",
+            MasterBridgeState::Left { .. } => "left",
+            _ => "connecting",
+        };
+        let body = format!(
+            "state={state}\nroom={}\nmembers={}\nin_match={}\n",
+            identity.room_id,
+            current.members().len(),
+            current.in_match()
+        );
+        let temporary = path.with_extension("tmp");
+        if let Err(error) =
+            std::fs::write(&temporary, body).and_then(|()| std::fs::rename(&temporary, &path))
+        {
+            diag::warn!(Net, "master status file: {error}");
+        }
     }
     *previous = Some(current);
 }
@@ -1832,7 +1847,10 @@ async fn session_main(
                     }
                 }
             }
-            (recv, frame) = &mut next_control => {
+            (recv, frame) = async {
+                mailbox.wait_control_inbound_capacity().await;
+                (&mut next_control).await
+            } => {
                 next_control.set(read_owned_frame(recv));
                 match frame {
                     Ok(ControlFrame::Relay(bytes)) => {

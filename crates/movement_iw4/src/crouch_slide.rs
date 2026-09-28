@@ -5,7 +5,7 @@
 
 use playerstate_iw4::{ENTITYNUM_NONE, PlayerState, UserCmd};
 
-use crate::{CollisionBackend, MoveBounds, Pml, pm_step_slide_move};
+use crate::{CollisionBackend, MoveBounds, Pml, step_slide_move};
 
 /// Set while sliding. Free `pm_flags` bits (`pm_drop_timers` clears `0x2180`).
 pub const PMF_SLIDING: u32 = 0x0200_0000;
@@ -118,7 +118,7 @@ fn continue_slide<C: CollisionBackend>(
         pml.ground_plane = 0;
         pml.almost_ground_plane = 0;
         end_slide(ps, context);
-        pm_step_slide_move(
+        step_slide_move(
             ps,
             pml,
             collision,
@@ -169,7 +169,7 @@ fn slide_move<C: CollisionBackend>(
     // speed, which is what makes a slide carry.
     ps.velocity[2] -= (ps.gravity as f32) * pml.frametime;
     clip_to_ground_plane(&mut ps.velocity, &pml.ground_trace[1..4]);
-    pm_step_slide_move(
+    step_slide_move(
         ps,
         pml,
         collision,
@@ -206,5 +206,5 @@ fn clip_to_ground_plane(vector: &mut [f32; 3], normal: &[u32]) {
         f32::from_bits(normal[1]),
         f32::from_bits(normal[2]),
     ];
-    crate::pm_project_velocity(vector, &normal);
+    crate::project_velocity(vector, &normal);
 }

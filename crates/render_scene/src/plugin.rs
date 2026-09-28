@@ -12,6 +12,7 @@ pub struct RenderScenePlugin;
 impl Plugin for RenderScenePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<HostGfxScene>()
+            .init_resource::<crate::ModelLightingAtlasTileWrites>()
             .init_resource::<DynAtPointLookup>()
             .init_resource::<crate::WorldDpvsCells>()
             .init_resource::<crate::PublishedCellVis>()

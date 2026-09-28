@@ -30,6 +30,10 @@ pub struct GameSettings {
     pub vsync: bool,
     pub fov: f32,
     pub master_volume: f32,
+    pub brightness: f32,
+    pub shadows: bool,
+    pub depth_of_field: bool,
+    pub bloom: bool,
     pub sensitivity: f32,
     pub invert_mouse: bool,
     pub player_name: String,
@@ -45,6 +49,10 @@ impl Default for GameSettings {
             vsync: true,
             fov: Self::FOV_DEFAULT,
             master_volume: 1.0,
+            brightness: 0.0,
+            shadows: true,
+            depth_of_field: true,
+            bloom: true,
             sensitivity: 5.0,
             invert_mouse: false,
             player_name: "Player".to_owned(),
@@ -69,6 +77,11 @@ impl GameSettings {
             self.fov.clamp(Self::FOV_MIN, Self::FOV_MAX)
         } else {
             Self::FOV_DEFAULT
+        };
+        self.brightness = if self.brightness.is_finite() {
+            self.brightness.clamp(-0.2, 0.2)
+        } else {
+            0.0
         };
         self.master_volume = self.master_volume.clamp(0.0, 1.0);
         self.sensitivity = self.sensitivity.clamp(0.1, 30.0);

@@ -1,4 +1,4 @@
-use assets::WeaponAnimSlot;
+use asset_game::WeaponAnimSlot;
 
 use crate::{EventResult, ViewmodelController, ViewmodelEvent, WeaponState};
 
@@ -290,8 +290,8 @@ pub struct EquippedFpv {
     pub gun_xmodel: String,
     pub gun_index: assets::FpvMeshIndex,
     pub hands_index: assets::FpvMeshIndex,
-    pub namespace: assets::AssetNamespace,
-    pub hands: assets::FpvHands,
+    pub namespace: asset_core::AssetNamespace,
+    pub hands: asset_model::FpvHands,
     pub controller: ViewmodelController,
 
     pub left: Option<ViewmodelController>,
@@ -302,8 +302,8 @@ impl EquippedFpv {
         gun_xmodel: impl Into<String>,
         gun_index: assets::FpvMeshIndex,
         hands_index: assets::FpvMeshIndex,
-        namespace: assets::AssetNamespace,
-        hands: assets::FpvHands,
+        namespace: asset_core::AssetNamespace,
+        hands: asset_model::FpvHands,
         controller: ViewmodelController,
         left: Option<ViewmodelController>,
     ) -> Self {

@@ -12,6 +12,13 @@ fn prepare_static_sun_and_fx(world: &mut World) {
     world.run_schedule(StaticSunAndFx);
 }
 
+#[derive(bevy::ecs::schedule::ScheduleLabel, Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct DrawLaneRebuild;
+
+fn rebuild_draw_lanes(world: &mut World) {
+    world.run_schedule(DrawLaneRebuild);
+}
+
 pub struct RenderAssemblePlugin;
 
 impl Plugin for RenderAssemblePlugin {
@@ -51,7 +58,7 @@ impl Plugin for RenderAssemblePlugin {
             Update,
             crate::assemble::drawsurf::tess::sky::build_sky_model_draw_plan
                 .after(crate::prepare::scene::spawn::spawn_world_finish)
-                .before(crate::assemble::drawsurf::rebuild_xmodel_draw_lane)
+                .before(rebuild_draw_lanes)
                 .in_set(net::ClientSet::Present),
         );
 
@@ -61,23 +68,6 @@ impl Plugin for RenderAssemblePlugin {
                 .after(crate::prepare::scene::model_lighting_cache::update_dirty_model_lighting)
                 .in_set(frame::WorkerCmdSet::AddSceneEnt),
         );
-        app.add_systems(
-            Update,
-            crate::assemble::drawsurf::rebuild_xmodel_draw_lane
-                .after(crate::adapters::anim::fpv_present::FpvPlacementSet)
-                .after(crate::adapters::anim::fpv_present::FpvGeometrySet)
-                .after(frame::WorkerCmdSet::AddSceneEnt)
-                .after(crate::assemble::drawsurf::tess::xmodel::apply_resolved_fx_model_lighting)
-                .after(crate::adapters::anim::script_model::ScriptModelDrawSet)
-                .in_set(net::ClientSet::Present),
-        );
-        app.add_systems(
-            Update,
-            crate::assemble::drawsurf::rebuild_fx_draw_lane
-                .after(frame::WorkerCmdSet::FxVerts)
-                .after(crate::assemble::drawsurf::tess::glass::apply_glass_model_lighting)
-                .in_set(net::ClientSet::Present),
-        );
 
         app.add_systems(
             Update,
@@ -86,8 +76,26 @@ impl Plugin for RenderAssemblePlugin {
                 .in_set(net::ClientSet::Present),
         );
         app.add_systems(
+            DrawLaneRebuild,
+            (
+                crate::assemble::drawsurf::rebuild_xmodel_draw_lane,
+                crate::assemble::drawsurf::rebuild_fx_draw_lane,
+                crate::assemble::drawsurf::rebuild_static_draw_lane,
+            ),
+        )
+        .edit_schedule(DrawLaneRebuild, |schedule| {
+            schedule.set_executor(bevy::ecs::schedule::MultiThreadedExecutor::new());
+        })
+        .add_systems(
             Update,
-            crate::assemble::drawsurf::rebuild_static_draw_lane
+            rebuild_draw_lanes
+                .after(crate::adapters::anim::fpv_present::FpvPlacementSet)
+                .after(crate::adapters::anim::fpv_present::FpvGeometrySet)
+                .after(frame::WorkerCmdSet::AddSceneEnt)
+                .after(crate::assemble::drawsurf::tess::xmodel::apply_resolved_fx_model_lighting)
+                .after(crate::adapters::anim::script_model::ScriptModelDrawSet)
+                .after(frame::WorkerCmdSet::FxVerts)
+                .after(crate::assemble::drawsurf::tess::glass::apply_glass_model_lighting)
                 .after(crate::prepare::scene::cull::apply_dpvs_cull)
                 .after(crate::prepare::scene::smodel_lighting::update_smodel_lighting)
                 .after(frame::WorkerCmdSet::SmodelCache)
@@ -105,28 +113,28 @@ impl Plugin for RenderAssemblePlugin {
                 crate::assemble::drawsurf::bake_sun_shadow_casters
                     .after(prepare_static_sun_and_fx)
                     .after(crate::assemble::drawsurf::open_frame_products)
-                    .after(crate::assemble::drawsurf::rebuild_xmodel_draw_lane)
+                    .after(rebuild_draw_lanes)
                     .after(frame::WorkerCmdSet::SmodelCache)
                     .after(crate::prepare::scene::cull::apply_dpvs_cull)
                     .after(crate::prepare::scene::smodel_lighting::update_smodel_lighting),
                 crate::assemble::drawsurf::bake_spot_shadow_casters
                     .after(crate::assemble::drawsurf::open_frame_products)
-                    .after(crate::assemble::drawsurf::rebuild_xmodel_draw_lane)
+                    .after(rebuild_draw_lanes)
                     .after(crate::prepare::scene::gfx_scene::snapshot_spot_shadow_occupancy)
                     .after(crate::prepare::scene::cull::apply_dpvs_cull)
-                    .after(crate::assemble::drawsurf::rebuild_static_draw_lane),
+                    .after(rebuild_draw_lanes),
                 crate::assemble::drawsurf::execute_sun_product
                     .after(crate::assemble::drawsurf::bake_sun_shadow_casters)
-                    .after(crate::assemble::drawsurf::rebuild_static_draw_lane),
+                    .after(rebuild_draw_lanes),
                 crate::assemble::drawsurf::execute_spot_product
                     .after(crate::assemble::drawsurf::bake_spot_shadow_casters)
-                    .after(crate::assemble::drawsurf::rebuild_static_draw_lane),
+                    .after(rebuild_draw_lanes),
                 crate::assemble::drawsurf::execute_camera_products
                     .after(crate::assemble::drawsurf::bake_sun_shadow_casters)
                     .after(crate::assemble::drawsurf::bake_spot_shadow_casters)
-                    .after(crate::assemble::drawsurf::rebuild_xmodel_draw_lane)
-                    .after(crate::assemble::drawsurf::rebuild_fx_draw_lane)
-                    .after(crate::assemble::drawsurf::rebuild_static_draw_lane),
+                    .after(rebuild_draw_lanes)
+                    .after(rebuild_draw_lanes)
+                    .after(rebuild_draw_lanes),
                 crate::assemble::drawsurf::publish_frame_products
                     .after(crate::assemble::drawsurf::execute_camera_products)
                     .after(crate::assemble::drawsurf::execute_sun_product)

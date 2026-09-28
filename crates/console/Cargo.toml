@@ -12,6 +12,10 @@ dpvs_iw4.workspace = true
 bevy.workspace = true
 frame.workspace = true
 ui.workspace = true
+asset_core.workspace = true
+asset_game.workspace = true
+asset_transport.workspace = true
+asset_world.workspace = true
 assets = { path = "../assets" }
 audio = { path = "../audio" }
 input_iw4.workspace = true

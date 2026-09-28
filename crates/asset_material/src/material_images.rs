@@ -1248,13 +1248,7 @@ pub fn decode_ui_image(
         let Some(main) = trees.main_for(key.namespace) else {
             return Ok(None);
         };
-        if let Some(image) = decode_ui_image_from_main(main, &key.name)? {
-            return Ok(Some(image));
-        }
-        if let Some(zone) = key.name.strip_prefix("preview_mp_") {
-            return decode_ui_image_from_main(main, &format!("loadscreen_mp_{zone}"));
-        }
-        return Ok(None);
+        return decode_ui_image_from_main(main, &key.name);
     }
     let name = crate::AssetRef::bare_name(image_name);
     for main in ui_decode_mains(games_root) {
@@ -1272,18 +1266,28 @@ pub fn decode_ui_image_from_main(
 ) -> Result<Option<(u32, u32, Vec<u8>)>, String> {
     let name = crate::AssetRef::bare_name(image_name);
     let index = IwdIndex::open(main)?;
-    match index.decode(name).map(expand_top_level) {
-        Some(Ok(image)) => Ok(Some(image)),
-        Some(Err(error)) => {
-            diag::warn!(
-                Zone,
-                "ui-image: decode {name} from {}: {error}",
-                main.display()
-            );
-            Ok(None)
+    let fallback = name
+        .strip_prefix("preview_")
+        .map(|map| format!("loadscreen_{map}"))
+        .or_else(|| {
+            name.strip_prefix("menu_mp_map_select_")
+                .and_then(|map| map.strip_suffix("_big"))
+                .map(|map| format!("loadscreen_mp_{map}"))
+        });
+    for candidate in std::iter::once(name).chain(fallback.as_deref()) {
+        match index.decode(candidate).map(expand_top_level) {
+            Some(Ok(image)) => return Ok(Some(image)),
+            Some(Err(error)) => {
+                diag::warn!(
+                    Zone,
+                    "ui-image: decode {candidate} from {}: {error}",
+                    main.display()
+                );
+            }
+            None => {}
         }
-        None => Ok(None),
     }
+    Ok(None)
 }
 
 fn ui_decode_mains(games_root: &Path) -> Vec<PathBuf> {
@@ -1959,7 +1963,7 @@ fn decode_blocks(
     Ok(out)
 }
 
-pub fn retail_lit_color(albedo_rgb: [f32; 3], lighting: [f32; 3]) -> [f32; 3] {
+pub fn lit_color(albedo_rgb: [f32; 3], lighting: [f32; 3]) -> [f32; 3] {
     let albedo = lighting_iw4::lit_albedo(albedo_rgb, [1.0, 1.0, 1.0]);
     lighting_iw4::lit_fragment_color(albedo, lighting, [0.0, 0.0, 0.0])
 }
@@ -2048,7 +2052,7 @@ pub fn decode_dxt5nm_xy(rgba: [f32; 4]) -> [f32; 2] {
     ]
 }
 
-pub fn retail_lightmap_bake(
+pub fn lightmap_bake(
     page0_rgb: [f32; 3],
     page1_rgb: [f32; 3],
     lm_dir: [f32; 2],

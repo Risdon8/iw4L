@@ -52,7 +52,7 @@ fn stance_hull_allsolid<C: CollisionBackend>(
     trace.allsolid != 0
 }
 
-pub fn pm_update_stance_flags<C: CollisionBackend>(
+pub fn update_stance_flags<C: CollisionBackend>(
     ps: &mut PlayerState,
     cmd: &mut UserCmd,
     collision: &C,
@@ -74,7 +74,7 @@ pub fn pm_update_stance_flags<C: CollisionBackend>(
         return;
     }
 
-    if (ps.pm_flags & PMF_SPRINTING) != 0 {
+    if (ps.pm_flags & PMF_SPRINTING) != 0 && (ps.pm_flags & (PMF_PRONE | PMF_CROUCH)) != 0 {
         ps.view_height_target = view_height::STAND;
         ps.e_flags &= !(eflags::DUCK | eflags::PRONE);
         ps.pm_flags &= !(PMF_PRONE | PMF_CROUCH);
@@ -137,7 +137,7 @@ pub fn pm_update_stance_flags<C: CollisionBackend>(
     }
 }
 
-pub fn pm_sync_stance_tail(ps: &mut PlayerState) -> f32 {
+pub fn sync_stance_tail(ps: &mut PlayerState) -> f32 {
     match stance_surface_type(ps) {
         StanceSurface::Prone => {
             ps.e_flags = (ps.e_flags & !eflags::DUCK) | eflags::PRONE;
@@ -286,7 +286,7 @@ const LAST_STAND_VIEW_HEIGHT_RATE: f32 = 120.0;
 const REVERSE_REWIND_SCALE: f32 = 0.01;
 
 #[allow(clippy::too_many_lines)]
-pub fn pm_update_view_height(ps: &mut PlayerState, pml: &Pml, cmd: &UserCmd) {
+pub fn update_view_height(ps: &mut PlayerState, pml: &Pml, cmd: &UserCmd) {
     let target = ps.view_height_target;
     if target == 0 || ps.view_height_current == 0.0 {
         ps.view_height_current = if ps.pm_type == 5 { 0.0 } else { target as f32 };
@@ -442,7 +442,7 @@ fn reverse_view_height_lerp(ps: &mut PlayerState, cmd: &UserCmd, progress: i32) 
 }
 
 #[must_use]
-pub fn pm_update_stance_target(ps: &mut PlayerState) -> StanceChange {
+pub fn update_stance_target(ps: &mut PlayerState) -> StanceChange {
     if ps.view_height_lerp_time != 0 {
         return StanceChange::Unchanged;
     }

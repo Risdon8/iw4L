@@ -3,7 +3,7 @@ use playerstate_iw4::{PlayerState, UserCmd};
 pub const PMF_SPRINTING: u32 = 0x4000;
 
 #[must_use]
-pub fn bg_get_max_sprint_time(sprint_duration_scale: f32, player_sprint_time_seconds: f32) -> i32 {
+pub fn get_max_sprint_time(sprint_duration_scale: f32, player_sprint_time_seconds: f32) -> i32 {
     let scale = if sprint_duration_scale > 0.0 {
         sprint_duration_scale
     } else {
@@ -58,7 +58,7 @@ pub struct SprintContext {
 }
 
 #[must_use]
-pub fn pm_sprint_start_interfering_buttons(
+pub fn sprint_start_interfering_buttons(
     ps: &PlayerState,
     forwardmove: i8,
     buttons: u32,
@@ -78,7 +78,7 @@ pub fn pm_sprint_start_interfering_buttons(
 }
 
 #[must_use]
-pub fn pm_sprint_ending_buttons(
+pub fn sprint_ending_buttons(
     ps: &PlayerState,
     forwardmove: i8,
     buttons: u32,
@@ -114,7 +114,7 @@ fn weapon_state_admits_sprint(ps: &PlayerState, flags: u32, ending: bool) -> boo
     true
 }
 
-pub fn pm_end_sprint(ps: &mut PlayerState, cmd: &UserCmd) {
+pub fn end_sprint(ps: &mut PlayerState, cmd: &UserCmd) {
     if (ps.pm_flags & PMF_SPRINTING) == 0 {
         return;
     }
@@ -183,7 +183,7 @@ pub enum SprintResult {
     Ended,
 }
 
-pub fn pm_update_sprint(
+pub fn update_sprint(
     ps: &mut PlayerState,
     cmd: &UserCmd,
     old_buttons: u32,
@@ -206,24 +206,24 @@ pub fn pm_update_sprint(
         if !unlimited
             && ps.sprint_start_max_length <= cmd.server_time.wrapping_sub(ps.last_sprint_start)
         {
-            pm_end_sprint(ps, cmd);
+            end_sprint(ps, cmd);
             ps.sprint_delay = 1;
             return SprintResult::Ended;
         }
-        if pm_sprint_ending_buttons(
+        if sprint_ending_buttons(
             ps,
             cmd.forwardmove,
             cmd.buttons,
             context.sprint_forward_minimum,
         ) {
-            pm_end_sprint(ps, cmd);
+            end_sprint(ps, cmd);
             return SprintResult::Ended;
         }
         if (old_buttons & BUTTON_SPRINT) != 0 || (cmd.buttons & BUTTON_SPRINT) == 0 {
             return SprintResult::Unchanged;
         }
 
-        pm_end_sprint(ps, cmd);
+        end_sprint(ps, cmd);
         ps.sprint_button_up_required = 1;
         return SprintResult::Ended;
     }
@@ -237,7 +237,7 @@ pub fn pm_update_sprint(
     if (cmd.buttons & BUTTON_SPRINT) == 0
         || (ps.pm_flags & PMF_SPRINT_BLOCKED) != 0
         || ps.sprint_button_up_required != 0
-        || pm_sprint_start_interfering_buttons(
+        || sprint_start_interfering_buttons(
             ps,
             cmd.forwardmove,
             cmd.buttons,

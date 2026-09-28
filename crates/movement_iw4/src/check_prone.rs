@@ -57,7 +57,7 @@ pub fn player_prone_allowed<C: CollisionBackend>(
     if ps.ground_entity_num == ENTITYNUM_NONE && !prone_special_air_ok(ps) {
         return false;
     }
-    bg_check_prone(
+    check_prone(
         collision,
         ps.origin,
         f_size,
@@ -75,10 +75,10 @@ pub fn player_prone_allowed<C: CollisionBackend>(
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "preserves the proven BG_CheckProne call boundary"
+    reason = "one call boundary for the prone check"
 )]
 #[must_use]
-pub fn bg_check_prone<C: CollisionBackend>(
+pub fn check_prone<C: CollisionBackend>(
     collision: &C,
     origin: [f32; 3],
     f_size: f32,

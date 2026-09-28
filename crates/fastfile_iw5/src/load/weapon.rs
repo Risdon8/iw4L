@@ -101,12 +101,12 @@ pub(super) fn load_weapon(s: &mut ZoneStream<'_>, links: &mut dyn AssetLinkSink)
         _ => None,
     };
     let fx_overrides_off = s.layout(52, 104);
-    let fx_overrides = s.i32_at(p, s.layout(48, 96))?.max(0) as usize;
+    let overrides = s.i32_at(p, s.layout(48, 96))?.max(0) as usize;
     if s.begin_body(p.at(fx_overrides_off))? {
         let entry = s.layout(sz::FX_OVERRIDE_ENTRY, 32);
-        let arr = s.alloc_load(4, entry * fx_overrides)?;
+        let arr = s.alloc_load(4, entry * overrides)?;
         s.fixup_slot(p.at(fx_overrides_off), arr)?;
-        for i in 0..fx_overrides {
+        for i in 0..overrides {
             load_fx_override(s, links, arr.at(i * entry))?;
         }
     }
@@ -254,8 +254,8 @@ pub(super) fn load_weapon(s: &mut ZoneStream<'_>, links: &mut dyn AssetLinkSink)
         anim_overrides: anim_override_arr,
         sound_override_count: sound_overrides as i32,
         sound_overrides: sound_override_arr,
-        fx_override_count: fx_overrides as i32,
-        fx_overrides: array_at(s, fx_overrides_off),
+        fx_override_count: overrides as i32,
+        overrides: array_at(s, fx_overrides_off),
         reload_override_count: reload_overrides as i32,
         reload_overrides: array_at(s, reload_overrides_off),
         note_track_override_count: note_overrides as i32,

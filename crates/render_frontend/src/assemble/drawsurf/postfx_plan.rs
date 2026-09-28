@@ -97,7 +97,7 @@ fn postfx_material_location<'a>(
     catalog: &'a RuntimeMaterialCatalog,
     material_name: &str,
 ) -> Result<(&'a RuntimeMaterial, usize, &'a RuntimeTechnique), PostFxAdmissionRefusal> {
-    let name = assets::AssetRef::bare_name(material_name);
+    let name = asset_core::AssetRef::bare_name(material_name);
     let material = catalog
         .materials
         .iter()
@@ -120,7 +120,7 @@ fn postfx_material_location<'a>(
         .get(set_i)
         .ok_or(PostFxAdmissionRefusal::TechniqueSetOutOfRange { set })?;
     if technique_set.namespace != material.namespace
-        || material.namespace != assets::AssetNamespace::Iw4
+        || material.namespace != asset_core::AssetNamespace::Iw4
     {
         return Err(PostFxAdmissionRefusal::TechniqueNamespaceMismatch);
     }
@@ -150,13 +150,13 @@ fn float4_bits(row: [f32; 4]) -> [u32; 4] {
 pub fn film_sources(
     width: u32,
     height: u32,
-    vision: Option<assets::FilmVision>,
+    vision: Option<asset_world::FilmVision>,
 ) -> Result<RuntimeCodeSources, PostFxSourceRefusal> {
     let width_i32 = i32::try_from(width)
         .map_err(|_| PostFxSourceRefusal::InvalidDimensions { width, height })?;
     let height_i32 = i32::try_from(height)
         .map_err(|_| PostFxSourceRefusal::InvalidDimensions { width, height })?;
-    let projection = hud_iw4::r_cmd_buf_set_2d_projection(width_i32, height_i32)
+    let projection = hud_iw4::cmd_buf_set_2d_projection(width_i32, height_i32)
         .ok_or(PostFxSourceRefusal::InvalidDimensions { width, height })?;
     let mut sources = RuntimeCodeSources::default();
     sources.set_constant(
@@ -167,7 +167,7 @@ pub fn film_sources(
     let vision = if authored.enable {
         authored
     } else {
-        assets::FilmVision::default()
+        asset_world::FilmVision::default()
     };
     let desaturation = vision.desaturation.max(FILM_DESAT_MIN);
     let mut contrast = vision.contrast;
@@ -223,9 +223,9 @@ pub fn film_sources(
     Ok(sources)
 }
 
-fn apply_glow_consts(sources: &mut RuntimeCodeSources, authored: assets::FilmVision) {
+fn apply_glow_consts(sources: &mut RuntimeCodeSources, authored: asset_world::FilmVision) {
     let bits = |row: [f32; 4]| row.map(f32::to_bits);
-    match lighting_iw4::r_set_glow_info(
+    match lighting_iw4::set_glow_info(
         authored.glow_bloom_cutoff,
         authored.glow_bloom_desaturation,
         authored.glow_bloom_intensity,
@@ -328,7 +328,7 @@ fn admit_unlit_2d(
     };
     let packed = render_material::MaterialDrawKey::new(
         dpvs_iw4::pack(dpvs_iw4::GfxDrawSurfFields {
-            material_sorted_index: ordinal.retail_sort_band(),
+            material_sorted_index: ordinal.sort_band(),
             primary_sort_key: material.sort_key,
             ..Default::default()
         })

@@ -1,7 +1,7 @@
 use bevy::prelude::Resource;
 use input_iw4::{
     ANGLE2SHORT, AdjustAnglesInput, CL_ANGLESPEEDKEY_DEFAULT, CL_PITCHSPEED_DEFAULT,
-    CL_YAWSPEED_DEFAULT, ClientInput, CreateCmdInput, axis_to_move, cl_adjust_angles, create_cmd,
+    CL_YAWSPEED_DEFAULT, ClientInput, CreateCmdInput, adjust_angles, axis_to_move, create_cmd,
     mouse_move_angles, sample_move,
 };
 use playerstate_iw4::UserCmd;
@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 
 pub const KEY_FRAME_MSEC_MAX: u32 = 200;
 
-pub fn com_frame_time_msec(elapsed_secs: f32) -> i32 {
+pub fn frame_time_msec(elapsed_secs: f32) -> i32 {
     (elapsed_secs * 1000.0).max(1.0) as i32
 }
 
@@ -27,6 +27,8 @@ pub struct LookState {
 #[derive(Resource, Clone, Debug)]
 pub struct ClientActionInput {
     pub client: ClientInput,
+    pub(crate) stance_life: Option<u32>,
+    pub(crate) stance_event_sequence: i32,
 
     pub scripted_ids: BTreeSet<u32>,
     pub mouse_x: f32,
@@ -52,6 +54,8 @@ impl Default for ClientActionInput {
     fn default() -> Self {
         Self {
             client: ClientInput::default(),
+            stance_life: None,
+            stance_event_sequence: 0,
             scripted_ids: BTreeSet::new(),
             mouse_x: 0.0,
             mouse_y: 0.0,
@@ -95,7 +99,7 @@ pub fn accumulate_look(
     cgame_max_pitch_speed: f32,
     cgame_max_yaw_speed: f32,
 ) {
-    let (pitch_deg, yaw_deg) = cl_adjust_angles(
+    let (pitch_deg, yaw_deg) = adjust_angles(
         &mut client.kb,
         AdjustAnglesInput {
             dt,

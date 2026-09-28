@@ -18,7 +18,7 @@ use crate::asset_graph::{AssetEdge, AssetEdgeCensus, AssetEdgeReason, ZoneOwner}
 use crate::ent_channel::{EntChannel, parse_ent_channel_file};
 use crate::{AssetNamespace, ZoneGame};
 
-pub use asset_iw4::{lerp_range, pick_weighted_variant_index, snd_advance_lcg, snd_unit_random};
+pub use asset_iw4::{advance_lcg, lerp_range, pick_weighted_variant_index, unit_random};
 
 pub type LoadedSoundEdge = crate::asset_graph::AssetEdge<crate::asset_graph::LoadedSoundSpace>;
 
@@ -945,7 +945,11 @@ impl SoundCatalog {
         }
         if ns == AssetNamespace::T5 && dir.is_empty() {
             let path = name.replace('\\', "/");
-            if let Some(relative) = path.strip_prefix("sound/")
+            let relative = path.strip_prefix("sound/").or_else(|| {
+                let (_, rest) = path.split_once('/')?;
+                rest.strip_prefix("sound/")
+            });
+            if let Some(relative) = relative
                 && let Some((directory, file)) = relative.rsplit_once('/')
             {
                 return Some((ns, directory.to_owned(), file.to_owned()));
@@ -1159,8 +1163,8 @@ impl SoundCatalog {
                 picked: None,
             });
         };
-        let t_vol = snd_unit_random(rng);
-        let t_pitch = snd_unit_random(rng);
+        let t_vol = unit_random(rng);
+        let t_pitch = unit_random(rng);
         let volume = if row.vol_min == 0.0 && row.vol_max == 0.0 {
             1.0
         } else {

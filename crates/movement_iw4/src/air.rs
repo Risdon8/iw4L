@@ -1,8 +1,8 @@
 use playerstate_iw4::{PlayerState, UserCmd};
 
 use crate::{
-    CollisionBackend, DoubleJumpContext, MoveBounds, Pml, WallRunContext, pm_accelerate,
-    pm_double_jump, pm_friction, pm_step_slide_move, pm_surf_air_accelerate, pm_wallrun,
+    CollisionBackend, DoubleJumpContext, MoveBounds, Pml, WallRunContext, accelerate, friction,
+    pm_double_jump, pm_surf_air_accelerate, pm_wallrun, step_slide_move,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -32,7 +32,7 @@ pub struct SurfAirContext {
     pub wishspeed_cap: f32,
 }
 
-pub fn pm_air_move<C: CollisionBackend>(
+pub fn air_move<C: CollisionBackend>(
     ps: &mut PlayerState,
     pml: &Pml,
     cmd: &UserCmd,
@@ -50,9 +50,9 @@ pub fn pm_air_move<C: CollisionBackend>(
         let _ = pm_double_jump(ps, cmd, double_jump);
     }
 
-    pm_friction(ps, pml);
+    friction(ps, pml);
 
-    let command_scale = pm_cmd_scale(ps, cmd, context.player_spectate_speed_scale);
+    let command_scale = cmd_scale(ps, cmd, context.player_spectate_speed_scale);
     let mut forward = pml.forward;
     let mut right = pml.right;
     forward[2] = 0.0;
@@ -68,7 +68,7 @@ pub fn pm_air_move<C: CollisionBackend>(
     let wishspeed = normalize(&mut wishdir);
     match context.surf {
         Some(surf) => pm_surf_air_accelerate(ps, pml, &wishdir, wishspeed * command_scale, surf),
-        None => pm_accelerate(ps, pml, &wishdir, wishspeed * command_scale, 1.0),
+        None => accelerate(ps, pml, &wishdir, wishspeed * command_scale, 1.0),
     }
 
     if pml.ground_plane != 0 {
@@ -85,7 +85,7 @@ pub fn pm_air_move<C: CollisionBackend>(
     }
 
     let effective_gravity = adjusted_gravity(ps, context);
-    pm_step_slide_move(
+    step_slide_move(
         ps,
         pml,
         collision,
@@ -96,7 +96,7 @@ pub fn pm_air_move<C: CollisionBackend>(
     );
 }
 
-fn pm_cmd_scale(ps: &PlayerState, cmd: &UserCmd, spectate_speed_scale: f32) -> f32 {
+fn cmd_scale(ps: &PlayerState, cmd: &UserCmd, spectate_speed_scale: f32) -> f32 {
     let forward = cmd.forwardmove as f32;
     let right = cmd.rightmove as f32;
     let magnitude = libm::sqrtf(forward * forward + right * right);

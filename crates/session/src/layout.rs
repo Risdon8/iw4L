@@ -4,7 +4,7 @@
 //! predicting client share them. Props are extra script models stretched to
 //! fill each shape, drawn by the ordinary script-model path.
 
-use assets::SpawnPoint;
+use asset_world::SpawnPoint;
 use bevy::prelude::*;
 use map_layout::Layout;
 
@@ -145,17 +145,17 @@ pub(crate) fn install_props(world: &mut assets::PreparedWorld, layout: &Layout) 
         let id = LAYOUT_PROP_ID_BASE + index as u32;
         world
             .script_model_instances
-            .push(assets::ScriptModelSceneInstance {
-                id: assets::ScriptModelId::from_source_ordinal(id),
-                current_model: assets::MapXModelAssetKey(visual.model.clone()),
+            .push(asset_world::ScriptModelSceneInstance {
+                id: asset_world::ScriptModelId::from_source_ordinal(id),
+                current_model: asset_world::MapXModelAssetKey(visual.model.clone()),
                 transform: Transform {
                     translation,
                     rotation,
                     scale,
                 },
                 lighting_origin: visual.center,
-                dobj_state: assets::dobj::DObjSemanticState::bind_pose(visual.model.clone(), 1, 1),
-                metadata: assets::ScriptModelMetadata {
+                dobj_state: xmodel_runtime::DObjSemanticState::bind_pose(visual.model.clone(), 1, 1),
+                metadata: asset_world::ScriptModelMetadata {
                     targetname: format!("layout_{}", layout.name),
                     ..Default::default()
                 },
@@ -166,14 +166,14 @@ pub(crate) fn install_props(world: &mut assets::PreparedWorld, layout: &Layout) 
 }
 
 fn model_bounds(
-    catalog: &assets::MapXModelSceneCatalog,
+    catalog: &asset_world::MapXModelSceneCatalog,
     model: &str,
 ) -> Option<([f32; 3], [f32; 3])> {
     let skel = match catalog.get_name(model)? {
-        assets::MapXModelSceneAsset::Iw4(skel)
-        | assets::MapXModelSceneAsset::Iw5(skel)
-        | assets::MapXModelSceneAsset::T5(skel) => skel,
-        assets::MapXModelSceneAsset::Unavailable { .. } => return None,
+        asset_world::MapXModelSceneAsset::Iw4(skel)
+        | asset_world::MapXModelSceneAsset::Iw5(skel)
+        | asset_world::MapXModelSceneAsset::T5(skel) => skel,
+        asset_world::MapXModelSceneAsset::Unavailable { .. } => return None,
     };
     let mut points = skel.positions.iter();
     let Some(&first) = points.next() else {

@@ -47,7 +47,7 @@ fn code_transpose_matrix_rows(m: Mat4) -> Vec<[u32; 4]> {
 }
 
 pub fn hud_2d_sources(width: f32, height: f32) -> Option<RuntimeCodeSources> {
-    let projection = hud_iw4::r_cmd_buf_set_2d_projection(width as i32, height as i32)?;
+    let projection = hud_iw4::cmd_buf_set_2d_projection(width as i32, height as i32)?;
     let mut sources = RuntimeCodeSources::default();
     sources.set_constant(
         CODE_TRANSPOSE_WORLD_VIEW_PROJECTION0,
@@ -59,13 +59,13 @@ pub fn hud_2d_sources(width: f32, height: f32) -> Option<RuntimeCodeSources> {
 pub fn film_sources(
     width: u32,
     height: u32,
-    vision: Option<assets::FilmVision>,
+    vision: Option<asset_world::FilmVision>,
 ) -> Result<RuntimeCodeSources, PostFxSourceRefusal> {
     let width_i32 = i32::try_from(width)
         .map_err(|_| PostFxSourceRefusal::InvalidDimensions { width, height })?;
     let height_i32 = i32::try_from(height)
         .map_err(|_| PostFxSourceRefusal::InvalidDimensions { width, height })?;
-    let mut projection = hud_iw4::r_cmd_buf_set_2d_projection(width_i32, height_i32)
+    let mut projection = hud_iw4::cmd_buf_set_2d_projection(width_i32, height_i32)
         .ok_or(PostFxSourceRefusal::InvalidDimensions { width, height })?;
     // Fullscreen quads must cover wgpu's half-integer pixel centers. The D3D9
     // projection shifts the right/bottom edges onto the last pixel centers,
@@ -81,7 +81,7 @@ pub fn film_sources(
     let vision = if authored.enable {
         authored
     } else {
-        assets::FilmVision::default()
+        asset_world::FilmVision::default()
     };
     let desaturation = vision.desaturation.max(FILM_DESAT_MIN);
     let mut contrast = vision.contrast;
@@ -140,9 +140,9 @@ pub fn film_sources(
     Ok(sources)
 }
 
-fn apply_glow_consts(sources: &mut RuntimeCodeSources, authored: assets::FilmVision) {
+fn apply_glow_consts(sources: &mut RuntimeCodeSources, authored: asset_world::FilmVision) {
     let bits = |row: [f32; 4]| row.map(f32::to_bits);
-    match lighting_iw4::r_set_glow_info(
+    match lighting_iw4::set_glow_info(
         authored.glow_bloom_cutoff,
         authored.glow_bloom_desaturation,
         authored.glow_bloom_intensity,
@@ -216,7 +216,7 @@ impl Default for GlowFrame {
 }
 
 impl GlowFrame {
-    pub fn from_vision(vision: Option<assets::FilmVision>) -> Self {
+    pub fn from_vision(vision: Option<asset_world::FilmVision>) -> Self {
         let vision = vision.unwrap_or_default();
         Self {
             enable: vision.glow_enable,
@@ -228,7 +228,7 @@ impl GlowFrame {
     }
 
     pub fn using(self) -> bool {
-        lighting_iw4::r_using_glow(
+        lighting_iw4::using_glow(
             self.enable,
             self.intensity,
             self.radius,
@@ -258,7 +258,7 @@ pub fn sources(
     width: u32,
     height: u32,
     scene_height: u32,
-    vision: Option<assets::FilmVision>,
+    vision: Option<asset_world::FilmVision>,
     frame: DofFrame,
 ) -> Result<RuntimeCodeSources, DofPlanRefusal> {
     if width == 0 || height == 0 || scene_height == 0 {

@@ -4,13 +4,13 @@ use super::dof::GlowDvars;
 
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct FilmVisionView {
-    pub current: Option<assets::FilmVision>,
+    pub current: Option<asset_world::FilmVision>,
     from: hud_iw4::VisionSetVars,
     to: hud_iw4::VisionSetVars,
     result: hud_iw4::VisionSetVars,
     lerp: hud_iw4::VisionSetLerpData,
-    last_map: Option<assets::FilmVision>,
-    override_vision: Option<assets::FilmVision>,
+    last_map: Option<asset_world::FilmVision>,
+    override_vision: Option<asset_world::FilmVision>,
 }
 
 impl Default for FilmVisionView {
@@ -31,8 +31,8 @@ impl FilmVisionView {
     /// Select a preset, or restore the map with None. Call only for a ready view.
     pub fn select(
         &mut self,
-        map: Option<assets::FilmVision>,
-        preset: Option<assets::FilmVision>,
+        map: Option<asset_world::FilmVision>,
+        preset: Option<asset_world::FilmVision>,
         now_ms: i32,
         duration_ms: i32,
         allowed: bool,
@@ -42,7 +42,7 @@ impl FilmVisionView {
             self.result = pack_film_vision(map.unwrap_or_default());
             self.lerp.style = hud_iw4::VISION_SET_LERP_HOLD;
         }
-        let (current, _) = hud_iw4::cg_vision_sets_update(
+        let (current, _) = hud_iw4::vision_sets_update(
             now_ms,
             self.from,
             self.to,
@@ -52,7 +52,7 @@ impl FilmVisionView {
             script_forced,
         );
         let target = preset.or(map).unwrap_or_default();
-        (self.from, self.to, self.lerp) = hud_iw4::cg_vision_set_start(
+        (self.from, self.to, self.lerp) = hud_iw4::vision_set_start(
             now_ms,
             duration_ms,
             hud_iw4::VISION_SET_LERP_TO_SMOOTH,
@@ -66,7 +66,7 @@ impl FilmVisionView {
     }
 }
 
-pub fn pack_film_vision(vision: assets::FilmVision) -> hud_iw4::VisionSetVars {
+pub fn pack_film_vision(vision: asset_world::FilmVision) -> hud_iw4::VisionSetVars {
     hud_iw4::VisionSetVars {
         r_glow: vision.glow_enable,
         r_glow_bloom_cutoff: vision.glow_bloom_cutoff,
@@ -86,8 +86,8 @@ pub fn pack_film_vision(vision: assets::FilmVision) -> hud_iw4::VisionSetVars {
     }
 }
 
-pub fn unpack_film_vision(vars: hud_iw4::VisionSetVars) -> assets::FilmVision {
-    assets::FilmVision {
+pub fn unpack_film_vision(vars: hud_iw4::VisionSetVars) -> asset_world::FilmVision {
+    asset_world::FilmVision {
         enable: vars.r_film_enable,
         contrast: vars.r_film_contrast,
         brightness: vars.r_film_brightness,
@@ -108,18 +108,18 @@ pub fn unpack_film_vision(vars: hud_iw4::VisionSetVars) -> assets::FilmVision {
 #[must_use]
 pub fn presented_film_vision(
     view_ready: bool,
-    map_vision: Option<assets::FilmVision>,
-) -> Option<assets::FilmVision> {
+    map_vision: Option<asset_world::FilmVision>,
+) -> Option<asset_world::FilmVision> {
     if view_ready { map_vision } else { None }
 }
 
 #[must_use]
 pub fn presented_film_vision_with_glow_tweaks(
     view_ready: bool,
-    map_vision: Option<assets::FilmVision>,
+    map_vision: Option<asset_world::FilmVision>,
     use_tweaks: bool,
     tweaks: lighting_iw4::GlowViewInfo,
-) -> Option<assets::FilmVision> {
+) -> Option<asset_world::FilmVision> {
     if !view_ready {
         return None;
     }
@@ -127,7 +127,7 @@ pub fn presented_film_vision_with_glow_tweaks(
         return map_vision;
     }
     let mut vision = map_vision.unwrap_or_default();
-    let selected = lighting_iw4::r_select_glow_view_info(
+    let selected = lighting_iw4::select_glow_view_info(
         lighting_iw4::GlowViewInfo {
             enable: vision.glow_enable,
             cutoff: vision.glow_bloom_cutoff,
@@ -150,7 +150,7 @@ pub fn presented_film_vision_with_glow_tweaks(
 #[allow(clippy::too_many_arguments)]
 pub fn presented_film_vision_with_lerp(
     view_ready: bool,
-    map_vision: Option<assets::FilmVision>,
+    map_vision: Option<asset_world::FilmVision>,
     now_ms: i32,
     duration_ms: i32,
     slot: &mut FilmVisionView,
@@ -158,7 +158,7 @@ pub fn presented_film_vision_with_lerp(
     tweaks: lighting_iw4::GlowViewInfo,
     allowed: bool,
     script_forced: bool,
-) -> Option<assets::FilmVision> {
+) -> Option<asset_world::FilmVision> {
     if !view_ready {
         *slot = FilmVisionView::default();
         return None;
@@ -168,7 +168,7 @@ pub fn presented_film_vision_with_lerp(
         return None;
     };
     if slot.last_map != Some(map) {
-        let (from, to, lerp) = hud_iw4::cg_vision_set_start(
+        let (from, to, lerp) = hud_iw4::vision_set_start(
             now_ms,
             duration_ms,
             hud_iw4::VISION_SET_LERP_TO_LINEAR,
@@ -184,7 +184,7 @@ pub fn presented_film_vision_with_lerp(
             slot.result = slot.to;
         }
     }
-    let (vars, lerp) = hud_iw4::cg_vision_sets_update(
+    let (vars, lerp) = hud_iw4::vision_sets_update(
         now_ms,
         slot.from,
         slot.to,
@@ -199,42 +199,11 @@ pub fn presented_film_vision_with_lerp(
     presented_film_vision_with_glow_tweaks(true, Some(mixed), use_tweaks, tweaks)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum IntroStage {
-    Waiting,
-    Starting,
-    Returning,
-    Playing,
-}
-
-fn intro_stage(phase: sim::MatchPhase, prematch: gamemode_iw4::PrematchStep) -> (IntroStage, i32) {
-    if phase != sim::MatchPhase::Warmup {
-        return (IntroStage::Playing, 0);
-    }
-    match prematch {
-        gamemode_iw4::PrematchStep::Starting { elapsed_ms } => {
-            let return_at = gamemode_iw4::MATCH_START_MS.saturating_sub(2000)
-                + gamemode_iw4::MATCH_START_PULSE_IN_MS as u32;
-            if elapsed_ms >= return_at {
-                (
-                    IntroStage::Returning,
-                    elapsed_ms.saturating_sub(return_at) as i32,
-                )
-            } else {
-                (IntroStage::Starting, 0)
-            }
-        }
-        _ => (IntroStage::Waiting, 0),
-    }
-}
-
 #[derive(Resource, Default)]
-struct MatchIntroVision {
-    stage: Option<IntroStage>,
-}
+struct AppliedVision(Option<Option<sim::VisionChange>>);
 
 pub fn register(app: &mut App) {
-    app.init_resource::<MatchIntroVision>();
+    app.init_resource::<AppliedVision>();
     app.init_resource::<FilmVisionView>().add_systems(
         Update,
         update_film_vision_view
@@ -243,79 +212,73 @@ pub fn register(app: &mut App) {
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn update_film_vision_view(
     view: Res<crate::prepare::scene::view_parms::PreparedSceneView>,
     scene: Res<crate::prepare::scene::world::WorldScene>,
     glow: Res<GlowDvars>,
-    clock: Res<net::CgFrameClock>,
+    clock: Res<net::FrameClock>,
     mut film: ResMut<FilmVisionView>,
     presented: Res<net::PresentedSnapshot>,
-    mut intro: ResMut<MatchIntroVision>,
+    local: Res<net::LocalPresentClient>,
+    mut applied: ResMut<AppliedVision>,
+    settings: Res<frame::GameSettings>,
 ) {
     if !view.ready {
-        intro.stage = None;
+        applied.0 = None;
     } else {
-        let (stage, age_ms) = presented
-            .snapshot()
-            .map_or((IntroStage::Waiting, 0), |snapshot| {
-                intro_stage(snapshot.meta.phase, snapshot.meta.prematch)
-            });
-        if intro.stage != Some(stage) {
-            match stage {
-                IntroStage::Waiting | IntroStage::Starting => {
-                    match scene.film_visions.get("vision/mpintro.vision") {
-                        Some(Ok(preset)) => film.select(
-                            scene.film_vision,
-                            Some(*preset),
-                            clock.time(),
-                            0,
-                            glow.allowed,
-                            glow.allowed_script_forced,
-                        ),
-                        Some(Err(error)) => diag::warn!(World, "match intro vision: {error:?}"),
-                        None => {}
-                    }
-                }
-                IntroStage::Returning => {
-                    if intro.stage.is_none()
-                        && let Some(Ok(preset)) = scene.film_visions.get("vision/mpintro.vision")
-                    {
-                        film.select(
-                            scene.film_vision,
-                            Some(*preset),
-                            clock.time() - age_ms,
-                            0,
-                            glow.allowed,
-                            glow.allowed_script_forced,
-                        );
-                    }
-                    film.select(
-                        scene.film_vision,
-                        None,
-                        clock.time() - age_ms,
-                        3000,
-                        glow.allowed,
-                        glow.allowed_script_forced,
-                    );
-                }
-                IntroStage::Playing if intro.stage.is_some() => {
-                    let duration = if intro.stage == Some(IntroStage::Returning) {
-                        3000
-                    } else {
-                        0
-                    };
-                    film.select(
-                        scene.film_vision,
-                        None,
-                        clock.time(),
-                        duration,
-                        glow.allowed,
-                        glow.allowed_script_forced,
-                    );
-                }
-                IntroStage::Playing => {}
+        let wanted = presented.snapshot().and_then(|snapshot| {
+            let meta = snapshot.meta.for_client(local.0)?;
+            let effects = &meta.view_effects;
+            let global = &snapshot.meta.objectives;
+            if meta.remote_missile.is_some() {
+                effects
+                    .missile_vision
+                    .clone()
+                    .or_else(|| global.missile_vision.clone())
+            } else if presented
+                .player(local.0)
+                .is_some_and(|ps| ps.other_flags & 0x8 != 0)
+            {
+                effects
+                    .thermal_vision
+                    .clone()
+                    .or_else(|| global.thermal_vision.clone())
+            } else {
+                effects
+                    .naked_vision
+                    .clone()
+                    .or_else(|| global.naked_vision.clone())
             }
-            intro.stage = Some(stage);
+        });
+        if applied.0.as_ref() != Some(&wanted) {
+            let preset = wanted.as_ref().and_then(|vision| {
+                let key = format!("vision/{}.vision", vision.name.to_ascii_lowercase());
+                match scene.film_visions.get(&key) {
+                    Some(Ok(preset)) => Some(*preset),
+                    Some(Err(error)) => {
+                        diag::warn!(World, "vision {key}: {error:?}");
+                        None
+                    }
+                    None => {
+                        diag::warn!(World, "vision {key} is not loaded");
+                        None
+                    }
+                }
+            });
+            let duration_ms = match (&applied.0, &wanted) {
+                (Some(_), Some(vision)) => vision.duration_ms,
+                _ => 0,
+            };
+            film.select(
+                scene.film_vision,
+                preset,
+                clock.time(),
+                duration_ms,
+                glow.allowed,
+                glow.allowed_script_forced,
+            );
+            applied.0 = Some(wanted);
         }
     }
     let mixed = presented_film_vision_with_lerp(
@@ -329,5 +292,12 @@ fn update_film_vision_view(
         glow.allowed,
         glow.allowed_script_forced,
     );
-    film.current = mixed;
+    film.current = if view.ready && settings.brightness != 0.0 {
+        let mut vision = mixed.unwrap_or(asset_world::FilmVision::default());
+        vision.enable = true;
+        vision.brightness += settings.brightness;
+        Some(vision)
+    } else {
+        mixed
+    };
 }

@@ -12,7 +12,7 @@ ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 
 .PHONY: map export-gltf play bench bench-load-session bench-live bench-overhead bench-perf menu menu-shots scenario chaos lifecycle-all lifecycle-swap lifecycle-replace lifecycle-play-in lifecycle-demo-out lifecycle-demo-map launcher deploy logs loc clean help
 .PHONY: build-windows setup-windows release publish provision
-.PHONY: mr publish-check approved
+.PHONY: mr publish-check approved duo
 .PHONY: $(ARGS)
 
 $(ARGS):
@@ -218,6 +218,15 @@ lifecycle-demo-map: require-games
 	cd $(ROOT) && IW4L_PERF=1 $(CARGO) run $(PROFILE_ARG) -p launcher -- map mp_boneyard --cmds '$(LIFECYCLE_DEMO_MAP_CMDS)'
 	cd $(ROOT) && $(CARGO) run -p xtask -- live demo-map
 
+HOST_CMDS ?= spawn assault
+CLIENT_CMDS ?= spawn assault
+MODE ?= dm
+export HOST_CMDS CLIENT_CMDS MODE ZONE PROFILE
+
+duo: require-games
+	cd $(ROOT) && $(CARGO) build $(PROFILE_ARG) -p launcher
+	cd $(ROOT) && $(CARGO) run --quiet -p xtask -- duo
+
 menu: require-games
 	cd $(ROOT) && $(CARGO) run $(PROFILE_ARG) -p launcher -- menu $(CMDS_ARG)
 
@@ -345,6 +354,7 @@ help:
 	@echo "make lifecycle-demo-out  demo → disconnect → menu"
 	@echo "make lifecycle-demo-map  demo → map mp_rust"
 	@echo "make menu         run the main-menu shell (Maps / Settings / Quit)"
+	@echo "make duo          two windows through the master; HOST_CMDS / CLIENT_CMDS, ZONE / MODE"
 	@echo "                  add CMDS='wait 2s; quit' to script it"
 	@echo "make menu-shots   2D UI pack under iw4l-artifacts/menu-shots (no map)"
 	@echo "make launcher windows  build password-protected dev + prod portable ZIPs"

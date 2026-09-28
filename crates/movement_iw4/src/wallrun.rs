@@ -8,7 +8,7 @@
 
 use playerstate_iw4::{PlayerState, UserCmd};
 
-use crate::{CollisionBackend, GroundTraceInput, MoveBounds, Pml, pm_step_slide_move};
+use crate::{CollisionBackend, GroundTraceInput, MoveBounds, Pml, step_slide_move};
 
 /// Set while the player is on a wall. A free `pm_flags` bit (the retail mask
 /// `pm_drop_timers` clears, `0x2180`, does not include it).
@@ -151,7 +151,7 @@ fn continue_run<C: CollisionBackend>(
         ps.velocity[2] = context.jump_up;
         detach(ps, context.cooldown_ms);
         // The launch moves this tick under ordinary gravity.
-        pm_step_slide_move(
+        step_slide_move(
             ps,
             pml,
             collision,
@@ -182,7 +182,7 @@ fn hold_height<C: CollisionBackend>(
 ) {
     ps.velocity[2] = 0.0;
     let gravity = ps.gravity as f32 * context.gravity_scale;
-    pm_step_slide_move(
+    step_slide_move(
         ps,
         pml,
         collision,

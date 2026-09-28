@@ -141,12 +141,15 @@ pub(super) fn draw_exact_colour(
     let emissive = products.0.product(FrameProductKind::Emissive);
     scratch.skinned_tess.upload(&device, &queue);
     shadow_scratch.skinned_tess.upload(&device, &queue);
-    let tess = std::mem::take(&mut scratch.skinned_tess);
-    let shadow_tess = std::mem::take(&mut shadow_scratch.skinned_tess);
-    let smodel_skinned_vertex = tess.vertex_buffer();
-    let smodel_skinned_index = tess.index_buffer();
-    let shadow_skinned_vertex = shadow_tess.vertex_buffer();
-    let shadow_skinned_index = shadow_tess.index_buffer();
+    // Handles only: taking the caches would drop the kept skinned surfaces.
+    let tess_vertex = scratch.skinned_tess.vertex_buffer().cloned();
+    let tess_index = scratch.skinned_tess.index_buffer().cloned();
+    let shadow_tess_vertex = shadow_scratch.skinned_tess.vertex_buffer().cloned();
+    let shadow_tess_index = shadow_scratch.skinned_tess.index_buffer().cloned();
+    let smodel_skinned_vertex = tess_vertex.as_ref();
+    let smodel_skinned_index = tess_index.as_ref();
+    let shadow_skinned_vertex = shadow_tess_vertex.as_ref();
+    let shadow_skinned_index = shadow_tess_index.as_ref();
     let sun_prepared = std::mem::take(&mut shadow_scratch.sun_prepared);
     let spot_prepared = std::mem::take(&mut shadow_scratch.spot_prepared);
     let sun_started = colour_census_clock(census_on);
@@ -662,7 +665,11 @@ pub(super) fn draw_exact_colour(
                 binding_cache.interned_n() + shadow_binding.textures.len(),
                 prepare_cost.tex_bind_hit_n,
                 prepare_cost.tex_bind_miss_n,
-                usize::from(constant_arena.gpu.bind_group.is_some()),
+                constant_arena
+                    .gpu
+                    .iter()
+                    .filter(|arena| arena.bind_group.is_some())
+                    .count(),
                 indirect.folded,
                 indirect.batches,
                 indirect.uploaded_words,

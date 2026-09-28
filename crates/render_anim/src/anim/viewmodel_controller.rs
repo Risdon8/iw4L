@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
-use assets::{
-    ACTION_GOAL_TIME_SECS, ACTIVE_GOAL_WEIGHT, ActiveAnim, AdsOverlayConvention, ClipScheduler,
-    IDLE_INTERRUPT_GOAL_TIME_SECS, INACTIVE_GOAL_WEIGHT, WEAPON_ANIM_COUNT, WEAPON_ANIM_SLOTS,
-    WeaponAnimSlot, WeaponAnimations, playback_rate, slot_uses_native_rate,
+use asset_anim::{ActiveAnim, ClipScheduler};
+use asset_game::{
+    ACTION_GOAL_TIME_SECS, ACTIVE_GOAL_WEIGHT, AdsOverlayConvention, IDLE_INTERRUPT_GOAL_TIME_SECS,
+    INACTIVE_GOAL_WEIGHT, WEAPON_ANIM_SLOTS, WeaponAnimSlot, WeaponAnimations,
+    playback_rate, slot_uses_native_rate,
 };
+use asset_iw4::size::WEAPON_ANIM_COUNT;
 
 const DISPATCH_SLOT_START: usize = 1;
 const DISPATCH_SLOT_END: usize = 0x22;

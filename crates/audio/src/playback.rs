@@ -3,8 +3,10 @@ use std::f32::consts::FRAC_PI_4;
 use std::sync::Arc;
 use std::time::Instant;
 
-use asset_iw4::{SND_CURVE_MAX_KNOTS, snd_attenuate, snd_has_free_voice};
-use assets::{AssetNamespace, NamespaceSoundIwd, SoundCatalog, lerp_range, snd_unit_random};
+use asset_audio::{SoundCatalog, lerp_range, unit_random};
+use asset_core::AssetNamespace;
+use asset_iw4::{SND_CURVE_MAX_KNOTS, attenuate, has_free_voice};
+use assets::NamespaceSoundIwd;
 use bevy::{
     audio::{AddAudioSource, AudioSink, AudioSinkPlayback, Volume},
     prelude::*,
@@ -190,11 +192,10 @@ impl Plugin for PlayerSoundPlugin {
                     play_weapon_sound_messages,
                     play_bound_weapon_sounds.after(drain_pending_oneshots),
                     play_land_sound_messages,
-                    crate::map_doors::update.before(crate::ambient::update_map_emitter_gain),
                     crate::destructible_loops::update
                         .before(crate::ambient::update_map_emitter_gain),
                     crate::ambient::update_map_emitter_gain,
-                    snd_update_all_channels,
+                    update_all_channels,
                 )
                     .in_set(ClientSet::Effects),
             )
@@ -235,7 +236,7 @@ fn reset_clip_prep_on_match_torn_down(
 fn listener_pose(listeners: &Query<&Transform, With<AmbientListener>>) -> Option<(Vec3, Vec3)> {
     let n = listeners.iter().len();
     if n > 1 {
-        panic!("second listener / amp maxRadius gate not ported");
+        panic!("more than one ambient listener");
     }
     listeners
         .iter()
@@ -243,7 +244,7 @@ fn listener_pose(listeners: &Query<&Transform, With<AmbientListener>>) -> Option
         .map(|t| (t.translation, t.rotation * Vec3::X))
 }
 
-fn snd_update_all_channels(
+fn update_all_channels(
     listeners: Query<&Transform, With<AmbientListener>>,
     mut channels: Query<(&Channel3d, &mut AudioSink)>,
     settings: Res<frame::GameSettings>,
@@ -257,7 +258,7 @@ fn snd_update_all_channels(
         let atten = if ch.knots.is_empty() {
             0.0
         } else {
-            let value = snd_attenuate(&ch.knots, dist, ch.dist_min, ch.dist_max);
+            let value = attenuate(&ch.knots, dist, ch.dist_min, ch.dist_max);
             if value < 0.0 { 0.0 } else { value }
         };
         let emitter = Vec3::from_array(ch.origin_inches);
@@ -272,10 +273,15 @@ fn snd_update_all_channels(
 fn apply_svc_local_sound(
     mut cmds: MessageReader<SvcLocalSound>,
     adopted: Res<LastAdoptedSnapshot>,
+    announcer: Res<crate::match_voices::AnnouncerRoutes>,
     mut play: MessageWriter<crate::AliasCommand>,
 ) {
     for cmd in cmds.read() {
-        let Some(alias) = adopted.sound_alias_name(cmd.index).map(str::to_owned) else {
+        let Some((namespace, alias)) = adopted
+            .sound_alias_name(cmd.index)
+            .map(|alias| announcer.route(alias))
+            .map(|(namespace, alias)| (namespace, alias.to_owned()))
+        else {
             diag::warn!(
                 Audio,
                 "audio: svc local sound CS index {} is unresolved (typed gap)",
@@ -285,13 +291,13 @@ fn apply_svc_local_sound(
         };
         if cmd.stop {
             play.write(AliasCommand::Stop {
-                namespace: AssetNamespace::Iw4,
+                namespace,
                 alias,
                 snd_ent: Some(SND_ENT_LOCAL),
             });
         } else {
             play.write(crate::AliasCommand::Play(PlayAlias {
-                namespace: AssetNamespace::Iw4,
+                namespace,
                 alias,
                 fallback: None,
                 origin_inches: None,
@@ -989,7 +995,7 @@ fn prepare_voice(
         }
     }
     let voice_n = occupancy.voice_count(ch);
-    if !snd_has_free_voice(voice_n, 0, info.max_voices) {
+    if !has_free_voice(voice_n, 0, info.max_voices) {
         return Err(SuppressReason::VoiceLimit);
     }
     Ok(())
@@ -1014,9 +1020,9 @@ fn track_voice(occupancy: &mut VoiceOccupancy, entity: Entity, lease: Option<Voi
     }
 }
 
-fn streamed_row_volume_pitch(row: &assets::CapturedAlias, rng: &mut u32) -> (f32, f32) {
-    let t_vol = snd_unit_random(rng);
-    let t_pitch = snd_unit_random(rng);
+fn streamed_row_volume_pitch(row: &asset_audio::CapturedAlias, rng: &mut u32) -> (f32, f32) {
+    let t_vol = unit_random(rng);
+    let t_pitch = unit_random(rng);
     let volume = if row.vol_min == 0.0 && row.vol_max == 0.0 {
         1.0
     } else {
@@ -1280,7 +1286,7 @@ fn submit_prepared_oneshot(
                     .with_variant(variant_index);
             };
             let knots = shared.intern_curve(&curve.name, &curve.knots);
-            let atten = snd_attenuate(&knots, dist, row.dist_min, row.dist_max);
+            let atten = attenuate(&knots, dist, row.dist_min, row.dist_max);
             let emitter = Vec3::from_array(pos);
             let (pan_l, pan_r) = world_oneshot_channel_gains(ear, right, emitter, 1.0);
             if atten < 0.0 {

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use bevy::platform::collections::HashMap;
 
 use bevy::prelude::*;
 
@@ -82,7 +82,10 @@ impl ResolvedModelLightingTable {
         self.by_owner.remove(&owner);
     }
 
-    pub fn retain_glass(&mut self, live: &std::collections::HashSet<ModelLightingOwner>) {
+    pub fn retain_glass(
+        &mut self,
+        live: &bevy::platform::collections::HashSet<ModelLightingOwner>,
+    ) {
         self.by_owner.retain(|owner, _| {
             !matches!(owner, ModelLightingOwner::Glass(_)) || live.contains(owner)
         });

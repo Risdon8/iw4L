@@ -1,6 +1,7 @@
 # Run and poke the live game
 
 How to touch the live process. Observation is [`PERF.md`](PERF.md).
+Two players through the master: [`make duo`](DUO.md).
 
 ```bash
 set -a; . ./.env; set +a          # IW4L_GAMES; DISPLAY=:0 if the session has none
@@ -14,13 +15,11 @@ write `make map ZONE=iw5:mp_overwatch` or use `cargo run`. Recipes: `make
 scenario`, `chaos`, `bench` ([`BENCH.md`](BENCH.md)), `bench-live`, `lifecycle-*`
 (`*_CMDS` in the `Makefile`). Live recipes use `[profile.play]`; LTO is `PROFILE=release`.
 
-**Controls are frozen until the match starts.** `sim::step` allows movement only
-in `MatchPhase::Playing`; `hold +attack`, `+forward` and `move` do nothing before
-then. You wait out `PLAYER_WAIT_MS` 15 s + `MATCH_START_MS` 5 s
-(`crates/gamemode_iw4/src/prematch.rs`) — bots (≥ 2 live players) cut the first
-timer short, a single-player script waits the full 20 s. The verb is shorter:
-`wait world; spawn assault; force_match_start; wait 1s; …`, and a script
-involving firing, hits or decals **lies with a zero without it**.
+**GSC controls the start freeze.** `freezecontrols` constrains authority movement;
+snapshots carry the same constraints into client prediction and command replay.
+Wait for the loaded mode's countdown, or use the debug command:
+`wait world; spawn assault; force_match_start; wait 1s; …`.
+Firing, hit and decal probes must start after the countdown releases the player.
 
 **Sync by default.** Ritual `wait`s are unnecessary: a command holds the FIFO
 until its own fact — `map`/`demo`/`play` until the swap plus GPU-ready
@@ -52,9 +51,19 @@ on host and clients — the host records authority, a client the snapshots it
 received plus its own presented state; `demo LATEST` plays it back.
 
 * ADS is `hold +speed_throw`, not `+speed`;
+* Aim binding: `bind MOUSE2 +speed_throw` aims only while held;
+  `bind MOUSE2 +toggleads_throw` toggles aim on each press. Both are available
+  under Options → Controls → Actions, and the chosen bind is saved in settings.
 * bolt action (`fire_type=1`): `hold +attack` is **one** shot, and a full
   magazine will not reload itself (`press +attack` ×N, then `press +reload`);
 * `look` without `LookState` only writes `ps.viewangles` — no aiming;
 * `give` takes a namespace: `give t5:weapon/psg1_acog`, `give iw5:weapon/msr`.
 * custom classes live in `iw4l-artifacts/profile/classes.txt` (one tab-separated
   row per class); delete it to get the presets back.
+
+Video settings include brightness (50–150%, neutral 100%) and FOV (65–120°)
+sliders. Drag with the mouse or use Left/Right on the focused slider; the value
+appears to its right. Multiplayer settings contain the player-name field
+(Enter to edit and accept, Escape to cancel). These settings persist across
+launches in `$XDG_CONFIG_HOME/iw4l/settings.cfg` or `~/.config/iw4l/settings.cfg`
+on Linux; `IW4L_SETTINGS_PATH` selects a separate profile for probes.

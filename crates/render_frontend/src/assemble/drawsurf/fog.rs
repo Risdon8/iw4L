@@ -1,4 +1,4 @@
-use assets::{ExpFog, SunFog};
+use asset_world::{ExpFog, SunFog};
 use bevy::prelude::*;
 
 #[derive(Resource)]

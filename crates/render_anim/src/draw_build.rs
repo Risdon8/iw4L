@@ -22,15 +22,15 @@ fn install_retained_packed(
     decoded_count: usize,
     empty: &'static str,
     missing: &'static str,
-) -> assets::RetailPackedVertexPayload {
+) -> asset_world::PackedVertexPayload {
     if packed_ok && packed.len() == decoded_count && !packed.is_empty() {
-        assets::RetailPackedVertexPayload::Iw4(packed)
+        asset_world::PackedVertexPayload::Iw4(packed)
     } else if decoded_count == 0 {
-        assets::RetailPackedVertexPayload::Unavailable {
+        asset_world::PackedVertexPayload::Unavailable {
             source_layout: empty,
         }
     } else {
-        assets::RetailPackedVertexPayload::Unavailable {
+        asset_world::PackedVertexPayload::Unavailable {
             source_layout: missing,
         }
     }
@@ -139,19 +139,16 @@ impl BodyPackedSession {
 
 pub fn take_body_packed_session(plan: &mut RemoteBodyDrawPlan) -> BodyPackedSession {
     let vertices_empty = plan.decoded_n == 0 && plan.vertices.is_empty();
-    let packed_ok = vertices_empty
-        || matches!(
-            plan.packed_vertices,
-            assets::RetailPackedVertexPayload::Iw4(_)
-        );
+    let packed_ok =
+        vertices_empty || matches!(plan.packed_vertices, asset_world::PackedVertexPayload::Iw4(_));
     let packed = match std::mem::replace(
         &mut plan.packed_vertices,
-        assets::RetailPackedVertexPayload::Unavailable {
+        asset_world::PackedVertexPayload::Unavailable {
             source_layout: BODY_PACKED_UNAVAILABLE,
         },
     ) {
-        assets::RetailPackedVertexPayload::Iw4(rows) => rows,
-        assets::RetailPackedVertexPayload::Unavailable { .. } => Vec::new(),
+        asset_world::PackedVertexPayload::Iw4(rows) => rows,
+        asset_world::PackedVertexPayload::Unavailable { .. } => Vec::new(),
     };
     BodyPackedSession { packed_ok, packed }
 }
@@ -226,8 +223,8 @@ pub fn finish_remote_body_draw_plan(plan: &mut RemoteBodyDrawPlan) {
 
 pub fn append_script_model_asset(
     plan: &mut ScriptModelDrawPlan,
-    key: assets::MapXModelAssetKey,
-    dobj_state: assets::dobj::DObjSemanticState,
+    key: asset_world::MapXModelAssetKey,
+    dobj_state: xmodel_runtime::DObjSemanticState,
     camera_lods: Vec<Option<u8>>,
     surfaces: &[PosedModelSurface],
     materials: &[Option<SmodelPassMaterial>],
@@ -235,19 +232,16 @@ pub fn append_script_model_asset(
     let mut asset_surfaces = Vec::new();
 
     let vertices_empty = plan.vertices.is_empty();
-    let mut packed_ok = vertices_empty
-        || matches!(
-            plan.packed_vertices,
-            assets::RetailPackedVertexPayload::Iw4(_)
-        );
+    let mut packed_ok =
+        vertices_empty || matches!(plan.packed_vertices, asset_world::PackedVertexPayload::Iw4(_));
     let mut packed = match std::mem::replace(
         &mut plan.packed_vertices,
-        assets::RetailPackedVertexPayload::Unavailable {
+        asset_world::PackedVertexPayload::Unavailable {
             source_layout: XMODEL_PACKED_UNAVAILABLE,
         },
     ) {
-        assets::RetailPackedVertexPayload::Iw4(rows) => rows,
-        assets::RetailPackedVertexPayload::Unavailable { .. } => Vec::new(),
+        asset_world::PackedVertexPayload::Iw4(rows) => rows,
+        asset_world::PackedVertexPayload::Unavailable { .. } => Vec::new(),
     };
     for (surface, material) in surfaces.iter().zip(materials) {
         let Some(material) = material else { continue };
@@ -294,7 +288,7 @@ pub fn append_script_model_asset(
 pub fn overwrite_script_model_asset(
     plan: &mut ScriptModelDrawPlan,
     asset_index: usize,
-    dobj_state: assets::dobj::DObjSemanticState,
+    dobj_state: xmodel_runtime::DObjSemanticState,
     surfaces: &[PosedModelSurface],
     materials: &[Option<SmodelPassMaterial>],
 ) -> bool {
@@ -374,7 +368,7 @@ pub fn overwrite_script_model_asset(
                 uv0: uvs.and_then(|a| a.get(i).copied()).unwrap_or([0.0; 2]),
             };
         }
-        if let assets::RetailPackedVertexPayload::Iw4(rows) = &mut plan.packed_vertices {
+        if let asset_world::PackedVertexPayload::Iw4(rows) = &mut plan.packed_vertices {
             let Some(dst) = rows.get_mut(base..base + n) else {
                 return false;
             };
@@ -398,8 +392,8 @@ pub fn retain_script_model_assets(plan: &mut ScriptModelDrawPlan, keep: &[bool])
         return;
     }
     let packed_src = match &plan.packed_vertices {
-        assets::RetailPackedVertexPayload::Iw4(rows) => Some(rows.as_slice()),
-        assets::RetailPackedVertexPayload::Unavailable { .. } => None,
+        asset_world::PackedVertexPayload::Iw4(rows) => Some(rows.as_slice()),
+        asset_world::PackedVertexPayload::Unavailable { .. } => None,
     };
     let mut next = ScriptModelDrawPlan::default();
 
@@ -495,17 +489,12 @@ pub fn append_missile_surfaces(
 ) -> Vec<(u32, u32)> {
     let mut asset_surfaces = Vec::new();
     let mut packed = match &plan.packed_vertices {
-        assets::RetailPackedVertexPayload::Iw4(rows) => rows.clone(),
-        assets::RetailPackedVertexPayload::Unavailable { .. } if plan.vertices.is_empty() => {
-            Vec::new()
-        }
-        assets::RetailPackedVertexPayload::Unavailable { .. } => Vec::new(),
+        asset_world::PackedVertexPayload::Iw4(rows) => rows.clone(),
+        asset_world::PackedVertexPayload::Unavailable { .. } if plan.vertices.is_empty() => Vec::new(),
+        asset_world::PackedVertexPayload::Unavailable { .. } => Vec::new(),
     };
     let mut packed_ok = plan.vertices.is_empty()
-        || matches!(
-            plan.packed_vertices,
-            assets::RetailPackedVertexPayload::Iw4(_)
-        );
+        || matches!(plan.packed_vertices, asset_world::PackedVertexPayload::Iw4(_));
     for (surface, material) in surfaces.iter().zip(materials) {
         let Some(material) = material else { continue };
         let before = plan.vertices.len();
@@ -546,17 +535,12 @@ pub fn append_item_surfaces(
 ) -> Vec<(u32, u32)> {
     let mut asset_surfaces = Vec::new();
     let mut packed = match &plan.packed_vertices {
-        assets::RetailPackedVertexPayload::Iw4(rows) => rows.clone(),
-        assets::RetailPackedVertexPayload::Unavailable { .. } if plan.vertices.is_empty() => {
-            Vec::new()
-        }
-        assets::RetailPackedVertexPayload::Unavailable { .. } => Vec::new(),
+        asset_world::PackedVertexPayload::Iw4(rows) => rows.clone(),
+        asset_world::PackedVertexPayload::Unavailable { .. } if plan.vertices.is_empty() => Vec::new(),
+        asset_world::PackedVertexPayload::Unavailable { .. } => Vec::new(),
     };
     let mut packed_ok = plan.vertices.is_empty()
-        || matches!(
-            plan.packed_vertices,
-            assets::RetailPackedVertexPayload::Iw4(_)
-        );
+        || matches!(plan.packed_vertices, asset_world::PackedVertexPayload::Iw4(_));
     for (surface, material) in surfaces.iter().zip(materials) {
         let Some(material) = material else { continue };
         let before = plan.vertices.len();
@@ -597,19 +581,16 @@ pub fn append_dynent_surfaces(
 ) -> Vec<(u32, u32)> {
     let mut asset_surfaces = Vec::new();
     let vertices_empty = plan.vertices.is_empty();
-    let mut packed_ok = vertices_empty
-        || matches!(
-            plan.packed_vertices,
-            assets::RetailPackedVertexPayload::Iw4(_)
-        );
+    let mut packed_ok =
+        vertices_empty || matches!(plan.packed_vertices, asset_world::PackedVertexPayload::Iw4(_));
     let mut packed = match std::mem::replace(
         &mut plan.packed_vertices,
-        assets::RetailPackedVertexPayload::Unavailable {
+        asset_world::PackedVertexPayload::Unavailable {
             source_layout: XMODEL_PACKED_UNAVAILABLE,
         },
     ) {
-        assets::RetailPackedVertexPayload::Iw4(rows) => rows,
-        assets::RetailPackedVertexPayload::Unavailable { .. } => Vec::new(),
+        asset_world::PackedVertexPayload::Iw4(rows) => rows,
+        asset_world::PackedVertexPayload::Unavailable { .. } => Vec::new(),
     };
     for (surface, material) in surfaces.iter().zip(materials) {
         let Some(material) = material else { continue };
@@ -646,7 +627,7 @@ pub fn append_dynent_surfaces(
 
 pub fn append_dynent_asset(
     plan: &mut DynEntDrawPlan,
-    key: assets::MapXModelAssetKey,
+    key: asset_world::MapXModelAssetKey,
     camera_lod: Option<u8>,
     surfaces: &[PosedModelSurface],
     materials: &[Option<SmodelPassMaterial>],
@@ -787,7 +768,7 @@ pub fn clear_fpv_draw_plan(plan: &mut FpvDrawPlan, lighting_handle: u32) {
     plan.materials.clear();
     plan.draws.clear();
     plan.decoded_n = 0;
-    plan.packed_vertices = assets::RetailPackedVertexPayload::Unavailable {
+    plan.packed_vertices = asset_world::PackedVertexPayload::Unavailable {
         source_layout: FPV_PACKED_EMPTY_PLAN,
     };
     plan.hands_plan_n = None;

@@ -180,23 +180,35 @@ impl PackedCodeConstants {
 }
 
 fn hash_packed_code_constants(lanes: &[PackedCodeConstantLane]) -> u64 {
-    let mut hash = fnv1a64(&(lanes.len() as u64).to_le_bytes());
+    // The id keys packed constant caches with no second comparison: keep a
+    // full-strength mix.
+    let mut hash = fold_mix(FOLD_SEED, lanes.len() as u64);
     for lane in lanes {
         let stage = match lane.stage {
-            RuntimeShaderStage::Vertex => 0u8,
-            RuntimeShaderStage::Pixel => 1u8,
+            RuntimeShaderStage::Vertex => 0u64,
+            RuntimeShaderStage::Pixel => 1u64,
         };
-        hash = fnv1a64_more(hash, &[stage]);
-        hash = fnv1a64_more(hash, &lane.destination.to_le_bytes());
-        hash = fnv1a64_more(hash, &lane.index.to_le_bytes());
-        hash = fnv1a64_more(hash, &[lane.first_row, lane.row_count]);
+        let header = stage
+            | u64::from(lane.destination) << 8
+            | u64::from(lane.index) << 24
+            | u64::from(lane.first_row) << 40
+            | u64::from(lane.row_count) << 48;
+        hash = fold_mix(hash, header);
         for row in lane.rows.iter() {
-            for word in row {
-                hash = fnv1a64_more(hash, &word.to_le_bytes());
-            }
+            let low = u64::from(row[0]) | u64::from(row[1]) << 32;
+            let high = u64::from(row[2]) | u64::from(row[3]) << 32;
+            hash = fold_mix(fold_mix(hash, low), high);
         }
     }
-    hash
+    fold_mix(hash, FOLD_SEED)
+}
+
+const FOLD_SEED: u64 = 0x243f_6a88_85a3_08d3;
+const FOLD_MULTIPLIER: u64 = 0x9e37_79b9_7f4a_7c15;
+
+fn fold_mix(hash: u64, word: u64) -> u64 {
+    let product = u128::from(hash ^ word) * u128::from(FOLD_MULTIPLIER);
+    (product as u64) ^ ((product >> 64) as u64)
 }
 
 fn hash_packed_code_lanes(lanes: &[PackedCodeSamplerLane]) -> u64 {

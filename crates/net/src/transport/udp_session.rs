@@ -27,12 +27,14 @@ use crate::transport::udp_socket::{DEFAULT_RECV_BUDGET_PER_TICK, UdpDatagramSock
 use crate::transport::wire::WireReader;
 
 const RELAY_MAIL_CAP: usize = 64;
+pub(crate) const CMDS_PER_PACKET: usize = 16;
 
 #[derive(Clone, Debug)]
 pub struct RelayMailbox {
     inbound: Arc<Mutex<Vec<(MemberId, Vec<u8>)>>>,
     outbound: Arc<Mutex<Vec<(MemberId, Vec<u8>)>>>,
     control_inbound: Arc<Mutex<Vec<(MemberId, Vec<u8>)>>>,
+    control_inbound_drained: Arc<tokio::sync::Notify>,
     control_outbound: Arc<Mutex<Vec<(MemberId, Vec<u8>)>>>,
     cap: usize,
 }
@@ -43,6 +45,7 @@ impl RelayMailbox {
             inbound: Arc::new(Mutex::new(Vec::new())),
             outbound: Arc::new(Mutex::new(Vec::new())),
             control_inbound: Arc::new(Mutex::new(Vec::new())),
+            control_inbound_drained: Arc::new(tokio::sync::Notify::new()),
             control_outbound: Arc::new(Mutex::new(Vec::new())),
             cap,
         }
@@ -56,7 +59,27 @@ impl RelayMailbox {
         push_mail(&self.control_inbound, self.cap, member, bytes)
     }
     pub fn take_control_inbound(&self) -> Vec<(MemberId, Vec<u8>)> {
-        take_mail(&self.control_inbound)
+        let packets = take_mail(&self.control_inbound);
+        self.control_inbound_drained.notify_one();
+        packets
+    }
+
+    // The control reader is the sole producer. Keep the capacity wait in its
+    // select loop so cancellation and local commands still run under pressure.
+    pub(crate) async fn wait_control_inbound_capacity(&self) {
+        loop {
+            let drained = self.control_inbound_drained.notified();
+            if self
+                .control_inbound
+                .lock()
+                .expect("relay mailbox poisoned")
+                .len()
+                < self.cap
+            {
+                return;
+            }
+            drained.await;
+        }
     }
     pub fn push_control_outbound(
         &self,
@@ -160,6 +183,8 @@ struct PeerReplicationState {
     last_full: Option<Tick>,
     sent_ticks: std::collections::VecDeque<Tick>,
     admission: PeerAdmission,
+    last_control_seq: Option<u16>,
+    control_drops_sent: u32,
 }
 
 #[derive(Debug)]
@@ -192,7 +217,49 @@ impl PeerReplicationState {
             last_full: None,
             sent_ticks: std::collections::VecDeque::new(),
             admission: PeerAdmission::Uncommitted,
+            last_control_seq: None,
+            control_drops_sent: 0,
         }
+    }
+
+    fn queue_control(
+        &mut self,
+        mailbox: &RelayMailbox,
+        member: MemberId,
+        connection: ConnectionId,
+        epoch: u32,
+        mut payload: crate::ReliablePayload,
+    ) -> Result<(), UdpSendError> {
+        // QUIC control is ordered and reliable. Keep rows until their application
+        // ACK, but enqueue each only once instead of repeating the pending window.
+        payload.rows.retain(|(seq, _)| {
+            self.last_control_seq
+                .is_none_or(|last| crate::transport::reliable::seq_after(*seq, last))
+        });
+        if payload.rows.is_empty() && payload.dropped_oldest == self.control_drops_sent {
+            return Ok(());
+        }
+        let last = payload
+            .rows
+            .last()
+            .map(|(seq, _)| *seq)
+            .or(self.last_control_seq);
+        let dropped = payload.dropped_oldest;
+        let packet = ServerPacket::Control {
+            header: PacketHeader {
+                connection,
+                sequence: 0,
+                ack: 0,
+                epoch,
+            },
+            payload,
+        };
+        mailbox
+            .push_control_outbound(member, packet.to_bytes())
+            .map_err(relay_send_error)?;
+        self.last_control_seq = last;
+        self.control_drops_sent = dropped;
+        Ok(())
     }
 
     fn reset_match(&mut self) {
@@ -769,21 +836,14 @@ impl UdpAuthorityHub {
                 if let (Some(mailbox), PeerTarget::Relay(member), Some(reliable)) =
                     (&self.relay, target, reliable)
                 {
-                    let payload = reliable.payload(client);
-                    if !payload.rows.is_empty() {
-                        let packet = ServerPacket::Control {
-                            header: PacketHeader {
-                                connection: conn,
-                                sequence: 0,
-                                ack: 0,
-                                epoch: live_epoch,
-                            },
-                            payload,
-                        };
-                        if let Err(error) = mailbox.push_control_outbound(member, packet.to_bytes())
-                        {
-                            last_err = Some(relay_send_error(error));
-                        }
+                    if let Err(error) = peer.queue_control(
+                        mailbox,
+                        member,
+                        conn,
+                        live_epoch,
+                        reliable.payload(client),
+                    ) {
+                        last_err = Some(error);
                     }
                 }
             }
@@ -840,7 +900,7 @@ impl UdpAuthorityHub {
                 frame.svc_hud_splashes = splashes;
             }
             if let Some(pending) = pending_gamenotify.as_mut() {
-                frame.svc_game_notifies = pending.take_broadcast();
+                frame.svc_game_notifies = pending.take_for(client);
             }
 
             frame
@@ -960,6 +1020,7 @@ pub struct UdpClientLink {
     out_seq: u32,
     in_ack: u32,
     last_snapshot_seq: Option<u32>,
+    required_baseline_seq: u32,
     applied_bootstrap_id: Option<u32>,
     last_applied_offer: Option<(u32, u32)>,
     pending_applied: Vec<BootstrapMessage>,
@@ -988,6 +1049,7 @@ impl UdpClientLink {
             out_seq: 0,
             in_ack: 0,
             last_snapshot_seq: None,
+            required_baseline_seq: 0,
             applied_bootstrap_id: None,
             last_applied_offer: None,
             pending_applied: Vec::new(),
@@ -1013,6 +1075,7 @@ impl UdpClientLink {
             out_seq: 0,
             in_ack: 0,
             last_snapshot_seq: None,
+            required_baseline_seq: 0,
             applied_bootstrap_id: None,
             last_applied_offer: None,
             pending_applied: Vec::new(),
@@ -1099,7 +1162,10 @@ impl UdpClientLink {
     }
 
     pub fn note_applied_snapshot(&mut self, snapshot_seq: u32) {
-        self.last_snapshot_seq.replace(snapshot_seq);
+        self.last_snapshot_seq = Some(
+            self.last_snapshot_seq
+                .map_or(snapshot_seq, |last| last.max(snapshot_seq)),
+        );
     }
 
     pub fn flush_applied_after_adopt(&mut self) {
@@ -1143,6 +1209,7 @@ impl UdpClientLink {
         self.out_seq = 0;
         self.in_ack = 0;
         self.last_snapshot_seq = None;
+        self.required_baseline_seq = 0;
         self.applied_bootstrap_id = None;
         self.last_applied_offer = None;
         self.pending_applied.clear();
@@ -1204,7 +1271,7 @@ impl UdpClientLink {
             }
         }
         self.adopt_entered_client();
-        if self.bootstrap.is_none() {
+        if self.bootstrap.is_none() || self.has_entered_match() {
             for seq in snap_acks {
                 let _ = self.send_snapshot_ack(seq);
             }
@@ -1398,6 +1465,7 @@ impl UdpClientLink {
                 snapshot.meta = frame.snapshot_meta.clone();
                 self.note_applied_snapshot(snapshot_seq);
                 self.baselines.insert(snapshot_seq, snapshot.clone());
+                self.required_baseline_seq = self.required_baseline_seq.max(baseline_seq);
                 self.retain_applied_baseline();
                 snap_acks.push(snapshot_seq);
                 ticks.push(ReceivedTick { snapshot, frame });
@@ -1413,7 +1481,7 @@ impl UdpClientLink {
                 .baselines
                 .keys()
                 .copied()
-                .find(|seq| Some(*seq) != pinned);
+                .find(|seq| Some(*seq) != pinned && *seq != self.required_baseline_seq);
             match oldest {
                 Some(seq) => {
                     self.baselines.remove(&seq);
@@ -1459,7 +1527,6 @@ impl UdpClientLink {
             let _ = self.send_snapshot_ack(seq);
         }
 
-        const CMDS_PER_PACKET: usize = 16;
         let count = CMDS_PER_PACKET.min(usize::from(self.limits.max_cmds_per_tick));
         if count == 0 {
             return Err(relay_send_error("peer permits no commands per packet"));

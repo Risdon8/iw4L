@@ -54,7 +54,7 @@ pub use clip::{
     rebuild_portal_hull_winding, side_plane_normals, unproject_clip_xy,
 };
 pub use convex_hull::{
-    COM_CONVEX_HULL_MAX, PortalHullPoints, add_vert_to_portal_hull_points, com_convex_hull,
+    COM_CONVEX_HULL_MAX, PortalHullPoints, add_vert_to_portal_hull_points, convex_hull,
 };
 pub use drawsurf::{
     GfxDrawSurf, GfxDrawSurfFields, MAX_DRAWSURFS, SF_CODE_MESH, SF_GLASS_MESH, SF_MARK_MESH,
@@ -91,7 +91,7 @@ pub use scene_ent::{
     filter_dyn_pos_into_cells, filter_scene_ent_into_all_cells, filter_scene_ent_into_cells,
     scene_ent_box_reaches_cell, scene_ent_cell_bits_len, scene_ent_cell_row,
     scene_ent_cell_row_second_pass, scene_ent_cell_walk_bits, scene_ent_cell_walk_words,
-    scene_ent_in_cell, unfilter_scene_ent_from_cells_view0,
+    scene_ent_cells, scene_ent_in_cell, unfilter_scene_ent_from_cells_view0,
 };
 pub use scene_ent_bounds::{
     DObjAnimMat, GFX_CFG_ENT_COUNT, SCENE_DOBJ_GATE_BOUNDED, SCENE_DOBJ_GATE_FAILED,

@@ -1,10 +1,10 @@
-//! Mod: headless movement harness. Runs the real `pm_move` with the real
+//! Mod: headless movement harness. Runs the real `pmove` with the real
 //! `pmove_context` against a world made of infinite half-space planes, so
 //! jump/land/strafe behaviour can be measured without launching the game.
 
 use movement_iw4::{
     ANGLE2SHORT, CollisionBackend, FlatMantleAnimLength, GroundTraceInput, ZeroMantleRootDelta,
-    pm_move,
+    pmove,
 };
 use playerstate_iw4::{PlayerState, UserCmd, buttons};
 use trace_iw4::{ENTITYNUM_WORLD, HITTYPE_ENTITY, Trace};
@@ -142,7 +142,7 @@ fn run(
             false,
             tuning,
         );
-        pm_move(
+        pmove(
             &mut ps,
             &mut cmd,
             context,
@@ -359,7 +359,7 @@ fn run_backend(
             false,
             tuning,
         );
-        pm_move(
+        pmove(
             &mut ps,
             &mut cmd,
             context,
@@ -409,7 +409,7 @@ fn run_policy(
             false,
             tuning,
         );
-        pm_move(
+        pmove(
             &mut ps,
             &mut cmd,
             context,

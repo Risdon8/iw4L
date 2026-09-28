@@ -2,7 +2,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use bevy::prelude::*;
-use frame::{HasWorld, MatchTornDown};
+use frame::{HasWorld, MatchTornDown, RuntimeRole};
 use playerstate_iw4::UserCmd;
 
 use crate::ServerTime;
@@ -10,20 +10,19 @@ use crate::authority::inbox::{
     AUTHORITY_MS, ClientActionInbox, ClientCommandInbox, MAX_REDUNDANT_CMDS,
 };
 use crate::authority::runtime::{AuthorityInputGate, AuthorityWorld, ClientShotSamples};
-use crate::client::cg_frame::{CgFrameClock, CgameActive, CgameJoinCensus};
-use crate::client::cls_frame::ClsRealtime;
-use crate::client::entities::CEntityBirthCensus;
+use crate::client::frame_clock::{FrameClock, GameActive, GameJoinCensus};
 use crate::client::input::{
-    ClientActionInput, LookState, accumulate_look, build_usercmd, com_frame_time_msec,
-    key_frame_msec, remote_control_axes,
+    ClientActionInput, LookState, accumulate_look, build_usercmd, frame_time_msec, key_frame_msec,
+    remote_control_axes,
 };
 use crate::client::predict::{ClientPrediction, CmdSeq};
-use crate::client::presented::{
+use crate::client::presentation::entities::CEntityBirthCensus;
+use crate::client::presentation::presented::{
     LocalPresentClient, PresentLocalCensus, PresentedSnapshot, interpolate_player_state,
 };
-use crate::client::projectiles::merge_presented_projectiles;
+use crate::client::presentation::projectiles::merge_presented_projectiles;
 use crate::client::proxy::{ProxySample, RemoteProxy};
-use crate::role::RuntimeRole;
+use crate::client::realtime::ClientRealtime;
 use crate::schedule::ClientSet;
 use crate::transport::loopback_live::{ListenLoopback, ReceivedTick};
 use sim::Snapshot;
@@ -162,6 +161,8 @@ pub struct PendingClientSends {
     cmds: VecDeque<(CmdSeq, UserCmd, sim::ShotSampleProvenance)>,
 
     evicted_unacked: u32,
+
+    acknowledged: Option<CmdSeq>,
 }
 
 impl PendingClientSends {
@@ -186,6 +187,7 @@ impl PendingClientSends {
     }
 
     pub fn clear_acknowledged(&mut self, acked: CmdSeq) {
+        self.acknowledged = Some(self.acknowledged.map_or(acked, |last| last.max(acked)));
         while self
             .cmds
             .front()
@@ -197,6 +199,30 @@ impl PendingClientSends {
 
     pub fn iter(&self) -> impl Iterator<Item = &(CmdSeq, UserCmd, sim::ShotSampleProvenance)> {
         self.cmds.iter()
+    }
+
+    pub fn has_command_capacity(&self, server_time: i32) -> bool {
+        if self.len() >= MAX_REDUNDANT_CMDS {
+            return false;
+        }
+        // Reserve one full step for the gap from the authority's last consumed
+        // command. Bound unacknowledged work before allocating a sequence: after
+        // a delayed ACK we can resume without dropping commands or leaving holes.
+        let step = crate::authority::inbox::COMMAND_TIME_STEP_MS;
+        let mut work = step;
+        let mut previous: Option<i32> = None;
+        for time in self
+            .cmds
+            .iter()
+            .map(|(_, cmd, _)| cmd.server_time)
+            .chain(std::iter::once(server_time))
+        {
+            if let Some(previous) = previous {
+                work = work.saturating_add(time.saturating_sub(previous).clamp(0, step));
+            }
+            previous = Some(time);
+        }
+        work <= crate::authority::inbox::MAX_QUEUED_COMMAND_MS
     }
 
     pub fn oldest_seq(&self) -> Option<CmdSeq> {
@@ -215,7 +241,7 @@ pub struct ClientCmdTemplate {
 }
 
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CgWeaponSelect {
+pub struct WeaponSelect {
     pub index: u32,
 
     pub time: i32,
@@ -228,8 +254,8 @@ pub struct CgWeaponSelect {
     pub mapped_index: u32,
 }
 
-pub fn cg_follow_held_weapon_select(
-    select: &mut CgWeaponSelect,
+pub fn follow_held_weapon_select(
+    select: &mut WeaponSelect,
     ps_weapon: u32,
     life_sequence: u32,
     cg_time: i32,
@@ -250,8 +276,8 @@ pub fn cg_follow_held_weapon_select(
     select.held_index = ps_weapon;
 }
 
-pub fn cg_cycle_weapon_select(
-    select: &mut CgWeaponSelect,
+pub fn cycle_weapon_select(
+    select: &mut WeaponSelect,
     input: &mut input_iw4::ClientInput,
     ps: &playerstate_iw4::PlayerState,
     world: &sim::SimWorld,
@@ -268,8 +294,8 @@ pub fn cg_cycle_weapon_select(
         let cancelable = world
             .weapon_combat_row(offhand)
             .unwrap_or_else(weapon_iw4::WeaponCombatFacts::none)
-            .offhand_hold_is_cancelable_at_0x681
-            .unwrap_or_else(|| panic!("offhand hold cancel flag +0x681 missing in source format"));
+            .offhand_hold_is_cancelable
+            .unwrap_or(false);
         if cancelable {
             input.offhand_hold_cancel = true;
             return;
@@ -295,13 +321,11 @@ pub fn cg_cycle_weapon_select(
         return;
     };
     let target_facts = facts(target);
-    let requires_ammo = target_facts
-        .select_requires_ammo_at_0x667
-        .unwrap_or_else(|| panic!("selection flag +0x667 missing in source format"));
+    let requires_ammo = target_facts.select_requires_ammo.unwrap_or(false);
     if requires_ammo {
-        let ammo_key = weapon_iw4::bg_ammo_table_key(target_facts.ammo_index, target);
-        let clip_key = weapon_iw4::bg_clip_table_key(target_facts.clip_index, target);
-        if weapon_iw4::bg_get_ammo_player_both_clips(ps, target, ammo_key, clip_key) == 0 {
+        let ammo_key = weapon_iw4::ammo_table_key(target_facts.ammo_index, target);
+        let clip_key = weapon_iw4::clip_table_key(target_facts.clip_index, target);
+        if weapon_iw4::get_ammo_player_both_clips(ps, target, ammo_key, clip_key) == 0 {
             return;
         }
     }
@@ -311,7 +335,7 @@ pub fn cg_cycle_weapon_select(
         }
         select.index = target;
         select.mapped_index = target;
-        input_iw4::cl_set_ads(input, false);
+        input_iw4::set_ads(input, false);
     }
 }
 
@@ -354,16 +378,16 @@ pub fn arm_listen_prediction(
     prediction.0.arm_from_content(&authority.0);
 }
 
-pub fn advance_cls_realtime(mut cls: ResMut<ClsRealtime>, time: Res<Time>) {
+pub fn advance_cls_realtime(mut cls: ResMut<ClientRealtime>, time: Res<Time>) {
     cls.advance_listen(time.delta_secs());
 }
 
 pub fn advance_cg_frame_clock(
-    mut clock: ResMut<CgFrameClock>,
+    mut clock: ResMut<FrameClock>,
     mut prediction: ResMut<ClientPredictionState>,
-    mut join: ResMut<CgameJoinCensus>,
+    mut join: ResMut<GameJoinCensus>,
     time: Res<Time>,
-    cgame_active: Res<CgameActive>,
+    cgame_active: Res<GameActive>,
     authority: Option<Res<crate::AuthorityClock>>,
     role: Res<RuntimeRole>,
     fixed: Res<Time<Fixed>>,
@@ -622,7 +646,7 @@ pub struct ReliableInbound<'w> {
     ack: ResMut<'w, ClientReliableAck>,
     events: MessageWriter<'w, ReliableControlEvent>,
     svc: SvcFrameWriters<'w>,
-    scores: ResMut<'w, crate::CgScores>,
+    scores: ResMut<'w, crate::Scoreboard>,
     signon: ResMut<'w, crate::SignonState>,
     bridge: Option<Res<'w, crate::MasterBridge>>,
 }
@@ -630,6 +654,7 @@ pub struct ReliableInbound<'w> {
 impl ReliableInbound<'_> {
     fn fail(&mut self, reason: &str) {
         self.actions.clear();
+        let match_key = crate::signon::live_match_key(self.bridge.as_deref());
         if let Some(bridge) = &self.bridge {
             bridge.fail(reason);
         }
@@ -637,7 +662,7 @@ impl ReliableInbound<'_> {
             crate::SignonFailReason::Transport {
                 source: reason.to_owned(),
                 stage: crate::FailStage::Transport,
-                match_key: frame::MatchKey::NONE,
+                match_key,
             },
         ));
     }
@@ -722,22 +747,37 @@ fn reliable_seq_after(a: u16, b: u16) -> bool {
     a != b && a.wrapping_sub(b) < 0x8000
 }
 
+fn apply_weapon_switch_requests(
+    mut events: MessageReader<ReliableControlEvent>,
+    mut select: ResMut<WeaponSelect>,
+    clock: Res<FrameClock>,
+) {
+    for event in events.read() {
+        if let sim::SimEvent::WeaponSwitchRequested { weapon } = event.0 {
+            select.index = weapon;
+            select.mapped_index = weapon;
+            select.time = clock.time();
+        }
+    }
+}
+
 pub fn sample_client_input(
     time: Res<Time>,
     mut actions: ResMut<ClientActionInput>,
     mut look: ResMut<LookState>,
     mut template: ResMut<ClientCmdTemplate>,
-    mut select: ResMut<CgWeaponSelect>,
+    mut select: ResMut<WeaponSelect>,
     prediction: Res<ClientPredictionState>,
     presented: Res<PresentedSnapshot>,
     local: Res<LocalPresentClient>,
     gate: Res<AuthorityInputGate>,
-    cls: Res<ClsRealtime>,
-    clock: Res<CgFrameClock>,
+    cls: Res<ClientRealtime>,
+    clock: Res<FrameClock>,
     mut action_inbox: Option<ResMut<ClientActionInbox>>,
     mut request_ids: Option<ResMut<crate::ActionRequestIds>>,
     view: Option<Res<frame::ViewSubject>>,
     trace: Option<ResMut<ClientPhaseTrace>>,
+    mut cursor: ResMut<LocationCursor>,
 ) {
     push_phase(trace, "Input");
     if !gate.local_cmds_enabled {
@@ -746,7 +786,7 @@ pub fn sample_client_input(
         return;
     }
     actions.frame_msec = key_frame_msec(time.delta_secs());
-    actions.now_msec = com_frame_time_msec(time.elapsed_secs());
+    actions.now_msec = frame_time_msec(time.elapsed_secs());
     let ps = prediction
         .0
         .predicted_local()
@@ -755,12 +795,24 @@ pub fn sample_client_input(
     let frozen = ps.is_some_and(|ps| (ps.pm_flags & 0x800) != 0)
         || presented
             .snapshot()
-            .is_none_or(|snapshot| snapshot.meta.phase != sim::MatchPhase::Playing);
+            .and_then(|snapshot| snapshot.meta.for_client(local.0))
+            .is_none_or(|meta| meta.controls.frozen);
 
     if frozen {
         actions.mouse_x = 0.0;
         actions.mouse_y = 0.0;
     }
+    let choose_direction = presented
+        .snapshot()
+        .and_then(|snapshot| snapshot.meta.for_client(local.0))
+        .and_then(|meta| meta.location_selection.as_ref())
+        .map(|selection| selection.choose_direction);
+    let location_mouse = choose_direction.is_some().then(|| {
+        let mouse = (actions.mouse_x, actions.mouse_y);
+        actions.mouse_x = 0.0;
+        actions.mouse_y = 0.0;
+        mouse
+    });
     let remote_mouse = presented
         .snapshot()
         .and_then(|snapshot| snapshot.meta.for_client(local.0))
@@ -773,12 +825,13 @@ pub fn sample_client_input(
             mouse
         });
     let look_state = ps
-        .map(|ps| {
+        .zip(presented.shellshock(local.0))
+        .map(|(ps, shock)| {
             hud_iw4::update_shellshock_look_control(
                 clock.time(),
                 ps.shellshock_time,
                 ps.shellshock_duration,
-                hud_iw4::shellshock_look_parms(ps.shellshock_index),
+                shock.look,
             )
         })
         .unwrap_or(hud_iw4::ShellshockLookState {
@@ -805,13 +858,40 @@ pub fn sample_client_input(
         max_pitch,
         max_yaw,
     );
+    if std::mem::take(&mut actions.client.center_view) {
+        if let Some(ps) = ps {
+            look.angles[0] = (-ps.delta_angles[0] * input_iw4::ANGLE2SHORT) as i32;
+        }
+    }
     let ps_weapon = ps.map(|ps| ps.weapon).unwrap_or(0);
     let life_sequence = presented
         .snapshot()
         .and_then(|snapshot| snapshot.meta.for_client(local.0))
         .map(|meta| meta.life_sequence.0)
         .unwrap_or(0);
-    cg_follow_held_weapon_select(&mut select, ps_weapon, life_sequence, clock.time());
+    if actions.stance_life != Some(life_sequence) {
+        actions.client.stance_latch = 0;
+        actions.stance_life = Some(life_sequence);
+        actions.stance_event_sequence = ps.map_or(0, |ps| ps.event_sequence);
+    } else if let Some(ps) = ps {
+        let pending = ps
+            .event_sequence
+            .wrapping_sub(actions.stance_event_sequence);
+        if pending > 0 {
+            let events = [ps.events_0, ps.events_1, ps.events_2, ps.events_3];
+            for age in (0..pending.min(4)).rev() {
+                let seq = ps.event_sequence.wrapping_sub(1 + age);
+                match events[(seq & 3) as usize] {
+                    6 => actions.client.stance_latch = 0,
+                    7 => actions.client.stance_latch = playerstate_iw4::buttons::CROUCH as i32,
+                    8 => actions.client.stance_latch = playerstate_iw4::buttons::PRONE as i32,
+                    _ => {}
+                }
+            }
+            actions.stance_event_sequence = ps.event_sequence;
+        }
+    }
+    follow_held_weapon_select(&mut select, ps_weapon, life_sequence, clock.time());
     if let Some(ps) = ps {
         if select.index == ps.weapon {
             select.mapped_index = if prediction
@@ -827,6 +907,18 @@ pub fn sample_client_input(
         }
     }
     let slots = std::mem::take(&mut actions.client.action_slots);
+    if let (Some(inbox), Some(ids)) = (action_inbox.as_mut(), request_ids.as_mut()) {
+        for &slot in &slots {
+            let request_id = ids.allocate();
+            let action = sim::ClientAction::ActionSlot {
+                request_id,
+                slot: slot as u8,
+            };
+            if let Err(error) = inbox.push(local.0, action) {
+                diag::warn!(Net, "action_slot: not queued — {error}");
+            }
+        }
+    }
     if let Some(ps) = ps.filter(|_| !frozen) {
         for slot in slots {
             if !input_iw4::weapon_select::weapon_cycle_allowed(ps, clock.time(), select.time, 0, 0)
@@ -863,7 +955,7 @@ pub fn sample_client_input(
             select.index = target;
             select.mapped_index = parent;
             select.time = clock.time();
-            input_iw4::cl_set_ads(&mut actions.client, false);
+            input_iw4::set_ads(&mut actions.client, false);
         }
     }
     let cycles = std::mem::take(&mut actions.client.weapon_cycles);
@@ -880,7 +972,7 @@ pub fn sample_client_input(
                     }
                 }
             }
-            cg_cycle_weapon_select(
+            cycle_weapon_select(
                 &mut select,
                 &mut actions.client,
                 ps,
@@ -910,8 +1002,168 @@ pub fn sample_client_input(
             cmd.off_hand_index = loadout.tactical as u16;
         }
     }
+    match location_mouse {
+        Some((mouse_x, mouse_y)) => {
+            let held = cmd.buttons;
+            let directing =
+                choose_direction == Some(true) && held & playerstate_iw4::buttons::ADS != 0;
+            let cancel = if choose_direction == Some(true) {
+                playerstate_iw4::buttons::MELEE_CHARGE
+            } else {
+                playerstate_iw4::buttons::ADS | playerstate_iw4::buttons::MELEE_CHARGE
+            };
+            cmd.selected_location = cursor.step(&actions, mouse_x, mouse_y, directing);
+            if choose_direction != Some(true) {
+                cmd.selected_location[2] = 0;
+            }
+            cmd.buttons &= playerstate_iw4::buttons::CROUCH | playerstate_iw4::buttons::PRONE;
+            if held & playerstate_iw4::buttons::ATTACK != 0 {
+                cmd.buttons |= playerstate_iw4::buttons::LOCATION_SELECT;
+            } else if held & cancel != 0 {
+                cmd.buttons |= playerstate_iw4::buttons::LOCATION_CANCEL;
+            }
+        }
+        None => *cursor = LocationCursor::default(),
+    }
+    if cmd.buttons & playerstate_iw4::buttons::MELEE_CHARGE != 0
+        && let (Some(ps), Some(snapshot)) = (ps, presented.snapshot())
+        && let Some((yaw, dist)) = melee_charge_target(ps, local.0, snapshot, prediction.0.world())
+    {
+        cmd.melee_charge_yaw = yaw;
+        cmd.melee_charge_dist = dist;
+    }
     template.cmd = cmd;
     template.ready = true;
+}
+
+const AIM_AUTOMELEE_RANGE: f32 = 128.0;
+const MELEE_REGION_TAN_X: f32 = 0.849 * 0.5;
+const MELEE_REGION_TAN_Y: f32 = 0.478 * 0.5;
+const PMF_PRONE: u32 = 0x1;
+
+fn melee_charge_target(
+    ps: &playerstate_iw4::PlayerState,
+    local: sim::ClientId,
+    snapshot: &Snapshot,
+    world: &sim::SimWorld,
+) -> Option<(f32, u8)> {
+    if ps.pm_flags & PMF_PRONE != 0 {
+        return None;
+    }
+    let local_team = snapshot.meta.for_client(local)?.client_state_team;
+    let eye = [
+        ps.origin[0],
+        ps.origin[1],
+        ps.origin[2] + ps.view_height_current,
+    ];
+    let (forward, right, up) = math_iw4::angle_vectors(ps.viewangles);
+    let dot = |a: [f32; 3], b: [f32; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let mut best: Option<(f32, [f32; 3])> = None;
+    for (id, other) in &snapshot.players {
+        if *id == local || other.pm_type > 1 {
+            continue;
+        }
+        let Some(meta) = snapshot.meta.for_client(*id) else {
+            continue;
+        };
+        if meta.lifecycle != sim::ClientLifecycle::Alive
+            || meta.client_state_team == 3
+            || (local_team != 0 && meta.client_state_team == local_team)
+        {
+            continue;
+        }
+        let delta = [
+            other.origin[0] - ps.origin[0],
+            other.origin[1] - ps.origin[1],
+            other.origin[2] - ps.origin[2],
+        ];
+        if dot(delta, delta) > AIM_AUTOMELEE_RANGE * AIM_AUTOMELEE_RANGE {
+            continue;
+        }
+        let center = [other.origin[0], other.origin[1], other.origin[2] + 36.0];
+        let to = [center[0] - eye[0], center[1] - eye[1], center[2] - eye[2]];
+        let depth = dot(to, forward);
+        if depth <= 1.0 {
+            continue;
+        }
+        let x = dot(to, right) / depth;
+        let y = dot(to, up) / depth;
+        if x.abs() - 15.0 / depth > MELEE_REGION_TAN_X
+            || y.abs() - 36.0 / depth > MELEE_REGION_TAN_Y
+        {
+            continue;
+        }
+        let crosshair = x * x + y * y;
+        if best.is_some_and(|(b, _)| b <= crosshair) {
+            continue;
+        }
+        let hit = world.trace_static_world(eye, center, [0.0; 3], [0.0; 3], sim::MASK_SHOT);
+        if hit.fraction < 1.0 {
+            continue;
+        }
+        best = Some((crosshair, delta));
+    }
+    let (_, delta) = best?;
+    let dist = dot(delta, delta).sqrt();
+    if dist <= movement_iw4::MELEE_CHARGE_PLAYER_MELEE_RANGE_DEFAULT {
+        return None;
+    }
+    Some((math_iw4::vec_to_yaw(delta[0], delta[1]), dist as u8))
+}
+
+/// `yaw` is counterclockwise from map up.
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct LocationCursor {
+    pub at: [f32; 2],
+    pub aim: [f32; 2],
+    pub yaw: f32,
+    pub directing: bool,
+}
+
+impl Default for LocationCursor {
+    fn default() -> Self {
+        Self {
+            at: [0.5, 0.5],
+            aim: [0.5, 0.5],
+            yaw: 0.0,
+            directing: false,
+        }
+    }
+}
+
+const LOCATION_CURSOR_SPEED: f32 = 0.6;
+
+impl LocationCursor {
+    fn step(
+        &mut self,
+        input: &ClientActionInput,
+        mouse_x: f32,
+        mouse_y: f32,
+        directing: bool,
+    ) -> [u8; 3] {
+        let scale = LOCATION_CURSOR_SPEED * input.sensitivity * 0.002;
+        let moved = [mouse_x * scale, mouse_y * scale];
+        self.directing = directing;
+        if directing {
+            self.aim = [
+                (self.aim[0] + moved[0]).clamp(0.0, 1.0),
+                (self.aim[1] + moved[1]).clamp(0.0, 1.0),
+            ];
+            let d = [self.aim[0] - self.at[0], self.aim[1] - self.at[1]];
+            if d[0] != 0.0 || d[1] != 0.0 {
+                self.yaw = (-d[0]).atan2(-d[1]).to_degrees().rem_euclid(360.0);
+            }
+        } else {
+            self.at = [
+                (self.at[0] + moved[0]).clamp(0.0, 1.0),
+                (self.at[1] + moved[1]).clamp(0.0, 1.0),
+            ];
+            self.aim = self.at;
+        }
+        let byte = |v: f32| ((v * 255.0 - 128.0).round() as i32).clamp(-128, 127) as i8 as u8;
+        let yaw = (self.yaw * (256.0 / 360.0)).round() as i32 as u8;
+        [byte(self.at[0]), byte(self.at[1]), yaw]
+    }
 }
 
 /// A stall is a stretch in which the authority acked none of the local client's
@@ -943,7 +1195,8 @@ impl BacklogStalls {
         if acks != self.acks_at_last {
             self.acks_at_last = acks;
             self.counted = 0;
-            self.last_ms = None;
+            self.last_ms = Some(now_ms);
+            return None;
         }
         if self
             .last_ms
@@ -964,9 +1217,8 @@ impl BacklogStalls {
 pub fn enforce_client_work_limits(
     pending: Res<PendingClientSends>,
     mut prediction: ResMut<ClientPredictionState>,
-    cg: Res<CgFrameClock>,
-    cls: Res<ClsRealtime>,
-    template: Res<ClientCmdTemplate>,
+    cg: Res<FrameClock>,
+    cls: Res<ClientRealtime>,
     mut signon: ResMut<crate::SignonState>,
     bridge: Option<Res<crate::MasterBridge>>,
     mut gate: ResMut<AuthorityInputGate>,
@@ -983,7 +1235,10 @@ pub fn enforce_client_work_limits(
     let stalled = oldest.is_some_and(|oldest| cg.time().saturating_sub(oldest) > BACKLOG_STALL_MS)
         || duration > BACKLOG_STALL_MS;
     let stall = if stalled {
-        stalls.note(cg.time(), prediction.0.metrics().acks_matched)
+        stalls.note(
+            cls.realtime(),
+            pending.acknowledged.map_or(0, |seq| u64::from(seq.0)),
+        )
     } else {
         stalls.clear();
         None
@@ -992,21 +1247,10 @@ pub fn enforce_client_work_limits(
         Some("ActionOutcomeUnknown: authority outcome deadline exceeded")
     } else if stall.is_some_and(|counted| counted >= BACKLOG_STALLS_BEFORE_FAIL) {
         Some("InputBacklogExceeded")
-    } else if gate.local_cmds_enabled
-        && prediction.0.is_armed()
-        && template.ready
-        && cls.frametime() > 0
-        && (pending.len() >= MAX_REDUNDANT_CMDS
-            || prediction.0.history().len() >= prediction.0.history().cap())
-    {
-        Some("PredictionHistoryExhausted")
     } else {
         None
     };
     let Some(reason) = reason else {
-        // Under the limit the stall is the authority falling behind, not the
-        // client flooding it — that case is `PredictionHistoryExhausted`, which
-        // counts commands instead of milliseconds. Re-adopt and play on.
         if let Some(counted) = stall {
             diag::warn!(
                 Net,
@@ -1019,6 +1263,7 @@ pub fn enforce_client_work_limits(
     };
     gate.local_cmds_enabled = false;
     prediction.0.disarm();
+    let match_key = crate::signon::live_match_key(bridge.as_deref());
     if let Some(bridge) = bridge {
         bridge.fail(reason);
     }
@@ -1026,7 +1271,7 @@ pub fn enforce_client_work_limits(
         crate::SignonFailReason::Transport {
             source: reason.to_owned(),
             stage: crate::FailStage::Transport,
-            match_key: frame::MatchKey::NONE,
+            match_key,
         },
     ));
 }
@@ -1053,8 +1298,8 @@ pub fn predict_local_move(
     gate: Res<AuthorityInputGate>,
     mut pending: ResMut<PendingClientSends>,
     proxy: Res<RemoteProxyState>,
-    cls: Res<ClsRealtime>,
-    cg_clock: Res<CgFrameClock>,
+    cls: Res<ClientRealtime>,
+    cg_clock: Res<FrameClock>,
     trace: Option<ResMut<ClientPhaseTrace>>,
 ) {
     push_phase(trace, "Predict");
@@ -1066,6 +1311,7 @@ pub fn predict_local_move(
         || !prediction.0.is_armed()
         || !template.ready
         || !cg_clock.started()
+        || !pending.has_command_capacity(cg_clock.time())
     {
         return;
     }
@@ -1107,7 +1353,7 @@ pub fn send_pending_commands(
     mut action_inbox: Option<ResMut<ClientActionInbox>>,
     reliable_ack: Res<ClientReliableAck>,
     mut pacer: ResMut<GameplaySendPacer>,
-    cls: Res<ClsRealtime>,
+    cls: Res<ClientRealtime>,
     pending: Res<PendingClientSends>,
     local: Res<LocalPresentClient>,
     trace: Option<ResMut<ClientPhaseTrace>>,
@@ -1132,10 +1378,10 @@ pub fn send_pending_commands(
             return;
         }
 
-        let cmds: Vec<_> = if gameplay_due {
-            pending.iter().copied().collect()
+        let (cmds, retry_cursor) = if gameplay_due {
+            pacer.command_window(&pending)
         } else {
-            Vec::new()
+            (Vec::new(), None)
         };
         let window = &cmds;
         if let Err(e) = link.send_commands(window, &actions, reliable_ack.0) {
@@ -1149,6 +1395,7 @@ pub fn send_pending_commands(
         }
         if gameplay_due {
             pacer.note_sent(now_ms, newest, reliable_ack.0);
+            pacer.retry_cursor = retry_cursor;
         } else {
             pacer.last_sent_ack = reliable_ack.0;
         }
@@ -1178,12 +1425,52 @@ pub struct GameplaySendPacer {
 
     last_sent_seq: Option<CmdSeq>,
 
+    retry_cursor: Option<CmdSeq>,
+
     last_sent_ack: u16,
 
     last_control_ms: Option<i32>,
 }
 
 impl GameplaySendPacer {
+    fn command_window(
+        &self,
+        pending: &PendingClientSends,
+    ) -> (
+        Vec<(CmdSeq, UserCmd, sim::ShotSampleProvenance)>,
+        Option<CmdSeq>,
+    ) {
+        let (mut fresh, retries): (Vec<_>, Vec<_>) = pending
+            .iter()
+            .copied()
+            .partition(|(seq, _, _)| self.last_sent_seq.is_none_or(|last| *seq > last));
+        let mut cursor = self.retry_cursor;
+        // Repeat the oldest command on every send to unblock the ordered stream,
+        // plus a small rotating window. A full 16-command repeat at 60 Hz floods
+        // high-latency links with commands that are already in flight.
+        if let Some(oldest) = retries.first() {
+            fresh.push(*oldest);
+            let rotating = &retries[1..];
+            if !rotating.is_empty() {
+                let start = rotating
+                    .iter()
+                    .position(|(seq, _, _)| cursor.is_none_or(|last| *seq > last))
+                    .unwrap_or(0);
+                for row in rotating
+                    .iter()
+                    .cycle()
+                    .skip(start)
+                    .take(rotating.len().min(3))
+                {
+                    cursor = Some(row.0);
+                    fresh.push(*row);
+                }
+            }
+        }
+        fresh.sort_by_key(|(seq, _, _)| *seq);
+        (fresh, cursor)
+    }
+
     fn gameplay_due(&self, now_ms: i32, newest: Option<CmdSeq>) -> bool {
         if newest.is_none() {
             return false;
@@ -1206,7 +1493,7 @@ pub struct ClientReliableAck(pub u16);
 
 pub fn publish_presented(
     clock: Res<ClientClock>,
-    cg_clock: Res<CgFrameClock>,
+    cg_clock: Res<FrameClock>,
     mut entities: Query<&mut crate::CEntityRuntime>,
     role: Res<RuntimeRole>,
     prediction: Res<ClientPredictionState>,
@@ -1429,9 +1716,9 @@ pub fn publish_presented(
 
 pub fn reset_cgame_on_match_torn_down(
     mut torn: MessageReader<MatchTornDown>,
-    mut clock: ResMut<CgFrameClock>,
-    mut active: ResMut<CgameActive>,
-    mut join: ResMut<CgameJoinCensus>,
+    mut clock: ResMut<FrameClock>,
+    mut active: ResMut<GameActive>,
+    mut join: ResMut<GameJoinCensus>,
     mut adopted: ResMut<LastAdoptedSnapshot>,
     mut received: ResMut<ReceivedTicks>,
     (mut prediction, mut sends, mut signon, mut admission): (
@@ -1444,7 +1731,7 @@ pub fn reset_cgame_on_match_torn_down(
     mut proxy: ResMut<RemoteProxyState>,
     mut presented: ResMut<PresentedSnapshot>,
     mut present_census: ResMut<PresentLocalCensus>,
-    mut select: ResMut<CgWeaponSelect>,
+    mut select: ResMut<WeaponSelect>,
     (mut entity_events, mut pellet_fx, mut entity_event_cursor): (
         ResMut<PendingPresentedEntityEvents>,
         ResMut<PendingPelletFx>,
@@ -1454,7 +1741,7 @@ pub fn reset_cgame_on_match_torn_down(
         ResMut<ClientReliableAck>,
         Option<ResMut<ClientActionInbox>>,
         ResMut<Messages<ReliableControlEvent>>,
-        ResMut<crate::CgScores>,
+        ResMut<crate::Scoreboard>,
     ),
     mut birth: Option<ResMut<CEntityBirthCensus>>,
     mut pacer: ResMut<GameplaySendPacer>,
@@ -1477,7 +1764,7 @@ pub fn reset_cgame_on_match_torn_down(
     *proxy = RemoteProxyState::default();
     presented.clear();
     *present_census = PresentLocalCensus::default();
-    *select = CgWeaponSelect::default();
+    *select = WeaponSelect::default();
 
     *entity_events = PendingPresentedEntityEvents::default();
     pellet_fx.0.clear();
@@ -1485,7 +1772,7 @@ pub fn reset_cgame_on_match_torn_down(
 
     *reliable_ack = ClientReliableAck::default();
     events.clear();
-    *scores = crate::CgScores::default();
+    *scores = crate::Scoreboard::default();
     if let Some(actions) = actions.as_mut() {
         actions.clear();
     }
@@ -1506,10 +1793,10 @@ pub fn register_client_runtime(app: &mut App) {
         .init_resource::<crate::ClientAdmission>()
         .init_resource::<ClientPredictionState>()
         .init_resource::<ClientClock>()
-        .init_resource::<CgFrameClock>()
-        .init_resource::<CgameActive>()
-        .init_resource::<CgameJoinCensus>()
-        .init_resource::<ClsRealtime>()
+        .init_resource::<FrameClock>()
+        .init_resource::<GameActive>()
+        .init_resource::<GameJoinCensus>()
+        .init_resource::<ClientRealtime>()
         .init_resource::<ReceivedTicks>()
         .init_resource::<LastAdoptedSnapshot>()
         .init_resource::<PresentLocalCensus>()
@@ -1517,7 +1804,8 @@ pub fn register_client_runtime(app: &mut App) {
         .init_resource::<PendingPelletFx>()
         .init_resource::<PendingClientSends>()
         .init_resource::<ClientCmdTemplate>()
-        .init_resource::<CgWeaponSelect>()
+        .init_resource::<WeaponSelect>()
+        .init_resource::<LocationCursor>()
         .init_resource::<ClientReliableAck>()
         .init_resource::<GameplaySendPacer>()
         .add_message::<ReliableControlEvent>()
@@ -1525,7 +1813,7 @@ pub fn register_client_runtime(app: &mut App) {
         .add_message::<frame::MatchTornDown>()
         .init_resource::<RemoteProxyState>()
         .init_resource::<ClientShotSamples>()
-        .init_resource::<crate::CgScores>()
+        .init_resource::<crate::Scoreboard>()
         .add_message::<crate::SvcLocalSound>()
         .add_message::<crate::SvcCardSlotCmd>()
         .add_message::<crate::SvcOpenMenuCmd>()
@@ -1567,6 +1855,9 @@ pub fn register_client_runtime(app: &mut App) {
             flush_bootstrap_applied
                 .in_set(ClientSet::Reconcile)
                 .after(reconcile_prediction),
+            apply_weapon_switch_requests
+                .in_set(ClientSet::Input)
+                .before(sample_client_input),
             sample_client_input.in_set(ClientSet::Input),
             predict_local_move.in_set(ClientSet::Predict),
             send_pending_commands.in_set(ClientSet::Send),

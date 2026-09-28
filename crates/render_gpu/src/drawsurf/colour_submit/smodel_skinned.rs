@@ -1,27 +1,41 @@
+use std::sync::Arc;
+
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Buffer, BufferDescriptor, BufferUsages};
 use bevy::render::renderer::{RenderDevice, RenderQueue};
 
 use super::{ExtractedColourRefs, GpuSubmitRefusal};
-use crate::drawsurf::gpu_resources::{padded_upload_len, write_buffer_padded};
+use crate::drawsurf::gpu_resources::padded_upload_len;
 
 #[derive(Default)]
 pub(super) struct SmodelSkinnedTess {
     verts: Vec<[u8; asset_iw4::size::GFX_PACKED_VERTEX]>,
     indices: Vec<u32>,
-    spans: HashMap<(u32, u32), (u32, u32)>,
+    spans: HashMap<(u32, u32), SkinnedSpan>,
+    geometry: Option<Arc<super::ExtractedStaticGeometry>>,
     vertex: Option<Buffer>,
     index: Option<Buffer>,
     vertex_cap: usize,
     index_cap: usize,
+    uploaded_verts: usize,
+    uploaded_indices: usize,
+}
+
+struct SkinnedSpan {
+    world_from_local: Mat4,
+    span: (u32, u32),
 }
 
 impl SmodelSkinnedTess {
-    pub(super) fn begin_frame(&mut self) {
+    pub(super) fn begin_frame(&mut self) {}
+
+    fn forget(&mut self) {
         self.verts.clear();
         self.indices.clear();
         self.spans.clear();
+        self.uploaded_verts = 0;
+        self.uploaded_indices = 0;
     }
 
     pub(super) fn append_draw(
@@ -31,10 +45,21 @@ impl SmodelSkinnedTess {
         surface: u32,
         world_from_local: Mat4,
     ) -> Result<(u32, u32), GpuSubmitRefusal> {
-        if let Some(&span) = self.spans.get(&(placement, surface)) {
-            return Ok(span);
+        let geometry = &extracted.world.static_geometry;
+        if !self
+            .geometry
+            .as_ref()
+            .is_some_and(|kept| Arc::ptr_eq(kept, geometry))
+        {
+            self.forget();
+            self.geometry = Some(Arc::clone(geometry));
         }
-        let geom = extracted.world.static_geometry.as_ref();
+        if let Some(kept) = self.spans.get(&(placement, surface))
+            && kept.world_from_local == world_from_local
+        {
+            return Ok(kept.span);
+        }
+        let geom = geometry.as_ref();
         let &(packed_off, packed_n) = geom
             .smodel_surface_verts
             .get(surface as usize)
@@ -61,29 +86,39 @@ impl SmodelSkinnedTess {
             .smodel_indices
             .get(index_start_us..index_start_us.saturating_add(index_count_us))
             .ok_or(GpuSubmitRefusal::SmodelSkinnedDestMissing { placement })?;
-        let dest_base = self.verts.len() as u32;
+        let packed_end = packed_off.saturating_add(packed_n);
+        if src_ix
+            .iter()
+            .any(|&idx| idx < packed_off || idx >= packed_end)
+        {
+            return Err(GpuSubmitRefusal::SmodelSkinnedDestMissing { placement });
+        }
+        let dest_base = self.verts.len();
         self.verts
-            .resize(self.verts.len().saturating_add(packed_n_us), [0u8; 32]);
-        let dest = self
-            .verts
-            .get_mut(dest_base as usize..dest_base as usize + packed_n_us)
-            .ok_or(GpuSubmitRefusal::SmodelSkinnedDestMissing { placement })?;
+            .resize(dest_base.saturating_add(packed_n_us), [0u8; 32]);
         let m = world_from_local.to_cols_array();
         let fixed = lighting_iw4::setup_transform_unit_vec(&m);
-        lighting_iw4::r_skin_xsurface_unique_verts(dest, src, &m, &fixed)
-            .map_err(|_| GpuSubmitRefusal::SmodelSkinnedDestMissing { placement })?;
-        let dest_index_start = self.indices.len() as u32;
-        self.indices.reserve(index_count_us);
-        let packed_end = packed_off.saturating_add(packed_n);
-        for &idx in src_ix {
-            if idx < packed_off || idx >= packed_end {
-                return Err(GpuSubmitRefusal::SmodelSkinnedDestMissing { placement });
-            }
-            self.indices
-                .push(idx.saturating_sub(packed_off).saturating_add(dest_base));
+        if lighting_iw4::skin_xsurface_unique_verts(&mut self.verts[dest_base..], src, &m, &fixed)
+            .is_err()
+        {
+            self.verts.truncate(dest_base);
+            return Err(GpuSubmitRefusal::SmodelSkinnedDestMissing { placement });
         }
+        let dest_index_start = self.indices.len() as u32;
+        let dest_base = dest_base as u32;
+        self.indices.extend(
+            src_ix
+                .iter()
+                .map(|&idx| idx.saturating_sub(packed_off).saturating_add(dest_base)),
+        );
         let span = (dest_index_start, index_count);
-        self.spans.insert((placement, surface), span);
+        self.spans.insert(
+            (placement, surface),
+            SkinnedSpan {
+                world_from_local,
+                span,
+            },
+        );
         Ok(span)
     }
 
@@ -96,28 +131,39 @@ impl SmodelSkinnedTess {
         let vneed = padded_upload_len(vbytes.len());
         let ineed = padded_upload_len(ibytes.len());
         if self.vertex.is_none() || self.vertex_cap < vneed {
+            self.vertex_cap = vneed.next_power_of_two();
             self.vertex = Some(device.create_buffer(&BufferDescriptor {
                 label: Some("iw4_smodel_skinned_unique_vb"),
-                size: vneed as u64,
+                size: self.vertex_cap as u64,
                 usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             }));
-            self.vertex_cap = vneed;
+            self.uploaded_verts = 0;
         }
         if self.index.is_none() || self.index_cap < ineed {
+            self.index_cap = ineed.next_power_of_two();
             self.index = Some(device.create_buffer(&BufferDescriptor {
                 label: Some("iw4_smodel_skinned_unique_ib"),
-                size: ineed as u64,
+                size: self.index_cap as u64,
                 usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             }));
-            self.index_cap = ineed;
+            self.uploaded_indices = 0;
         }
-        if let Some(buffer) = self.vertex.as_ref() {
-            write_buffer_padded(queue, buffer, vbytes);
+        const VERTEX_BYTES: usize = asset_iw4::size::GFX_PACKED_VERTEX;
+        if let Some(buffer) = self.vertex.as_ref()
+            && self.uploaded_verts < self.verts.len()
+        {
+            let from = self.uploaded_verts * VERTEX_BYTES;
+            queue.write_buffer(buffer, from as u64, &vbytes[from..]);
+            self.uploaded_verts = self.verts.len();
         }
-        if let Some(buffer) = self.index.as_ref() {
-            write_buffer_padded(queue, buffer, ibytes);
+        if let Some(buffer) = self.index.as_ref()
+            && self.uploaded_indices < self.indices.len()
+        {
+            let from = self.uploaded_indices * 4;
+            queue.write_buffer(buffer, from as u64, &ibytes[from..]);
+            self.uploaded_indices = self.indices.len();
         }
     }
 

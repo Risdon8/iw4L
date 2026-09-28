@@ -1,5 +1,5 @@
 use std::{
-    alloc::{GlobalAlloc, Layout, System},
+    alloc::{GlobalAlloc, Layout},
     cell::Cell,
     sync::atomic::{AtomicU8, AtomicU64, AtomicUsize, Ordering},
 };
@@ -112,28 +112,33 @@ pub fn release_freed_heap() -> std::time::Duration {
     at.elapsed()
 }
 
+#[cfg(windows)]
+static BACKING: mimalloc::MiMalloc = mimalloc::MiMalloc;
+#[cfg(not(windows))]
+static BACKING: std::alloc::System = std::alloc::System;
+
 pub struct ProcessCountingAllocator;
 
 unsafe impl GlobalAlloc for ProcessCountingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         record_alloc(layout.size() as u64);
-        unsafe { System.alloc(layout) }
+        unsafe { BACKING.alloc(layout) }
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
         record_alloc(layout.size() as u64);
-        unsafe { System.alloc_zeroed(layout) }
+        unsafe { BACKING.alloc_zeroed(layout) }
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         record_dealloc(layout.size() as u64);
-        unsafe { System.dealloc(ptr, layout) }
+        unsafe { BACKING.dealloc(ptr, layout) }
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         record_alloc(new_size as u64);
         record_dealloc(layout.size() as u64);
-        unsafe { System.realloc(ptr, layout, new_size) }
+        unsafe { BACKING.realloc(ptr, layout, new_size) }
     }
 }
 

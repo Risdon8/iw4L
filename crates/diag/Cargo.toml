@@ -9,5 +9,8 @@ description = "Process diagnostics: Channel/Level sinks, JSONL traces, counting 
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+mimalloc = { version = "0.1", default-features = false }
+
 [lints]
 workspace = true

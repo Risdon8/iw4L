@@ -37,7 +37,8 @@ pub use model_lighting::{
     ResolvedModelLightingTable,
 };
 pub use model_lighting_atlas::{
-    WorldModelLightingAtlas, model_lighting_atlas_image, model_lighting_atlas_write_tile,
+    ModelLightingAtlasTileWrite, ModelLightingAtlasTileWrites, WorldModelLightingAtlas,
+    model_lighting_atlas_image, model_lighting_atlas_write_tile, model_lighting_tile_texels,
 };
 pub use plugin::RenderScenePlugin;
 pub use present::{TessMaterials, WorldPresentFacts};

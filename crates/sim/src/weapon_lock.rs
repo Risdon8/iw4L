@@ -47,6 +47,9 @@ pub(crate) fn update(world: &mut FrameWorld, id: ClientId, now: i32) {
         out_of_ads_at: now,
         ..Default::default()
     };
+    if lock.flags & crate::script::SCRIPT_LOCK != 0 && lock.life == life {
+        return;
+    }
     if lock.weapon != ps.weapon || lock.life != life || now < lock.sampled_at {
         lock = reset;
     }

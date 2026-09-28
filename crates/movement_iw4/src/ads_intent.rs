@@ -39,7 +39,7 @@ fn scoped_weapon_raised(ps: &PlayerState, weapon_def_scope: bool) -> bool {
     weapon_def_scope && ps.f_weapon_pos_frac > 0.0
 }
 
-pub fn pm_update_ads_intent(
+pub fn update_ads_intent(
     ps: &mut PlayerState,
     cmd: &UserCmd,
     old_buttons: u32,

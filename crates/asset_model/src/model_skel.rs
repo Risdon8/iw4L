@@ -36,10 +36,7 @@ pub fn xmodel_lod_for_dist(num_lods: u8, lod_dist: [f32; 4], dist: f32) -> Optio
     None
 }
 
-pub fn dobj_has_lod_for_dist(
-    submodels: impl IntoIterator<Item = (u8, [f32; 4])>,
-    dist: f32,
-) -> bool {
+pub fn has_lod_for_dist(submodels: impl IntoIterator<Item = (u8, [f32; 4])>, dist: f32) -> bool {
     let mut saw = false;
     for (num_lods, lod_dist) in submodels {
         saw = true;
@@ -208,6 +205,20 @@ impl SharedXModelSurfaces {
             {
                 self.0.insert(name.to_owned(), (skel.clone(), lod));
             }
+        }
+    }
+
+    pub fn retain_iw5(
+        &mut self,
+        stream: &fastfile_iw5::ZoneStream<'_>,
+        geometry: fastfile_iw5::XModelGeometry,
+        skel: std::sync::Arc<ModelSkel>,
+    ) {
+        if geometry.surfaces.is_some()
+            && let Some(name) = geometry.surfaces_name.and_then(|p| stream.cstr(p).ok())
+            && !name.starts_with(',')
+        {
+            self.0.insert(name.to_owned(), (skel, 0));
         }
     }
 }
@@ -1371,7 +1382,7 @@ pub fn capture_fpv_skel_iw5(
     if model_kind(&name) != Some(ModelKind::Fpv) {
         return None;
     }
-    capture_model_skel_iw5(stream, strings, geometry, name, materials)
+    capture_model_skel_iw5(stream, strings, geometry, name, materials, None)
 }
 
 pub fn capture_world_weapon_skel_iw5(
@@ -1384,7 +1395,7 @@ pub fn capture_world_weapon_skel_iw5(
     if model_kind(&name) != Some(ModelKind::WorldWeapon) {
         return None;
     }
-    capture_model_skel_iw5(stream, strings, geometry, name, materials)
+    capture_model_skel_iw5(stream, strings, geometry, name, materials, None)
 }
 
 pub fn capture_xmodel_skel_iw5(
@@ -1394,7 +1405,25 @@ pub fn capture_xmodel_skel_iw5(
     materials: &MaterialCatalog,
 ) -> Option<ModelSkel> {
     let name = geometry.name.and_then(|p| stream.cstr(p).ok())?.to_owned();
-    capture_model_skel_iw5(stream, strings, geometry, name, Some(materials))
+    capture_model_skel_iw5(stream, strings, geometry, name, Some(materials), None)
+}
+
+pub fn capture_xmodel_skel_iw5_with_shared(
+    stream: &fastfile_iw5::ZoneStream<'_>,
+    strings: &fastfile_iw5::ScriptStrings,
+    geometry: fastfile_iw5::XModelGeometry,
+    materials: &MaterialCatalog,
+    shared: &SharedXModelSurfaces,
+) -> Option<ModelSkel> {
+    let name = geometry.name.and_then(|p| stream.cstr(p).ok())?.to_owned();
+    capture_model_skel_iw5(
+        stream,
+        strings,
+        geometry,
+        name,
+        Some(materials),
+        Some(shared),
+    )
 }
 
 pub fn capture_body_skel_iw5(
@@ -1407,7 +1436,7 @@ pub fn capture_body_skel_iw5(
     if model_kind(&name) != Some(ModelKind::Soldier) {
         return None;
     }
-    capture_model_skel_iw5(stream, strings, geometry, name, materials)
+    capture_model_skel_iw5(stream, strings, geometry, name, materials, None)
 }
 
 fn capture_model_skel_iw5(
@@ -1416,10 +1445,10 @@ fn capture_model_skel_iw5(
     geometry: fastfile_iw5::XModelGeometry,
     name: String,
     materials: Option<&MaterialCatalog>,
+    shared: Option<&SharedXModelSurfaces>,
 ) -> Option<ModelSkel> {
     use fastfile_iw5::size as iw5sz;
 
-    let surfaces = geometry.surfaces?;
     let bone_names = geometry.bone_names?;
     let base_mat = geometry.base_mat?;
 
@@ -1455,6 +1484,43 @@ fn capture_model_skel_iw5(
 
     let num_child = geometry.num_bones.saturating_sub(geometry.num_root_bones);
     let pose = capture_pose_src_iw5(stream, &geometry, &bone_name_strs, &bones, num_child);
+    let material_at = |surface_index: usize| {
+        geometry.material_handles.and_then(|handles| {
+            materials?.material_index(Ptr {
+                block: handles.block,
+                offset: handles.offset + (surface_index * stream.pointer_bytes()) as u32,
+            })
+        })
+    };
+
+    let Some(surfaces) = geometry.surfaces else {
+        let surfaces_name = stream
+            .cstr(geometry.surfaces_name?)
+            .ok()?
+            .trim_start_matches(',');
+        let (source, _) = shared?.0.get(surfaces_name)?;
+        if source.surface_vertex_ranges.len() != geometry.surface_count
+            || source.vert_skin.iter().any(|skin| {
+                skin.bones
+                    .iter()
+                    .zip(skin.weights)
+                    .any(|(bone, weight)| weight != 0.0 && usize::from(*bone) >= geometry.num_bones)
+            })
+        {
+            return None;
+        }
+        return Some(ModelSkel {
+            name,
+            bones,
+            bone_names: bone_name_strs,
+            tag_view,
+            tag_weapon,
+            pose,
+            surface_materials: (0..geometry.surface_count).map(material_at).collect(),
+            radius: geometry.radius,
+            ..(**source).clone()
+        });
+    };
 
     let mut positions = Vec::new();
     let mut normals = Vec::new();
@@ -1547,12 +1613,7 @@ fn capture_model_skel_iw5(
         }
         surface_vertex_ranges.push((base, vertex_count));
         surface_index_ranges.push((index_start, indices.len() - index_start));
-        surface_materials.push(geometry.material_handles.and_then(|handles| {
-            materials?.material_index(Ptr {
-                block: handles.block,
-                offset: handles.offset + (surface_index * stream.pointer_bytes()) as u32,
-            })
-        }));
+        surface_materials.push(material_at(surface_index));
     }
 
     Some(ModelSkel {
