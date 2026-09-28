@@ -104,6 +104,32 @@ impl PcmAudio {
         }
     }
 
+    /// Scale the samples so the loudest peak sits at `target_peak`.
+    ///
+    /// Decoded music is often mastered far quieter than game effects; peak
+    /// normalising brings the tracks up to the same headroom before the
+    /// per-track volume is applied.
+    pub fn normalized(self, target_peak: f32) -> Self {
+        let peak = self
+            .samples
+            .iter()
+            .fold(0.0f32, |max, sample| max.max(sample.abs()));
+        if peak <= 1e-6 {
+            return self;
+        }
+        let gain = (target_peak / peak).min(16.0);
+        let samples: Arc<[f32]> = self
+            .samples
+            .iter()
+            .map(|sample| sample * gain)
+            .collect::<Vec<f32>>()
+            .into();
+        Self {
+            samples,
+            ..self
+        }
+    }
+
     pub fn live_pan(&self) -> Option<&LivePan> {
         self.live_pan.as_ref()
     }
@@ -302,4 +328,34 @@ pub fn decode_audio_bytes(bytes: &[u8]) -> Option<PcmAudio> {
         sample_rate,
         live_pan: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pcm(samples: Vec<f32>) -> PcmAudio {
+        PcmAudio {
+            samples: samples.into(),
+            channels: 1,
+            sample_rate: 8_000,
+            live_pan: None,
+        }
+    }
+
+    #[test]
+    fn normalized_scales_to_the_target_peak() {
+        let out = pcm(vec![0.0, 0.1, -0.2, 0.05]).normalized(1.0);
+        let peak = out
+            .samples()
+            .iter()
+            .fold(0.0f32, |max, sample| max.max(sample.abs()));
+        assert!((peak - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn normalized_leaves_silence_alone() {
+        let out = pcm(vec![0.0, 0.0, 0.0]).normalized(1.0);
+        assert!(out.samples().iter().all(|sample| *sample == 0.0));
+    }
 }
