@@ -6,6 +6,7 @@ mod emit;
 mod entity_events;
 mod frontend;
 mod messages;
+mod music;
 mod pcm;
 mod playback;
 mod plugin;
@@ -28,6 +29,7 @@ pub use clip_store::{ClipPath, ClipPathCost, ClipPrepCost, ClipStore, PREP_BATCH
 pub use emit::{BobCycleTracker, emit_footstep_on_bob_wrap, emit_weapon_fire};
 pub use frontend::FrontendAudio;
 pub use match_set::{AudioReady, AudioSilent};
+pub use music::{MusicPlayer, MusicRequest, Repeat};
 pub use messages::{
     AliasCommand, BoundWeaponSound, Footstep, LandSound, PlayAlias, SND_ENT_LOCAL,
     ViewmodelNotetracks, WeaponSound, ent_from_number,

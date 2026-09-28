@@ -13,5 +13,6 @@ impl Plugin for AudioPlugin {
         crate::entity_events::register_entity_event_audio(app);
         crate::weapon_lock::register(app);
         crate::rumble::register(app);
+        crate::music::register(app);
     }
 }
