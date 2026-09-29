@@ -275,7 +275,14 @@ fn scan(player: &mut MusicPlayer) {
     collect_tracks(&player.dir, &mut found);
     found.sort();
     for path in found {
-        player.names.push(display_name(&path));
+        let (artist, title) = read_tags(&path);
+        let name = match (artist, title) {
+            (Some(artist), Some(title)) => format!("{artist} - {title}"),
+            (None, Some(title)) => title,
+            (Some(artist), None) => artist,
+            (None, None) => display_name(&path),
+        };
+        player.names.push(name);
         player.paths.push(path);
     }
     player.scanned = true;
@@ -302,6 +309,66 @@ fn collect_tracks(dir: &Path, out: &mut Vec<PathBuf>) {
             out.push(path);
         }
     }
+}
+
+/// Best-effort embedded tags (ID3 / Vorbis comments). Returns `(artist, title)`.
+/// Only a header window is read, so a whole library stays cheap to scan.
+fn read_tags(path: &Path) -> (Option<String>, Option<String>) {
+    use std::io::Read;
+    use symphonia::core::formats::FormatOptions;
+    use symphonia::core::io::MediaSourceStream;
+    use symphonia::core::meta::{MetadataOptions, StandardTagKey};
+    use symphonia::core::probe::Hint;
+
+    let mut artist = None;
+    let mut title = None;
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return (artist, title);
+    };
+    let mut head = vec![0u8; 512 * 1024];
+    let Ok(n) = file.read(&mut head) else {
+        return (artist, title);
+    };
+    head.truncate(n);
+    let stream = MediaSourceStream::new(Box::new(std::io::Cursor::new(head)), Default::default());
+    let Ok(mut probed) = symphonia::default::get_probe().format(
+        &Hint::new(),
+        stream,
+        &FormatOptions::default(),
+        &MetadataOptions::default(),
+    ) else {
+        return (artist, title);
+    };
+    // Tags may arrive in the probe log or on the reader, depending on format.
+    let mut tags: Vec<(Option<StandardTagKey>, String)> = Vec::new();
+    if let Some(metadata) = probed.metadata.get()
+        && let Some(revision) = metadata.current()
+    {
+        for tag in revision.tags() {
+            tags.push((tag.std_key, tag.value.to_string()));
+        }
+    }
+    if let Some(revision) = probed.format.metadata().current() {
+        for tag in revision.tags() {
+            tags.push((tag.std_key, tag.value.to_string()));
+        }
+    }
+    for (std_key, value) in tags {
+        let value = value.trim();
+        if value.is_empty() {
+            continue;
+        }
+        match std_key {
+            Some(StandardTagKey::TrackTitle) if title.is_none() => {
+                title = Some(value.to_owned());
+            }
+            Some(StandardTagKey::Artist) if artist.is_none() => {
+                artist = Some(value.to_owned());
+            }
+            _ => {}
+        }
+    }
+    (artist, title)
 }
 
 /// A readable name from the file: drop a leading track number, turn separators
