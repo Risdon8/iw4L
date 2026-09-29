@@ -46,6 +46,51 @@ pub enum MusicRequest {
 #[derive(Component)]
 pub(crate) struct MusicTrack;
 
+/// Visible rows when the track list is open.
+pub const MUSIC_HUD_ROWS: usize = 9;
+
+/// Shared state between the console (which reads the keys) and the HUD (which
+/// draws the panel).
+#[derive(Resource)]
+pub struct MusicHudState {
+    pub visible: bool,
+    pub browsing: bool,
+    pub selected: usize,
+    pub scroll: usize,
+}
+
+impl MusicHudState {
+    pub fn browsing(&self) -> bool {
+        self.browsing
+    }
+
+    /// Keep the selection on screen.
+    pub fn clamp_scroll(&mut self, count: usize) {
+        let rows = MUSIC_HUD_ROWS;
+        let max_scroll = count.saturating_sub(rows);
+        self.scroll = self.scroll.min(max_scroll);
+        if self.selected < self.scroll {
+            self.scroll = self.selected;
+        }
+        if self.selected >= self.scroll + rows {
+            self.scroll = self.selected + 1 - rows;
+        }
+        self.scroll = self.scroll.min(max_scroll);
+    }
+}
+
+impl Default for MusicHudState {
+    fn default() -> Self {
+        Self {
+            visible: true,
+            browsing: false,
+            selected: 0,
+            scroll: 0,
+        }
+    }
+}
+
+
 #[derive(Resource)]
 pub struct MusicPlayer {
     dir: PathBuf,
@@ -157,6 +202,7 @@ impl MusicPlayer {
 
 pub(crate) fn register(app: &mut App) {
     app.init_resource::<MusicPlayer>()
+        .init_resource::<MusicHudState>()
         .add_systems(Startup, scan_music_on_start)
         .add_systems(Update, drive_music.in_set(frame::ClientSet::Effects));
 }

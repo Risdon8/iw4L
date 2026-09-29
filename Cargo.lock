@@ -3248,6 +3248,7 @@ dependencies = [
  "asset_material",
  "asset_transport",
  "assets",
+ "audio",
  "bevy",
  "diag",
  "entity_iw4",
