@@ -245,6 +245,7 @@ fn update(
         .as_ref()
         .is_none_or(|a| clip.0.as_ref().is_some_and(|b| Arc::ptr_eq(a, b)));
     if (mode.active || host.enter_requested || host.activating) && (!alive || !same_map) {
+        diag::info!(World, "skate: stopping (alive={alive} same_map={same_map})");
         stop(&mut host, &mut mode, authority);
     }
     if !same_map {

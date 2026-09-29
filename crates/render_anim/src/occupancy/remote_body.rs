@@ -23,6 +23,16 @@ use assets::{PreparedBodies, PreparedWeapons, PreparedWorldWeapons};
 use bevy::prelude::*;
 use bevy::tasks::ComputeTaskPool;
 use entity_iw4::{ET_PLAYER, ET_PLAYER_CORPSE};
+
+/// `IW4L_SKATE_DEBUG=1` turns on a rate-limited pose log for the local client.
+fn skate_debug_log() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if !*ON.get_or_init(|| std::env::var_os("IW4L_SKATE_DEBUG").is_some()) {
+        return false;
+    }
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 60 == 0
+}
 use frame::{ModelLightingSeated, ViewSubject, WorkerCmdSet};
 use net::{
     CEntity, CEntityRuntime, ClientSet, FrameClock, LocalPresentClient, PlayerDrawGate,
@@ -818,6 +828,14 @@ impl<'a> RemotePoseFrame<'a> {
             // The client that just stopped skating still has the board in its
             // cached geometry, so force a re-pose once instead of reusing it.
             let stale_board = persist_key == self.skate.client && !skating;
+            if skate_debug_log() && persist_key == self.skate.client {
+                diag::info!(
+                    World,
+                    "skate pose: client={persist_key} corpse={is_corpse} active={} bones={} skating={skating}",
+                    self.skate.active,
+                    self.skate.bones.len()
+                );
+            }
             if !stale_board
                 && skip_frozen_corpse_dobj(
                     e_type == ET_PLAYER_CORPSE,
