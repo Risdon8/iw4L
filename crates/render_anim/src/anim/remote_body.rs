@@ -1264,6 +1264,9 @@ pub struct RemoteSkinPoseHashes {
     skinned: HashMap<u32, CachedSkinnedBody>,
 
     last_cache_hits: HashSet<u32>,
+
+    /// Last `SkateMode::reset_epoch` seen for the skating client.
+    skate_epoch: HashMap<u32, u64>,
 }
 
 #[derive(Clone, Default)]
@@ -1355,6 +1358,23 @@ impl RemoteSkinPoseHashes {
             .is_some_and(|&prev| prev == hash);
         self.last.insert(persist_key, hash);
         pose_same
+    }
+
+    /// Drop a client's cached body when skate mode's reset epoch changes, so a
+    /// boarded pose cannot be reused after skating stops (death or J).
+    pub fn invalidate_skate(&mut self, persist_key: u32, epoch: u64) {
+        let stored = self
+            .skate_epoch
+            .get(&persist_key)
+            .copied()
+            .unwrap_or(u64::MAX);
+        if stored == epoch {
+            return;
+        }
+        self.skate_epoch.insert(persist_key, epoch);
+        self.skinned.remove(&persist_key);
+        self.last.remove(&persist_key);
+        self.last_cache_hits.remove(&persist_key);
     }
 }
 

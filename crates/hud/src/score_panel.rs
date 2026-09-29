@@ -253,7 +253,6 @@ pub(crate) fn update(
             VALUE_SCALE,
             fade(ACCENT, alpha),
         );
-        y += LINE_H;
     }
 
     let mut fonts = HashMap::new();

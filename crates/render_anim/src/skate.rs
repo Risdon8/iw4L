@@ -182,6 +182,7 @@ fn stop(host: &mut Host, mode: &mut SkateMode, authority: &mut net::AuthorityWor
     mode.camera = None;
     mode.bones.clear();
     mode.status.clear();
+    mode.reset_epoch = mode.reset_epoch.wrapping_add(1);
     diag::info!(World, "Skate mode stopped; map session retained");
 }
 

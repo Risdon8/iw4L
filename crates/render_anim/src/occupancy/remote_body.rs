@@ -774,6 +774,11 @@ impl<'a> RemotePoseFrame<'a> {
         let trees = &mut *self.trees;
         let pending = &mut self.pending;
         let pose_hashes = &mut *self.pose_hashes;
+        // When skating stops (death or J), drop the skating client's cached
+        // body so its boarded geometry cannot be reused.
+        if persist_key == self.skate.client {
+            pose_hashes.invalidate_skate(persist_key, self.skate.reset_epoch);
+        }
         let submit = &mut *self.submit;
         let slot = remote_body_scene_slot(self.scene, persist_key);
         let scene_ent_surface_count = slot.surface_count;
@@ -828,10 +833,10 @@ impl<'a> RemotePoseFrame<'a> {
             // The client that just stopped skating still has the board in its
             // cached geometry, so force a re-pose once instead of reusing it.
             let stale_board = persist_key == self.skate.client && !skating;
-            if skate_debug_log() && persist_key == self.skate.client {
+            if skate_debug_log() && (self.skate.active || is_corpse) {
                 diag::info!(
                     World,
-                    "skate pose: client={persist_key} corpse={is_corpse} active={} bones={} skating={skating}",
+                    "skate pose: key={persist_key} corpse={is_corpse} e_type={e_type} active={} bones={} skating={skating}",
                     self.skate.active,
                     self.skate.bones.len()
                 );

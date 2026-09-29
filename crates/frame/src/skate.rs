@@ -31,4 +31,8 @@ pub struct SkateMode {
 
     /// Horizontal board speed in game units per second (inches/s).
     pub speed_u_per_s: f32,
+
+    /// Bumped whenever skating stops so the renderer drops cached boarded
+    /// geometry instead of reusing it.
+    pub reset_epoch: u64,
 }
