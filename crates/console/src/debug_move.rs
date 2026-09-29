@@ -187,7 +187,7 @@ pub(crate) fn route_debug_move_commands(
                     None => { skate.toggle_requested = true; },
                     _ => { echo("usage: skate [on|off|status]".into(), &mut console, &mut line); continue; }
                 }
-                echo(format!("skate active={} ready={} controller={:?} tick={} {}",skate.active,skate.preloaded,skate.controller,skate.tick,skate.status),&mut console,&mut line);
+                echo(format!("skate active={} ready={} controller={:?} tick={} score={} combo={} x{:.1} trick={:?} {}",skate.active,skate.preloaded,skate.controller,skate.tick,skate.score_total,skate.score_sequence,skate.score_multiplier,skate.trick,skate.status),&mut console,&mut line);
             }
 
             "showpos" | "debug_pos" => match cmd.args.first().map(String::as_str) {
