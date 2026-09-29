@@ -19,6 +19,12 @@ pub struct RunTimer {
     /// The course the timer is following.
     pub course: String,
     pub status: String,
+
+    /// Waypoint to the next checkpoint: name, distance (game units) and a
+    /// rough relative direction (`AHEAD`/`LEFT`/`RIGHT`/`BEHIND`).
+    pub next_label: Option<String>,
+    pub next_distance: Option<f32>,
+    pub next_dir: String,
 }
 
 #[derive(Clone, Debug)]

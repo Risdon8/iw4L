@@ -154,7 +154,14 @@ pub(crate) fn update(
         })
         .unwrap_or_default();
 
-    if !show_speed && timer_text.is_none() && split_lines.is_empty() {
+    let waypoint = timer.as_ref().and_then(|timer| {
+        let label = timer.next_label.as_deref()?;
+        let distance = timer.next_distance? / 39.37;
+        let verb = if timer.running { "NEXT" } else { "GO" };
+        Some(format!("{verb} {label}  {distance:.0}m  {}", timer.next_dir))
+    });
+
+    if !show_speed && timer_text.is_none() && split_lines.is_empty() && waypoint.is_none() {
         return;
     }
 
@@ -173,6 +180,10 @@ pub(crate) fn update(
             TEXT,
         );
         y += LINE_H + 4.0;
+    }
+    if let Some(line) = waypoint.as_deref() {
+        painter.text(font, line, LEFT_X, y, VALUE_SCALE, ACCENT);
+        y += LINE_H;
     }
     if let Some(line) = timer_text.as_deref() {
         painter.text(font, line, LEFT_X, y, VALUE_SCALE, ACCENT);

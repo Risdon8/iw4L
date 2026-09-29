@@ -810,12 +810,20 @@ impl<'a> RemotePoseFrame<'a> {
             }) else {
                 return Ok(PoseOneOutcome::NoBodyLod);
             };
-            if skip_frozen_corpse_dobj(
-                e_type == ET_PLAYER_CORPSE,
-                reuse,
-                last_cache_hits.contains(&persist_key),
-                pose_hashes.has_lods(persist_key, lods.tuple()),
-            ) {
+            let skating = self.skate.active
+                && !self.skate.bones.is_empty()
+                && persist_key == self.skate.client;
+            // The client that just stopped skating still has the board in its
+            // cached geometry, so force a re-pose once instead of reusing it.
+            let stale_board = persist_key == self.skate.client && !skating;
+            if !stale_board
+                && skip_frozen_corpse_dobj(
+                    e_type == ET_PLAYER_CORPSE,
+                    reuse,
+                    last_cache_hits.contains(&persist_key),
+                    pose_hashes.has_lods(persist_key, lods.tuple()),
+                )
+            {
                 push_cached_surfaces(persist_key, transform, pose_hashes, submit);
                 return Ok(PoseOneOutcome::Posed);
             }
@@ -830,9 +838,6 @@ impl<'a> RemotePoseFrame<'a> {
                 .expect("composed");
             validate_remote_tracks(dobj, clips.as_ref(), body, &model_set.body_name)?;
 
-            let skating = self.skate.active
-                && !self.skate.bones.is_empty()
-                && persist_key == self.skate.client;
             let world = if skating {
                 crate::skate::rig::pose(dobj, self.skate)
             } else {
@@ -862,7 +867,7 @@ impl<'a> RemotePoseFrame<'a> {
                 )?;
             }
             let hash = hash_skin_matrices(&skin);
-            let pose_same = pose_hashes.remember_pose_hash(persist_key, hash);
+            let pose_same = pose_hashes.remember_pose_hash(persist_key, hash) && !stale_board;
 
             let skin_models = bind_remote_skin_models(dobj, &model_set)?;
             let lods_reusable = pose_hashes.has_lods(persist_key, lods.tuple());

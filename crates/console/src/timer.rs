@@ -58,6 +58,13 @@ fn summary(timer: &RunTimer) -> String {
         clock(timer.elapsed),
         best
     );
+    if let Some(label) = timer.next_label.as_deref() {
+        line.push_str(&format!(
+            " next=`{label}` {:.0}u {}",
+            timer.next_distance.unwrap_or(0.0),
+            timer.next_dir
+        ));
+    }
     if !timer.splits.is_empty() {
         line.push('\n');
         for split in &timer.splits {
@@ -137,7 +144,7 @@ pub(crate) fn update_run_timer(
     let Some(authority) = authority else {
         return;
     };
-    let (course, labels): (String, Vec<String>) = match map_layout::active() {
+    let (course, labels, origins): (String, Vec<String>, Vec<[f32; 3]>) = match map_layout::active() {
         Some(active) => (
             active.name.clone(),
             active
@@ -152,8 +159,9 @@ pub(crate) fn update_run_timer(
                     }
                 })
                 .collect(),
+            active.checkpoints.iter().map(|checkpoint| checkpoint.origin).collect(),
         ),
-        None => (String::new(), Vec::new()),
+        None => (String::new(), Vec::new(), Vec::new()),
     };
     let count = labels.len();
 
@@ -184,6 +192,36 @@ pub(crate) fn update_run_timer(
     let index = authority.0.layout_checkpoint(local.0);
     if count == 0 {
         return;
+    }
+
+    // Waypoint to the next checkpoint (the start when idle).
+    timer.next_label = None;
+    timer.next_distance = None;
+    timer.next_dir.clear();
+    let target = if timer.running {
+        state.progress.map_or(0, |progress| progress + 1)
+    } else {
+        0
+    };
+    if target < count
+        && let Some(player) = presented.alive_player(local.0)
+        && let Some(origin) = origins.get(target)
+    {
+        let dx = origin[0] - player.origin[0];
+        let dy = origin[1] - player.origin[1];
+        let rel = ((dy.atan2(dx).to_degrees() - player.viewangles[1] + 540.0) % 360.0) - 180.0;
+        timer.next_distance = Some((dx * dx + dy * dy).sqrt());
+        timer.next_dir = if rel.abs() < 45.0 {
+            "AHEAD"
+        } else if rel.abs() > 135.0 {
+            "BEHIND"
+        } else if rel > 0.0 {
+            "LEFT"
+        } else {
+            "RIGHT"
+        }
+        .to_owned();
+        timer.next_label = labels.get(target).cloned();
     }
 
     if !timer.running {
