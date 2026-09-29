@@ -153,6 +153,7 @@ impl Plugin for ConsolePlugin {
                             crate::movement::route_movement_commands,
                             crate::music::route_music_commands,
                             crate::layout::route_layout_commands,
+                            crate::video::route_video_commands,
                         )
                             .chain(),
                         crate::debug_script_mover::route_debug_script_mover_commands,
@@ -576,6 +577,7 @@ fn setup_console(
     crate::movement::register_movement_commands(&mut registry);
     crate::music::register_music_commands(&mut registry);
     crate::layout::register_layout_commands(&mut registry);
+    crate::video::register_video_commands(&mut registry);
     crate::debug_script_mover::register_debug_script_mover_commands(&mut registry);
     crate::debug_draw_method::register_debug_draw_method_commands(&mut registry);
     crate::debug_view_proj::register_view_proj_commands(&mut registry);

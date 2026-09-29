@@ -67,3 +67,10 @@ appears to its right. Multiplayer settings contain the player-name field
 (Enter to edit and accept, Escape to cancel). These settings persist across
 launches in `$XDG_CONFIG_HOME/iw4l/settings.cfg` or `~/.config/iw4l/settings.cfg`
 on Linux; `IW4L_SETTINGS_PATH` selects a separate profile for probes.
+
+From the console you can set the window directly: `fullscreen on|off`
+(borderless fullscreen / windowed) and `resolution 2560x1440`. Both apply on the
+next frame and persist. On Windows the file is `iw4l-artifacts/settings.cfg`
+beside the executable. In borderless fullscreen the resolution is ignored — the
+window matches the monitor — so use a windowed resolution if you want to force
+one.
