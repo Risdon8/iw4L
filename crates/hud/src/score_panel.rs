@@ -2,7 +2,9 @@
 //! pipeline (the game's `fonts/hudsmallfont`), the same way as the music panel.
 //!
 //! Data comes from [`frame::SkateMode`], which `render_anim` fills from the
-//! Skate host's scoring publication.
+//! Skate host's scoring publication. This adds the presentation layer: a
+//! session best, a BANKED confirmation when a combo lands, and trick-name
+//! popups.
 
 use std::collections::HashMap;
 
@@ -24,6 +26,10 @@ const MARGIN: f32 = 12.0;
 const LINE_H: f32 = 16.0;
 const BAR_H: f32 = 3.0;
 const BAR_W: f32 = 150.0;
+const POPUP_H: f32 = 13.0;
+const POPUP_LIFE: f32 = 2.2;
+const BANK_HOLD: f32 = 1.6;
+const BAIL_HOLD: f32 = 1.4;
 
 const BIG_SCALE: f32 = 0.46;
 const VALUE_SCALE: f32 = 0.26;
@@ -45,6 +51,16 @@ fn grouped(value: f32) -> String {
         out.push(ch);
     }
     out
+}
+
+#[derive(Default)]
+pub(crate) struct ScoreFx {
+    best: f32,
+    prev_total: f32,
+    prev_trick: String,
+    bank: Option<(f32, f32)>,
+    bail_until: f32,
+    popups: Vec<(String, f32)>,
 }
 
 struct Painter<'a> {
@@ -124,6 +140,10 @@ impl Painter<'_> {
     }
 }
 
+fn fade(color: [f32; 4], alpha: f32) -> [f32; 4] {
+    [color[0], color[1], color[2], color[3] * alpha.clamp(0.0, 1.0)]
+}
+
 pub(crate) fn update(
     surface: Res<crate::surface::Hud2dSurface>,
     catalog: Option<Res<MenuCatalog>>,
@@ -133,7 +153,7 @@ pub(crate) fn update(
     mut gaps: ResMut<HudPresentationGaps>,
     mut hud_images: ResMut<crate::images::HudImages>,
     mut images: ResMut<Assets<Image>>,
-    mut bail_until: Local<f32>,
+    mut fx: Local<ScoreFx>,
 ) {
     pass.score_panel = TessJob::Hide;
     let Some(mode) = mode else {
@@ -162,9 +182,33 @@ pub(crate) fn update(
 
     let now = time.elapsed_secs();
     if mode.score_bailed {
-        *bail_until = now + 1.4;
+        fx.bail_until = now + BAIL_HOLD;
     }
-    let bailed = now < *bail_until;
+    let bailed = now < fx.bail_until;
+
+    // Session best.
+    if mode.score_total > fx.best {
+        fx.best = mode.score_total;
+    }
+    // A successful publish moves the total; a bail does not.
+    if mode.score_total > fx.prev_total + 0.5 {
+        fx.bank = Some((mode.score_total - fx.prev_total, now + BANK_HOLD));
+    }
+    fx.prev_total = mode.score_total;
+
+    // Trick-name popups: one per announced trick.
+    if mode.trick_active && !mode.trick.is_empty() && mode.trick != fx.prev_trick {
+        fx.popups.push((mode.trick.clone(), now));
+        fx.prev_trick = mode.trick.clone();
+        while fx.popups.len() > 4 {
+            fx.popups.remove(0);
+        }
+    }
+    if !mode.trick_active {
+        fx.prev_trick.clear();
+    }
+    fx.popups.retain(|(_, born)| now - *born < POPUP_LIFE);
+
     let active = mode.trick_active && mode.score_sequence > 0.0;
 
     let mut painter = Painter {
@@ -174,6 +218,15 @@ pub(crate) fn update(
     let mut y = MARGIN;
 
     painter.text(font, &grouped(mode.score_total), 0.0, y, BIG_SCALE, TEXT);
+    y += LINE_H;
+    painter.text(
+        font,
+        &format!("BEST {}", grouped(fx.best)),
+        0.0,
+        y,
+        LABEL_SCALE,
+        MUTED,
+    );
     y += LINE_H;
 
     if active || bailed {
@@ -202,6 +255,36 @@ pub(crate) fn update(
             let frac = mode.score_combo_fraction.clamp(0.0, 1.0);
             painter.rect(-BAR_W * 0.5, y, BAR_W * frac, BAR_H, ACCENT);
         }
+        y += LINE_H;
+    }
+
+    if let Some((amount, until)) = fx.bank
+        && now < until
+    {
+        let alpha = ((until - now) / BANK_HOLD).clamp(0.0, 1.0);
+        painter.text(
+            font,
+            &format!("BANKED +{}", grouped(amount)),
+            0.0,
+            y,
+            VALUE_SCALE,
+            fade(ACCENT, alpha),
+        );
+        y += LINE_H;
+    }
+
+    for (name, born) in fx.popups.iter().rev() {
+        let age = (now - *born).max(0.0);
+        let alpha = (1.0 - age / POPUP_LIFE).clamp(0.0, 1.0);
+        painter.text(
+            font,
+            &name.to_uppercase(),
+            0.0,
+            y,
+            LABEL_SCALE,
+            fade(TEXT, alpha),
+        );
+        y += POPUP_H;
     }
 
     let mut fonts = HashMap::new();
