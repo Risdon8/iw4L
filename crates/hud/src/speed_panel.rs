@@ -137,17 +137,24 @@ pub(crate) fn update(
             .unwrap_or_else(|| "--:--.--".to_owned());
         Some(format!("{}   BEST {best}", clock(timer.elapsed)))
     });
-    let split_text = timer.as_ref().and_then(|timer| {
-        timer.last_split.as_ref().map(|split| {
-            let delta = split
-                .delta
-                .map(|d| format!("{d:+.2}"))
-                .unwrap_or_else(|| "   -  ".to_owned());
-            format!("{}  {}  {delta}", split.label, clock(split.time))
+    let split_lines: Vec<String> = timer
+        .as_ref()
+        .map(|timer| {
+            let start = timer.splits.len().saturating_sub(3);
+            timer.splits[start..]
+                .iter()
+                .map(|split| {
+                    let delta = split
+                        .delta
+                        .map(|d| format!("{d:+.2}"))
+                        .unwrap_or_else(|| "   -  ".to_owned());
+                    format!("{:<10} {}  {delta}", split.label, clock(split.time))
+                })
+                .collect()
         })
-    });
+        .unwrap_or_default();
 
-    if !show_speed && timer_text.is_none() && split_text.is_none() {
+    if !show_speed && timer_text.is_none() && split_lines.is_empty() {
         return;
     }
 
@@ -171,8 +178,9 @@ pub(crate) fn update(
         painter.text(font, line, LEFT_X, y, VALUE_SCALE, ACCENT);
         y += LINE_H;
     }
-    if let Some(line) = split_text.as_deref() {
+    for line in &split_lines {
         painter.text(font, line, LEFT_X, y, LABEL_SCALE, MUTED);
+        y += LINE_H;
     }
 
     let mut fonts = HashMap::new();
