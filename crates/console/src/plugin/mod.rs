@@ -249,11 +249,10 @@ fn dispatch_menu_commands(
 
 fn isolate_gameplay_input(
     console: Res<ConsoleState>,
-    hud: Res<audio::MusicHudState>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut mouse: MessageReader<MouseMotion>,
 ) {
-    if !(console.open || hud.browsing()) {
+    if !console.open {
         return;
     }
     keys.reset_all();

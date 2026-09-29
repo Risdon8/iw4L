@@ -24,17 +24,14 @@ const ALIGN_TOP: i32 = 1; // hud_iw4::ALIGN_VIEWABLE
 // Virtual (640x480) geometry.
 const PANEL_W: f32 = 300.0;
 const PANEL_MARGIN: f32 = 6.0;
-const PAD: f32 = 8.0;
-const HEADER_H: f32 = 15.0;
-const LINE_H: f32 = 13.0;
-const BAR_H: f32 = 2.0;
-const ROW_H: f32 = 13.0;
-const FOOTER_H: f32 = 13.0;
+const PAD: f32 = 10.0;
+const LINE_H: f32 = 14.0;
+const BAR_H: f32 = 4.0;
+const FOOTER_H: f32 = 14.0;
 
 const TITLE_SCALE: f32 = 0.30;
 const LABEL_SCALE: f32 = 0.22;
 const VALUE_SCALE: f32 = 0.24;
-const ROW_SCALE: f32 = 0.22;
 const FOOTER_SCALE: f32 = 0.22;
 
 const BG: [f32; 4] = [0.025, 0.035, 0.05, 0.76];
@@ -42,8 +39,6 @@ const BORDER: [f32; 4] = [0.96, 0.62, 0.14, 0.85];
 const ACCENT: [f32; 4] = [0.96, 0.62, 0.14, 1.0];
 const TEXT: [f32; 4] = [0.93, 0.94, 0.96, 1.0];
 const MUTED: [f32; 4] = [0.55, 0.58, 0.62, 1.0];
-const ROW_SELECTED: [f32; 4] = [0.96, 0.62, 0.14, 0.24];
-const ROW_CURRENT: [f32; 4] = [1.0, 1.0, 1.0, 0.07];
 const TRACK: [f32; 4] = [1.0, 1.0, 1.0, 0.14];
 
 fn mmss(seconds: f32) -> String {
@@ -94,10 +89,12 @@ impl Painter<'_> {
             return;
         }
         let nscale = hud_iw4::normalized_text_scale(font.pixel_height, text_scale);
-        // The draw-text command uses cmd.w/cmd.h as the glyph x/y scale.
+        // The draw-text command uses cmd.w/cmd.h as the glyph x/y scale, and
+        // renders the glyphs above `y`, so drop `y` to the line's baseline.
+        let baseline = y + hud_iw4::ui_text_height(text_scale);
         let r = self
             .surface
-            .apply_rect(x, y, nscale, nscale, ALIGN_RIGHT, ALIGN_TOP);
+            .apply_rect(x, baseline, nscale, nscale, ALIGN_RIGHT, ALIGN_TOP);
         self.cmds.push(Draw2dCmd {
             material_namespace: crate::images::HUD_CHROME_NAMESPACE,
             x: r.x,
@@ -180,10 +177,8 @@ pub(crate) fn update(
         return;
     }
 
-    let rows = audio::MUSIC_HUD_ROWS;
     let count = player.track_count();
     let current = player.current_index();
-    let list_h = ROW_H * rows as f32;
     let left = -(PANEL_W + PANEL_MARGIN);
     let top = PANEL_MARGIN;
     let inner_left = left + PAD;
@@ -192,19 +187,13 @@ pub(crate) fn update(
 
     let mut y = top + PAD;
     let title_y = y;
-    y += HEADER_H;
+    y += LINE_H;
     let now_y = y;
     y += LINE_H;
     let next_y = y;
     y += LINE_H;
-    let time_y = y;
+    let progress_y = y;
     y += LINE_H;
-    let bar_y = y;
-    y += BAR_H + 4.0;
-    let divider_y = y;
-    y += 3.0;
-    let list_top = y;
-    y += list_h;
     let footer_y = y + 2.0;
     let panel_h = footer_y + FOOTER_H + PAD - top;
 
@@ -261,6 +250,7 @@ pub(crate) fn update(
         TEXT,
     );
 
+    // Progress bar, with the elapsed/total clock to its right.
     let elapsed = player.elapsed_secs();
     let duration = player.duration_secs();
     let clock = if duration > 0.0 {
@@ -268,72 +258,16 @@ pub(crate) fn update(
     } else {
         mmss(elapsed)
     };
-    painter.text(font, "TIME", inner_left, time_y, LABEL_SCALE, MUTED);
-    painter.text(
-        font,
-        &clock,
-        inner_left + label_w,
-        time_y,
-        VALUE_SCALE,
-        TEXT,
-    );
-    painter.rect(inner_left, bar_y, inner_w, BAR_H, TRACK);
+    let clock_w = crate::chrome::ui_text_width(font, &clock, LABEL_SCALE);
+    let clock_x = inner_right - clock_w;
+    let bar_w = (clock_x - 8.0 - inner_left).max(24.0);
+    let bar_y = progress_y + (LINE_H - BAR_H) * 0.5;
+    painter.rect(inner_left, bar_y, bar_w, BAR_H, TRACK);
     if duration > 0.0 {
         let frac = (elapsed / duration).clamp(0.0, 1.0);
-        painter.rect(inner_left, bar_y, inner_w * frac, BAR_H, ACCENT);
+        painter.rect(inner_left, bar_y, bar_w * frac, BAR_H, ACCENT);
     }
-    painter.rect(inner_left, divider_y, inner_w, 1.0, BORDER);
-
-    for i in 0..rows {
-        let index = hud.scroll + i;
-        let row_y = list_top + i as f32 * ROW_H;
-        if index >= count {
-            continue;
-        }
-        let selected = hud.browsing && index == hud.selected;
-        if selected {
-            painter.rect(left, row_y - 1.0, PANEL_W, ROW_H, ROW_SELECTED);
-            painter.rect(left, row_y - 1.0, 2.0, ROW_H, ACCENT);
-        } else if index == current {
-            painter.rect(left, row_y - 1.0, PANEL_W, ROW_H, ROW_CURRENT);
-        }
-        let name = player.track_name(index).unwrap_or("").to_uppercase();
-        let prefix = if index == current { ">" } else { " " };
-        let number = format!("{prefix} {:>3}  ", index + 1);
-        let number_w = crate::chrome::ui_text_width(font, &number, ROW_SCALE);
-        let line = format!(
-            "{number}{}",
-            fit(font, &name, ROW_SCALE, inner_w - number_w)
-        );
-        let color = if index == current {
-            ACCENT
-        } else if selected {
-            TEXT
-        } else {
-            MUTED
-        };
-        painter.text(font, &line, inner_left, row_y, ROW_SCALE, color);
-    }
-
-    let max_scroll = count.saturating_sub(rows);
-    if count > rows {
-        let track_x = left + PANEL_W - 3.0;
-        painter.rect(track_x, list_top, 3.0, list_h, TRACK);
-        let ratio = (rows as f32 / count as f32).clamp(0.0, 1.0);
-        let thumb_h = (list_h * ratio).max(ROW_H);
-        let t = if max_scroll == 0 {
-            0.0
-        } else {
-            hud.scroll as f32 / max_scroll as f32
-        };
-        painter.rect(
-            track_x,
-            list_top + (list_h - thumb_h) * t,
-            3.0,
-            thumb_h,
-            ACCENT,
-        );
-    }
+    painter.text(font, &clock, clock_x, progress_y, LABEL_SCALE, MUTED);
 
     let footer = format!(
         "MUSIC {:.2}   SOUND {:.2}   {}",
