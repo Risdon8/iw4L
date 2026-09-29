@@ -35,6 +35,7 @@ pub mod suggest;
 mod surf;
 mod synthetic_input;
 mod user_settings;
+mod video;
 mod wallrun;
 mod weapon_dispatch;
 
