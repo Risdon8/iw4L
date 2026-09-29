@@ -37,7 +37,7 @@ pub(crate) fn route_music_commands(
     mut line: ResMut<ConsoleLine>,
     mut player: ResMut<MusicPlayer>,
     mut game: ResMut<frame::GameSettings>,
-    mut hud: ResMut<crate::music_hud::MusicHud>,
+    mut hud: ResMut<audio::MusicHudState>,
 ) {
     let capacity = settings.log_capacity;
     let echo = |msg: String, console: &mut ConsoleState, line: &mut ConsoleLine| {

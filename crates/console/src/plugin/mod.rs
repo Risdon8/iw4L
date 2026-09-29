@@ -94,16 +94,10 @@ impl Plugin for ConsolePlugin {
             .init_resource::<crate::weapon_dispatch::WeaponArgCompletions>()
             .init_resource::<crate::user_settings::PendingMenuBinding>()
             .init_resource::<crate::user_settings::UserSettingsPersistence>()
-            .init_resource::<crate::music_hud::MusicHud>()
             .add_message::<ConsoleCommand>()
             .add_systems(
                 Startup,
-                (
-                    setup_console,
-                    crate::music_hud::setup,
-                    crate::user_settings::load_user_settings,
-                )
-                    .chain(),
+                (setup_console, crate::user_settings::load_user_settings).chain(),
             )
             .add_systems(PreUpdate, feed_console_keyboard.before(InputSystems))
             .add_systems(
@@ -256,7 +250,7 @@ fn dispatch_menu_commands(
 
 fn isolate_gameplay_input(
     console: Res<ConsoleState>,
-    hud: Res<crate::music_hud::MusicHud>,
+    hud: Res<audio::MusicHudState>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut mouse: MessageReader<MouseMotion>,
 ) {

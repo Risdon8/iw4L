@@ -16,6 +16,7 @@ mod killcam_skip;
 mod killfeed;
 mod mantle_hint;
 mod menus;
+mod music_panel;
 mod overhead_names;
 mod playercard;
 mod plugin;

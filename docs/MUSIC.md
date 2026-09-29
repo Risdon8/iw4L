@@ -63,8 +63,10 @@ same from the console.
 | `;` / `'` | game sound volume down / up |
 | `F8` | hide / show the panel |
 
-Implementation: `crates/console/src/music_hud.rs`. The font is Bebas Neue
-(SIL OFL); the license sits beside it in `crates/console/assets/`.
+Implementation: input in `crates/console/src/music_hud.rs`; the panel is drawn
+by `crates/hud/src/music_panel.rs` on the HUD's own font pipeline
+(`Draw2dOp::TextRun` + `tessellate_fonts`, `fonts/hudsmallfont`, the `white`
+chrome image for its boxes) so its text is the game's HUD font.
 
 ## Getting the Skate 3 music out of the disc
 
