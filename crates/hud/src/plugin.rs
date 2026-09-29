@@ -118,6 +118,7 @@ impl Plugin for HudPlugin {
                             crate::use_hint::update,
                             crate::music_panel::update,
                             crate::score_panel::update,
+                            crate::speed_panel::update,
                             update_hud_elems,
                             update_targetmap,
                             crate::menus::update_script_menus,
@@ -149,6 +150,7 @@ impl Plugin for HudPlugin {
                     flush_script_menus_tess,
                     flush_music_panel_tess,
                     flush_score_panel_tess,
+                    flush_speed_panel_tess,
                 )
                     .chain()
                     .after(hud_stage_close::<7>)
@@ -340,6 +342,7 @@ fn ensure_hud_root(mut commands: Commands, existing: Query<Entity, With<HudRoot>
             crate::font_overlay::spawn_overlay(root, crate::use_hint::UseHintRaster);
             crate::font_overlay::spawn_overlay(root, crate::music_panel::MusicPanelRaster);
             crate::font_overlay::spawn_overlay(root, crate::score_panel::ScorePanelRaster);
+            crate::font_overlay::spawn_overlay(root, crate::speed_panel::SpeedPanelRaster);
             spawn_hud_elems(root);
             spawn_targetmap(root);
             crate::menus::spawn_script_menus(root);
@@ -779,6 +782,36 @@ fn reset_match_hud_on_torn_down(
     *pings = crate::compass::CompassPingLatch::default();
     *cache = PlayerCardCache::default();
     *local_vars = UiLocalVars::default();
+}
+
+fn flush_speed_panel_tess(
+    surface: Res<crate::surface::Hud2dSurface>,
+    mut pass: ResMut<HudTessPass>,
+    mut hud_images: ResMut<HudImages>,
+    mut images: ResMut<Assets<Image>>,
+    mut frame: ResMut<crate::gpu_list::HudTessGpuFrame>,
+    mut raster: Query<
+        (Entity, &mut Node, &mut crate::gpu_list::GpuListLatch),
+        With<crate::speed_panel::SpeedPanelRaster>,
+    >,
+) {
+    let _body = gpu_list::TessBody::open();
+    if !surface.is_ready() {
+        return;
+    }
+    let job = std::mem::take(&mut pass.speed_panel);
+    if let Ok((_, mut host, mut latch)) = raster.single_mut() {
+        gpu_list::apply_tess_job(
+            job,
+            &mut host,
+            &mut latch,
+            &mut hud_images,
+            &mut images,
+            &mut frame,
+            surface.width(),
+            surface.height(),
+        );
+    }
 }
 
 fn flush_score_panel_tess(

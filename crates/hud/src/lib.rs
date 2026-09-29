@@ -25,6 +25,7 @@ mod reticle;
 mod scorebar;
 mod scoreboard;
 mod score_panel;
+mod speed_panel;
 mod splash;
 mod surface;
 mod targetmap;

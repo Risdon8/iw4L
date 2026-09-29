@@ -34,3 +34,6 @@ pub use ui::{
 
 pub mod skate;
 pub use skate::SkateMode;
+
+mod run_timer;
+pub use run_timer::{RunSplit, RunTimer};
