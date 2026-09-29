@@ -230,7 +230,9 @@ fn scan_music_on_start(mut player: ResMut<MusicPlayer>) {
     scan(&mut player);
 }
 
-/// (Re)read the folder. Sorted so a fixed order is stable run to run.
+/// (Re)read the folder. Walks sub-folders too, so an album/gamerip folder the
+/// user drops in is picked up whole. Sorted by path so a fixed order is stable
+/// run to run.
 fn scan(player: &mut MusicPlayer) {
     player.paths.clear();
     player.names.clear();
@@ -238,26 +240,11 @@ fn scan(player: &mut MusicPlayer) {
         player.status = format!("music: cannot create {}: {error}", player.dir.display());
         return;
     }
-    let entries = match std::fs::read_dir(&player.dir) {
-        Ok(entries) => entries,
-        Err(error) => {
-            player.status = format!("music: cannot read {}: {error}", player.dir.display());
-            return;
-        }
-    };
-    let mut found: Vec<PathBuf> = entries
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| path.is_file() && is_supported(path))
-        .collect();
+    let mut found = Vec::new();
+    collect_tracks(&player.dir, &mut found);
     found.sort();
     for path in found {
-        player.names.push(
-            path.file_stem()
-                .and_then(|stem| stem.to_str())
-                .unwrap_or("?")
-                .to_owned(),
-        );
+        player.names.push(display_name(&path));
         player.paths.push(path);
     }
     player.scanned = true;
@@ -271,6 +258,44 @@ fn scan(player: &mut MusicPlayer) {
     };
     diag::info!(Audio, "{}", player.status);
 }
+
+fn collect_tracks(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_tracks(&path, out);
+        } else if path.is_file() && is_supported(&path) {
+            out.push(path);
+        }
+    }
+}
+
+/// A readable name from the file: drop a leading track number, turn separators
+/// into spaces. `01 - Artist - Title.mp3` becomes `Artist - Title`.
+fn display_name(path: &Path) -> String {
+    let stem = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("?");
+    let trimmed = stem
+        .trim_start_matches(|c: char| c.is_ascii_digit())
+        .trim_start_matches(|c: char| c == ' ' || c == '-' || c == '.' || c == '_');
+    let source = if trimmed.is_empty() { stem } else { trimmed };
+    let cleaned = source
+        .replace('_', " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if cleaned.is_empty() {
+        stem.to_owned()
+    } else {
+        cleaned
+    }
+}
+
 
 fn next_rng(rng: &mut u64) -> u64 {
     // xorshift64*
@@ -530,6 +555,19 @@ mod tests {
             let next = pick_next(&mut player, true).unwrap();
             assert_ne!(next, 1);
         }
+    }
+
+    #[test]
+    fn display_names_drop_track_numbers_and_separators() {
+        assert_eq!(
+            display_name(Path::new("music/01 - Agent Orange - Bloodstains.mp3")),
+            "Agent Orange - Bloodstains"
+        );
+        assert_eq!(
+            display_name(Path::new("music/07_some_song.flac")),
+            "some song"
+        );
+        assert_eq!(display_name(Path::new("music/Plain Name.mp3")), "Plain Name");
     }
 }
 
