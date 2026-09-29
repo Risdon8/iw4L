@@ -229,7 +229,7 @@ impl Runtime {
                     self.modified_trick = true;
                 }
                 if conversion.is_some() {
-                    self.trick_name = d.label.clone();
+                    self.trick_name = clean_label(&d.label);
                 }
                 self.carriers[slot] = Some(carrier);
                 self.sequence_active = true;
@@ -246,7 +246,7 @@ impl Runtime {
                     .data
                     .by_id(c.scorable.id)
                     .ok_or("Missing announced scorable")?;
-                self.trick_name = d.label.clone();
+                self.trick_name = clean_label(&d.label);
                 self.stance = [f.switch, f.fakie, f.nollie, false];
                 self.new_trick = true;
                 if self.collector == Collector::Air && !self.air_repetition_set {
@@ -600,6 +600,11 @@ impl Runtime {
 }
 
 /// Read-only view for the game side's HUD.
+/// Trick labels use underscores as word separators; show them as spaces.
+fn clean_label(label: &str) -> String {
+    label.replace('_', " ")
+}
+
 impl Runtime {
     pub fn trick_name(&self) -> &str {
         &self.trick_name
