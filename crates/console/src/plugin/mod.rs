@@ -94,7 +94,6 @@ impl Plugin for ConsolePlugin {
             .init_resource::<crate::weapon_dispatch::WeaponArgCompletions>()
             .init_resource::<crate::user_settings::PendingMenuBinding>()
             .init_resource::<crate::user_settings::UserSettingsPersistence>()
-            .init_resource::<frame::RunTimer>()
             .add_message::<ConsoleCommand>()
             .add_systems(
                 Startup,
@@ -156,8 +155,6 @@ impl Plugin for ConsolePlugin {
                             crate::music::route_music_commands,
                             crate::layout::route_layout_commands,
                             crate::video::route_video_commands,
-                            crate::timer::route_timer_commands,
-                            crate::timer::update_run_timer,
                         )
                             .chain(),
                         crate::debug_script_mover::route_debug_script_mover_commands,
@@ -569,7 +566,6 @@ fn setup_console(
     crate::music::register_music_commands(&mut registry);
     crate::layout::register_layout_commands(&mut registry);
     crate::video::register_video_commands(&mut registry);
-    crate::timer::register_timer_commands(&mut registry);
     crate::debug_script_mover::register_debug_script_mover_commands(&mut registry);
     crate::debug_draw_method::register_debug_draw_method_commands(&mut registry);
     crate::debug_view_proj::register_view_proj_commands(&mut registry);

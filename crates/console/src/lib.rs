@@ -34,7 +34,6 @@ mod startup;
 pub mod suggest;
 mod surf;
 mod synthetic_input;
-mod timer;
 mod user_settings;
 mod video;
 mod wallrun;

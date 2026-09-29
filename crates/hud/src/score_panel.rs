@@ -26,8 +26,6 @@ const MARGIN: f32 = 12.0;
 const LINE_H: f32 = 16.0;
 const BAR_H: f32 = 3.0;
 const BAR_W: f32 = 150.0;
-const POPUP_H: f32 = 13.0;
-const POPUP_LIFE: f32 = 2.2;
 const BANK_HOLD: f32 = 1.6;
 const BAIL_HOLD: f32 = 1.4;
 
@@ -57,10 +55,8 @@ fn grouped(value: f32) -> String {
 pub(crate) struct ScoreFx {
     best: f32,
     prev_total: f32,
-    prev_trick: String,
     bank: Option<(f32, f32)>,
     bail_until: f32,
-    popups: Vec<(String, f32)>,
 }
 
 struct Painter<'a> {
@@ -196,19 +192,6 @@ pub(crate) fn update(
     }
     fx.prev_total = mode.score_total;
 
-    // Trick-name popups: one per announced trick.
-    if mode.trick_active && !mode.trick.is_empty() && mode.trick != fx.prev_trick {
-        fx.popups.push((mode.trick.clone(), now));
-        fx.prev_trick = mode.trick.clone();
-        while fx.popups.len() > 4 {
-            fx.popups.remove(0);
-        }
-    }
-    if !mode.trick_active {
-        fx.prev_trick.clear();
-    }
-    fx.popups.retain(|(_, born)| now - *born < POPUP_LIFE);
-
     let active = mode.trick_active && mode.score_sequence > 0.0;
 
     let mut painter = Painter {
@@ -271,20 +254,6 @@ pub(crate) fn update(
             fade(ACCENT, alpha),
         );
         y += LINE_H;
-    }
-
-    for (name, born) in fx.popups.iter().rev() {
-        let age = (now - *born).max(0.0);
-        let alpha = (1.0 - age / POPUP_LIFE).clamp(0.0, 1.0);
-        painter.text(
-            font,
-            &name.to_uppercase(),
-            0.0,
-            y,
-            LABEL_SCALE,
-            fade(TEXT, alpha),
-        );
-        y += POPUP_H;
     }
 
     let mut fonts = HashMap::new();

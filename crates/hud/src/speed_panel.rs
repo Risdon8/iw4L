@@ -1,9 +1,8 @@
-//! Speedometer and run timer, drawn just to the right of the minimap while
-//! skating, on the game's font pipeline like the other panels.
+//! Speedometer, drawn just to the right of the minimap while skating, on the
+//! game's font pipeline like the other panels.
 //!
 //! Speed is the board's horizontal speed from [`frame::SkateMode`] (the
-//! snapshot's player velocity stays zero while the skate host owns motion); the
-//! timer comes from [`frame::RunTimer`].
+//! snapshot's player velocity stays zero while the skate host owns motion).
 
 use std::collections::HashMap;
 
@@ -24,86 +23,25 @@ const ALIGN_TOP: i32 = 1; // hud_iw4::ALIGN_VIEWABLE
 /// Just right of the minimap, which sits in the top-left corner.
 const LEFT_X: f32 = 118.0;
 const TOP_Y: f32 = 10.0;
-const LINE_H: f32 = 15.0;
-
 const SPEED_SCALE: f32 = 0.38;
-const VALUE_SCALE: f32 = 0.24;
-const LABEL_SCALE: f32 = 0.20;
 
-const ACCENT: [f32; 4] = [0.96, 0.62, 0.14, 1.0];
 const TEXT: [f32; 4] = [0.95, 0.96, 0.97, 1.0];
-const MUTED: [f32; 4] = [0.68, 0.71, 0.75, 1.0];
 const UT_S: f32 = 17.6; // inches per second per mph
-
-fn clock(seconds: f32) -> String {
-    let cs = (seconds.max(0.0) * 100.0).round() as i64;
-    format!("{}:{:02}.{:02}", cs / 6000, (cs / 100) % 60, cs % 100)
-}
-
-struct Painter<'a> {
-    surface: &'a crate::surface::Hud2dSurface,
-    cmds: Vec<Draw2dCmd>,
-}
-
-impl Painter<'_> {
-    fn text(
-        &mut self,
-        font: &asset_game::FontDef,
-        text: &str,
-        x: f32,
-        y: f32,
-        text_scale: f32,
-        color: [f32; 4],
-    ) {
-        if text.is_empty() {
-            return;
-        }
-        let nscale = hud_iw4::normalized_text_scale(font.pixel_height, text_scale);
-        let baseline = y + hud_iw4::ui_text_height(text_scale);
-        let r = self
-            .surface
-            .apply_rect(x, baseline, nscale, nscale, ALIGN_LEFT, ALIGN_TOP);
-        self.cmds.push(Draw2dCmd {
-            material_namespace: crate::images::HUD_CHROME_NAMESPACE,
-            x: r.x,
-            y: r.y,
-            w: r.w,
-            h: r.h,
-            s0: 0.0,
-            t0: 0.0,
-            s1: 1.0,
-            t1: 1.0,
-            color,
-            material: asset_core::AssetRef::bare_name(&font.material).to_owned(),
-            op: Draw2dOp::TextRun {
-                font: FONT.to_owned(),
-                scale: nscale,
-                text: text.to_owned(),
-                loc_key: String::new(),
-                style: crate::draw2d::TEXT_STYLE_HUDELEM,
-                fx: None,
-                glow: None,
-            },
-            provenance: Draw2dProvenance::CgDraw {
-                site: "speed_panel",
-            },
-            layer: 1,
-        });
-    }
-}
 
 pub(crate) fn update(
     surface: Res<crate::surface::Hud2dSurface>,
     catalog: Option<Res<MenuCatalog>>,
     mode: Option<Res<frame::SkateMode>>,
-    timer: Option<Res<frame::RunTimer>>,
     mut pass: ResMut<HudTessPass>,
     mut gaps: ResMut<HudPresentationGaps>,
     mut hud_images: ResMut<crate::images::HudImages>,
     mut images: ResMut<Assets<Image>>,
 ) {
     pass.speed_panel = TessJob::Hide;
-    if !surface.is_ready() {
+    let Some(mode) = mode else {
+        return;
+    };
+    if !mode.active || !surface.is_ready() {
         return;
     }
     let Some(catalog) = catalog else {
@@ -124,78 +62,41 @@ pub(crate) fn update(
         return;
     }
 
-    let show_speed = mode.as_ref().is_some_and(|mode| mode.active);
-    let speed = mode.as_ref().map_or(0.0, |mode| mode.speed_u_per_s).max(0.0);
-    let timer_text = timer.as_ref().and_then(|timer| {
-        let show = timer.running || timer.elapsed > 0.0 || timer.best.is_some();
-        if !show {
-            return None;
-        }
-        let best = timer
-            .best
-            .map(clock)
-            .unwrap_or_else(|| "--:--.--".to_owned());
-        Some(format!("{}   BEST {best}", clock(timer.elapsed)))
-    });
-    let split_lines: Vec<String> = timer
-        .as_ref()
-        .map(|timer| {
-            let start = timer.splits.len().saturating_sub(3);
-            timer.splits[start..]
-                .iter()
-                .map(|split| {
-                    let delta = split
-                        .delta
-                        .map(|d| format!("{d:+.2}"))
-                        .unwrap_or_else(|| "   -  ".to_owned());
-                    format!("{:<10} {}  {delta}", split.label, clock(split.time))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let mph = mode.speed_u_per_s.max(0.0) / UT_S;
+    let text = format!("{mph:.0} MPH");
+    let nscale = hud_iw4::normalized_text_scale(font.pixel_height, SPEED_SCALE);
+    let baseline = TOP_Y + hud_iw4::ui_text_height(SPEED_SCALE);
+    let rect = surface.apply_rect(LEFT_X, baseline, nscale, nscale, ALIGN_LEFT, ALIGN_TOP);
 
-    let waypoint = timer.as_ref().and_then(|timer| {
-        let label = timer.next_label.as_deref()?;
-        let distance = timer.next_distance? / 39.37;
-        let verb = if timer.running { "NEXT" } else { "GO" };
-        Some(format!("{verb} {label}  {distance:.0}m  {}", timer.next_dir))
-    });
-
-    if !show_speed && timer_text.is_none() && split_lines.is_empty() && waypoint.is_none() {
-        return;
-    }
-
-    let mut painter = Painter {
-        surface: &surface,
-        cmds: Vec::new(),
-    };
-    let mut y = TOP_Y;
-    if show_speed {
-        painter.text(
-            font,
-            &format!("{:.0} MPH", speed / UT_S),
-            LEFT_X,
-            y,
-            SPEED_SCALE,
-            TEXT,
-        );
-        y += LINE_H + 4.0;
-    }
-    if let Some(line) = waypoint.as_deref() {
-        painter.text(font, line, LEFT_X, y, VALUE_SCALE, ACCENT);
-        y += LINE_H;
-    }
-    if let Some(line) = timer_text.as_deref() {
-        painter.text(font, line, LEFT_X, y, VALUE_SCALE, ACCENT);
-        y += LINE_H;
-    }
-    for line in &split_lines {
-        painter.text(font, line, LEFT_X, y, LABEL_SCALE, MUTED);
-        y += LINE_H;
-    }
+    let mut cmds = vec![Draw2dCmd {
+        material_namespace: crate::images::HUD_CHROME_NAMESPACE,
+        x: rect.x,
+        y: rect.y,
+        w: rect.w,
+        h: rect.h,
+        s0: 0.0,
+        t0: 0.0,
+        s1: 1.0,
+        t1: 1.0,
+        color: TEXT,
+        material: asset_core::AssetRef::bare_name(&font.material).to_owned(),
+        op: Draw2dOp::TextRun {
+            font: FONT.to_owned(),
+            scale: nscale,
+            text,
+            loc_key: String::new(),
+            style: crate::draw2d::TEXT_STYLE_HUDELEM,
+            fx: None,
+            glow: None,
+        },
+        provenance: Draw2dProvenance::CgDraw {
+            site: "speed_panel",
+        },
+        layer: 1,
+    }];
 
     let mut fonts = HashMap::new();
     fonts.insert(FONT.to_owned(), font);
-    let (quads, _) = tessellate_fonts(&Draw2dList { cmds: painter.cmds }, &fonts);
+    let (quads, _) = tessellate_fonts(&Draw2dList { cmds }, &fonts);
     pass.speed_panel = TessJob::Quads(quads);
 }

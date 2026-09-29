@@ -812,7 +812,9 @@ impl<'a> RemotePoseFrame<'a> {
             };
             let skating = self.skate.active
                 && !self.skate.bones.is_empty()
-                && persist_key == self.skate.client;
+                && persist_key == self.skate.client
+                // A dead body must never keep the skate rig or board.
+                && e_type != ET_PLAYER_CORPSE;
             // The client that just stopped skating still has the board in its
             // cached geometry, so force a re-pose once instead of reusing it.
             let stale_board = persist_key == self.skate.client && !skating;
