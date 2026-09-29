@@ -157,17 +157,15 @@ pub(crate) fn update(
     };
     let mut y = TOP_Y;
     if show_speed {
-        painter.text(font, &format!("{speed:.0} U/S"), LEFT_X, y, SPEED_SCALE, TEXT);
-        y += LINE_H + 4.0;
         painter.text(
             font,
             &format!("{:.0} MPH", speed / UT_S),
             LEFT_X,
             y,
-            LABEL_SCALE,
-            MUTED,
+            SPEED_SCALE,
+            TEXT,
         );
-        y += LINE_H;
+        y += LINE_H + 4.0;
     }
     if let Some(line) = timer_text.as_deref() {
         painter.text(font, line, LEFT_X, y, VALUE_SCALE, ACCENT);
