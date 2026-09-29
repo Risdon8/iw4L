@@ -593,3 +593,30 @@ impl Runtime {
         Ok(())
     }
 }
+
+/// Read-only view for the game side's HUD.
+impl Runtime {
+    pub fn trick_name(&self) -> &str {
+        &self.trick_name
+    }
+    pub fn sequence_score(&self) -> f32 {
+        self.sequence_score
+    }
+    pub fn sequence_active(&self) -> bool {
+        self.sequence_active
+    }
+    pub fn combo_multiplier(&self) -> f32 {
+        self.session.combo.multiplier
+    }
+    pub fn combo_fraction(&self) -> f32 {
+        let capacity = self.data.session_rules().combo_capacity.max(1.0);
+        (self.session.combo.timer.points / capacity).clamp(0.0, 1.0)
+    }
+    pub fn total_score(&self) -> f32 {
+        self.session.holder.snapshot.completed_lines + self.session.holder.snapshot.line
+    }
+    pub fn bailed(&self) -> bool {
+        self.close_tricks
+    }
+}
+

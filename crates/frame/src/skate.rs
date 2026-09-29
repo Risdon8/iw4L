@@ -18,4 +18,14 @@ pub struct SkateMode {
     pub camera: Option<(Transform, f32)>,
     pub tick: u64,
     pub status: String,
+
+    /// Score/trick publication from the Skate host.
+    pub score_total: f32,
+    pub score_line: f32,
+    pub score_sequence: f32,
+    pub score_multiplier: f32,
+    pub score_combo_fraction: f32,
+    pub trick: String,
+    pub trick_active: bool,
+    pub score_bailed: bool,
 }

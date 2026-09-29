@@ -194,6 +194,14 @@ fn present(mode: &mut SkateMode, p: Pose, authority: &mut net::AuthorityWorld) {
     mode.names = p.names;
     mode.tick = p.tick;
     mode.status = p.state;
+    mode.score_total = p.score.total;
+    mode.score_line = p.score.line;
+    mode.score_sequence = p.score.sequence;
+    mode.score_multiplier = p.score.multiplier;
+    mode.score_combo_fraction = p.score.combo_fraction;
+    mode.trick = p.score.trick;
+    mode.trick_active = p.score.active;
+    mode.score_bailed = p.score.bailed;
     mode.camera = p.camera.map(|(position, basis, fov)| {
         (
             Transform::from_translation(collision::from_skate(position)).looking_to(

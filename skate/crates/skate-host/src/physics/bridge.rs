@@ -28,6 +28,27 @@ pub struct Pose {
     pub velocity: Vec3,
     pub tick: u64,
     pub state: String,
+    pub score: Score,
+}
+
+/// Score/trick publication for the game-side HUD.
+#[derive(Clone, Default)]
+pub struct Score {
+    /// Banked total (completed lines + the current line).
+    pub total: f32,
+    /// The current line's banked points.
+    pub line: f32,
+    /// Live combo points, multiplier included.
+    pub sequence: f32,
+    pub multiplier: f32,
+    /// Combo timer, 0..1.
+    pub combo_fraction: f32,
+    /// Last announced trick.
+    pub trick: String,
+    /// A combo is in progress.
+    pub active: bool,
+    /// The last sequence bailed.
+    pub bailed: bool,
 }
 impl Session {
     pub fn new(
@@ -221,6 +242,19 @@ impl Session {
             velocity: Vec3::new(v.x, v.y, v.z),
             tick: self.physics.ticks,
             state: format!("{:?}", self.skater.player_state.current()),
+            score: {
+                let scoring = &self.skater.scoring;
+                Score {
+                    total: scoring.total_score(),
+                    line: scoring.session.holder.snapshot.line,
+                    sequence: scoring.sequence_score(),
+                    multiplier: scoring.combo_multiplier(),
+                    combo_fraction: scoring.combo_fraction(),
+                    trick: scoring.trick_name().to_owned(),
+                    active: scoring.sequence_active(),
+                    bailed: scoring.bailed(),
+                }
+            },
         }
     }
 }

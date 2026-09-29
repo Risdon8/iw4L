@@ -180,6 +180,7 @@ pub struct HudTessPass {
     pub mantle_hint: TessJob,
     pub use_hint: TessJob,
     pub music_panel: TessJob,
+    pub score_panel: TessJob,
     pub hud_elems: TessJob,
     pub hud_elems_back: TessJob,
     pub script_menus: TessJob,
