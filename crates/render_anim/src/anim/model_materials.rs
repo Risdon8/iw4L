@@ -208,6 +208,28 @@ pub fn prepare_model_materials(
             &mut refused,
         );
     }
+    // The skate board is a local override model; say plainly whether its
+    // materials made it in, since a missing one renders an invisible board.
+    match assets::bot_model::local_skate_board() {
+        None => diag::info!(World, "skate board model not loaded"),
+        Some(board) => {
+            let missing: Vec<&str> = board
+                .surfaces
+                .iter()
+                .map(|surface| surface.material.as_str())
+                .filter(|name| !by_name.contains_key(*name))
+                .collect();
+            if missing.is_empty() {
+                diag::info!(
+                    World,
+                    "skate board materials admitted: {} surface(s)",
+                    board.surfaces.len()
+                );
+            } else {
+                diag::warn!(World, "skate board materials missing: {missing:?}");
+            }
+        }
+    }
     for name in bodies.0.names() {
         if let Some(entry) = bodies.0.get(name) {
             admit_names(

@@ -1224,8 +1224,11 @@ fn assemble_meshes(job: PendingBodySkin<'_>) -> Result<AssembledMeshes, String> 
             true,
         )?;
     }
-    if let Some(skate) = job.skate {
-        crate::skate::rig::board(skate, &mut geom)?;
+    if let Some(skate) = job.skate
+        && let Err(error) = crate::skate::rig::board(skate, &mut geom)
+    {
+        // A missing board must not take the whole body down with it.
+        diag::warn!(World, "skate board not built: {error}");
     }
     let (radii, radius_parents) = radii(
         job.body,
