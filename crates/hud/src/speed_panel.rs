@@ -1,14 +1,14 @@
-//! Speedometer and run timer for the bottom-centre of the HUD, drawn on the
-//! game's font pipeline like the other panels.
+//! Speedometer and run timer, drawn just to the right of the minimap while
+//! skating, on the game's font pipeline like the other panels.
 //!
-//! Speed is the local player's horizontal velocity from the presented snapshot;
-//! the timer comes from [`frame::RunTimer`].
+//! Speed is the board's horizontal speed from [`frame::SkateMode`] (the
+//! snapshot's player velocity stays zero while the skate host owns motion); the
+//! timer comes from [`frame::RunTimer`].
 
 use std::collections::HashMap;
 
 use asset_game::MenuCatalog;
 use bevy::prelude::*;
-use net::{LocalPresentClient, PresentedSnapshot};
 
 use crate::draw2d::{Draw2dCmd, Draw2dList, Draw2dOp, Draw2dProvenance, tessellate_fonts};
 use crate::gaps::{GapCause, HudPresentationGaps};
@@ -18,13 +18,15 @@ use crate::gpu_list::{HudTessPass, TessJob};
 pub(crate) struct SpeedPanelRaster;
 
 const FONT: &str = "fonts/hudsmallfont";
-const ALIGN_CENTER: i32 = 2; // hud_iw4::ALIGN_CENTER
-const ALIGN_BOTTOM: i32 = 3; // hud_iw4::ALIGN_VIEWABLE_MAX
+const ALIGN_LEFT: i32 = 1; // hud_iw4::ALIGN_VIEWABLE
+const ALIGN_TOP: i32 = 1; // hud_iw4::ALIGN_VIEWABLE
 
-const BOTTOM_MARGIN: f32 = 46.0;
+/// Just right of the minimap, which sits in the top-left corner.
+const LEFT_X: f32 = 118.0;
+const TOP_Y: f32 = 10.0;
 const LINE_H: f32 = 15.0;
 
-const SPEED_SCALE: f32 = 0.40;
+const SPEED_SCALE: f32 = 0.38;
 const VALUE_SCALE: f32 = 0.24;
 const LABEL_SCALE: f32 = 0.20;
 
@@ -32,10 +34,6 @@ const ACCENT: [f32; 4] = [0.96, 0.62, 0.14, 1.0];
 const TEXT: [f32; 4] = [0.95, 0.96, 0.97, 1.0];
 const MUTED: [f32; 4] = [0.68, 0.71, 0.75, 1.0];
 const UT_S: f32 = 17.6; // inches per second per mph
-
-fn speed_text(u_per_s: f32) -> String {
-    format!("{:.0}", u_per_s.max(0.0))
-}
 
 fn clock(seconds: f32) -> String {
     let cs = (seconds.max(0.0) * 100.0).round() as i64;
@@ -48,7 +46,6 @@ struct Painter<'a> {
 }
 
 impl Painter<'_> {
-    /// Centred text: `x` is the centre, `y` is measured up from the bottom edge.
     fn text(
         &mut self,
         font: &asset_game::FontDef,
@@ -65,7 +62,7 @@ impl Painter<'_> {
         let baseline = y + hud_iw4::ui_text_height(text_scale);
         let r = self
             .surface
-            .apply_rect(x, baseline, nscale, nscale, ALIGN_CENTER, ALIGN_BOTTOM);
+            .apply_rect(x, baseline, nscale, nscale, ALIGN_LEFT, ALIGN_TOP);
         self.cmds.push(Draw2dCmd {
             material_namespace: crate::images::HUD_CHROME_NAMESPACE,
             x: r.x,
@@ -98,8 +95,7 @@ impl Painter<'_> {
 pub(crate) fn update(
     surface: Res<crate::surface::Hud2dSurface>,
     catalog: Option<Res<MenuCatalog>>,
-    presented: Res<PresentedSnapshot>,
-    local: Res<LocalPresentClient>,
+    mode: Option<Res<frame::SkateMode>>,
     timer: Option<Res<frame::RunTimer>>,
     mut pass: ResMut<HudTessPass>,
     mut gaps: ResMut<HudPresentationGaps>,
@@ -107,9 +103,6 @@ pub(crate) fn update(
     mut images: ResMut<Assets<Image>>,
 ) {
     pass.speed_panel = TessJob::Hide;
-    let Some(player) = presented.alive_player(local.0) else {
-        return;
-    };
     if !surface.is_ready() {
         return;
     }
@@ -131,22 +124,20 @@ pub(crate) fn update(
         return;
     }
 
-    let v = player.velocity;
-    let speed = (v[0] * v[0] + v[1] * v[1]).sqrt();
-
-    let timer_line = timer.as_ref().map(|timer| {
+    let show_speed = mode.as_ref().is_some_and(|mode| mode.active);
+    let speed = mode.as_ref().map_or(0.0, |mode| mode.speed_u_per_s).max(0.0);
+    let timer_text = timer.as_ref().and_then(|timer| {
+        let show = timer.running || timer.elapsed > 0.0 || timer.best.is_some();
+        if !show {
+            return None;
+        }
         let best = timer
             .best
             .map(clock)
             .unwrap_or_else(|| "--:--.--".to_owned());
-        let show = timer.running || timer.elapsed > 0.0 || timer.best.is_some();
-        if show {
-            format!("{}   BEST {best}", clock(timer.elapsed))
-        } else {
-            String::new()
-        }
+        Some(format!("{}   BEST {best}", clock(timer.elapsed)))
     });
-    let split_line = timer.as_ref().and_then(|timer| {
+    let split_text = timer.as_ref().and_then(|timer| {
         timer.last_split.as_ref().map(|split| {
             let delta = split
                 .delta
@@ -156,34 +147,34 @@ pub(crate) fn update(
         })
     });
 
-    let lines = 2
-        + usize::from(timer_line.as_deref().is_some_and(|l| !l.is_empty()))
-        + usize::from(split_line.is_some());
-    let total_h = lines as f32 * LINE_H;
-    let top = -(BOTTOM_MARGIN + total_h);
-    let mut y = top;
+    if !show_speed && timer_text.is_none() && split_text.is_none() {
+        return;
+    }
 
     let mut painter = Painter {
         surface: &surface,
         cmds: Vec::new(),
     };
-    painter.text(font, &speed_text(speed), 0.0, y, SPEED_SCALE, TEXT);
-    y += LINE_H;
-    painter.text(
-        font,
-        &format!("{:.0} MPH", speed / UT_S),
-        0.0,
-        y,
-        LABEL_SCALE,
-        MUTED,
-    );
-    y += LINE_H;
-    if let Some(line) = timer_line.as_deref().filter(|l| !l.is_empty()) {
-        painter.text(font, line, 0.0, y, VALUE_SCALE, ACCENT);
+    let mut y = TOP_Y;
+    if show_speed {
+        painter.text(font, &format!("{speed:.0} U/S"), LEFT_X, y, SPEED_SCALE, TEXT);
+        y += LINE_H + 4.0;
+        painter.text(
+            font,
+            &format!("{:.0} MPH", speed / UT_S),
+            LEFT_X,
+            y,
+            LABEL_SCALE,
+            MUTED,
+        );
         y += LINE_H;
     }
-    if let Some(line) = split_line.as_deref() {
-        painter.text(font, line, 0.0, y, LABEL_SCALE, MUTED);
+    if let Some(line) = timer_text.as_deref() {
+        painter.text(font, line, LEFT_X, y, VALUE_SCALE, ACCENT);
+        y += LINE_H;
+    }
+    if let Some(line) = split_text.as_deref() {
+        painter.text(font, line, LEFT_X, y, LABEL_SCALE, MUTED);
     }
 
     let mut fonts = HashMap::new();

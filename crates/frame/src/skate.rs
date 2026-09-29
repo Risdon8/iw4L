@@ -28,4 +28,7 @@ pub struct SkateMode {
     pub trick: String,
     pub trick_active: bool,
     pub score_bailed: bool,
+
+    /// Horizontal board speed in game units per second (inches/s).
+    pub speed_u_per_s: f32,
 }

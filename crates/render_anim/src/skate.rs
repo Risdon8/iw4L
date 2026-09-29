@@ -202,6 +202,9 @@ fn present(mode: &mut SkateMode, p: Pose, authority: &mut net::AuthorityWorld) {
     mode.trick = p.score.trick;
     mode.trick_active = p.score.active;
     mode.score_bailed = p.score.bailed;
+    // The skate host works in metres; the game shows inches/second.
+    let horizontal_m_s = (p.velocity.x * p.velocity.x + p.velocity.z * p.velocity.z).sqrt();
+    mode.speed_u_per_s = horizontal_m_s / 0.0254;
     mode.camera = p.camera.map(|(position, basis, fov)| {
         (
             Transform::from_translation(collision::from_skate(position)).looking_to(
