@@ -97,3 +97,20 @@ file as `f32`:
 target/play/music/Skate 3 - iPod 00..36.mp3
 target/play/music/Skate 3 - Free Skate 00..NN.mp3
 ```
+
+## Adding a named gamerip (recommended for real song names)
+
+The disc stores no song names and the banks are adaptive segments, so the clean
+way to get named tracks is a Skate 3 gamerip. The player treats `music/` as a
+library:
+
+* **It scans sub-folders too**, so drop the whole album folder in:
+  `music/Skate 3/01 - Agent Orange - Bloodstains.mp3`.
+* **Names come from the file name**: a leading track number and following
+  separators are dropped and `_` becomes a space, so
+  `01 - Agent Orange - Bloodstains.mp3` shows as `Agent Orange - Bloodstains`
+  in the HUD list. Untidy names just show as they are.
+* `music reload` re-reads the folder without restarting.
+
+You can keep or delete the continuous beds above; both show in the same list.
+
