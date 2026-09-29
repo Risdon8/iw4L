@@ -22,29 +22,33 @@ const ALIGN_RIGHT: i32 = 3; // hud_iw4::ALIGN_VIEWABLE_MAX
 const ALIGN_TOP: i32 = 1; // hud_iw4::ALIGN_VIEWABLE
 
 // Virtual (640x480) geometry.
-const PANEL_W: f32 = 214.0;
+const PANEL_W: f32 = 300.0;
 const PANEL_MARGIN: f32 = 6.0;
-const PAD: f32 = 6.0;
+const PAD: f32 = 8.0;
 const HEADER_H: f32 = 15.0;
+const LINE_H: f32 = 13.0;
+const BAR_H: f32 = 2.0;
 const ROW_H: f32 = 13.0;
 const FOOTER_H: f32 = 13.0;
-const NAME_CHARS: usize = 30;
 
-const BG: [f32; 4] = [0.025, 0.035, 0.05, 0.74];
+const TITLE_SCALE: f32 = 0.30;
+const LABEL_SCALE: f32 = 0.22;
+const VALUE_SCALE: f32 = 0.24;
+const ROW_SCALE: f32 = 0.22;
+const FOOTER_SCALE: f32 = 0.22;
+
+const BG: [f32; 4] = [0.025, 0.035, 0.05, 0.76];
 const BORDER: [f32; 4] = [0.96, 0.62, 0.14, 0.85];
 const ACCENT: [f32; 4] = [0.96, 0.62, 0.14, 1.0];
-const TEXT: [f32; 4] = [0.92, 0.93, 0.95, 1.0];
+const TEXT: [f32; 4] = [0.93, 0.94, 0.96, 1.0];
 const MUTED: [f32; 4] = [0.55, 0.58, 0.62, 1.0];
 const ROW_SELECTED: [f32; 4] = [0.96, 0.62, 0.14, 0.24];
 const ROW_CURRENT: [f32; 4] = [1.0, 1.0, 1.0, 0.07];
-const TRACK: [f32; 4] = [1.0, 1.0, 1.0, 0.10];
+const TRACK: [f32; 4] = [1.0, 1.0, 1.0, 0.14];
 
-fn truncate(text: &str, max: usize) -> String {
-    if text.chars().count() > max {
-        text.chars().take(max).collect()
-    } else {
-        text.to_owned()
-    }
+fn mmss(seconds: f32) -> String {
+    let total = seconds.max(0.0) as u32;
+    format!("{}:{:02}", total / 60, total % 60)
 }
 
 struct Painter<'a> {
@@ -123,6 +127,23 @@ impl Painter<'_> {
     }
 }
 
+/// Cut `text` so it measures no wider than `max`.
+fn fit(font: &asset_game::FontDef, text: &str, scale: f32, max: f32) -> String {
+    if crate::chrome::ui_text_width(font, text, scale) <= max {
+        return text.to_owned();
+    }
+    let mut out = String::new();
+    for ch in text.chars() {
+        let mut candidate = out.clone();
+        candidate.push(ch);
+        if crate::chrome::ui_text_width(font, &candidate, scale) > max {
+            break;
+        }
+        out = candidate;
+    }
+    out
+}
+
 pub(crate) fn update(
     surface: Res<crate::surface::Hud2dSurface>,
     catalog: Option<Res<MenuCatalog>>,
@@ -151,7 +172,6 @@ pub(crate) fn update(
         });
         return;
     };
-    // The panel background is a `white` chrome quad; make sure it exists.
     if hud_images
         .get(crate::images::HUD_CHROME_NAMESPACE, "white", &mut images)
         .is_none()
@@ -164,60 +184,127 @@ pub(crate) fn update(
     let count = player.track_count();
     let current = player.current_index();
     let list_h = ROW_H * rows as f32;
-    let panel_h = PAD * 2.0 + HEADER_H + 4.0 + list_h + 4.0 + FOOTER_H;
     let left = -(PANEL_W + PANEL_MARGIN);
     let top = PANEL_MARGIN;
+    let inner_left = left + PAD;
+    let inner_right = left + PANEL_W - PAD;
+    let inner_w = PANEL_W - PAD * 2.0;
+
+    let mut y = top + PAD;
+    let title_y = y;
+    y += HEADER_H;
+    let now_y = y;
+    y += LINE_H;
+    let next_y = y;
+    y += LINE_H;
+    let time_y = y;
+    y += LINE_H;
+    let bar_y = y;
+    y += BAR_H + 4.0;
+    let divider_y = y;
+    y += 3.0;
+    let list_top = y;
+    y += list_h;
+    let footer_y = y + 2.0;
+    let panel_h = footer_y + FOOTER_H + PAD - top;
 
     let mut painter = Painter {
         surface: &surface,
         cmds: Vec::new(),
     };
     painter.rect(left, top, PANEL_W, panel_h, BG);
-    // accent frame
     painter.rect(left, top, PANEL_W, 1.2, BORDER);
+    painter.rect(left, top + panel_h - 1.2, PANEL_W, 1.2, BORDER);
     painter.rect(left, top, 1.2, panel_h, BORDER);
+    painter.rect(left + PANEL_W - 1.2, top, 1.2, panel_h, BORDER);
 
-    let title_scale = 0.30;
-    let row_scale = 0.24;
-    let small_scale = 0.22;
+    painter.text(font, "MUSIC", inner_left, title_y, TITLE_SCALE, ACCENT);
+    let counter = format!("{} / {}", current + 1, count);
+    let counter_w = crate::chrome::ui_text_width(font, &counter, VALUE_SCALE);
     painter.text(
         font,
-        "MUSIC",
-        left + PAD,
-        top + PAD,
-        title_scale,
-        ACCENT,
+        &counter,
+        inner_right - counter_w,
+        title_y,
+        VALUE_SCALE,
+        MUTED,
     );
+
+    let label_w = crate::chrome::ui_text_width(font, "NOW", LABEL_SCALE) + 6.0;
+    let value_w = inner_w - label_w;
+
     let now = player
         .now_playing()
         .map(|name| name.to_uppercase())
         .unwrap_or_else(|| "NOTHING PLAYING".to_owned());
+    painter.text(font, "NOW", inner_left, now_y, LABEL_SCALE, MUTED);
     painter.text(
         font,
-        &format!("{} / {}", current + 1, count),
-        left + PAD,
-        top + PAD,
-        small_scale,
-        MUTED,
+        &fit(font, &now, VALUE_SCALE, value_w),
+        inner_left + label_w,
+        now_y,
+        VALUE_SCALE,
+        TEXT,
     );
 
-    let list_top = top + PAD + HEADER_H + 4.0;
+    let next = player
+        .next_name()
+        .map(|name| name.to_uppercase())
+        .unwrap_or_else(|| "-".to_owned());
+    painter.text(font, "NEXT", inner_left, next_y, LABEL_SCALE, MUTED);
+    painter.text(
+        font,
+        &fit(font, &next, VALUE_SCALE, value_w),
+        inner_left + label_w,
+        next_y,
+        VALUE_SCALE,
+        TEXT,
+    );
+
+    let elapsed = player.elapsed_secs();
+    let duration = player.duration_secs();
+    let clock = if duration > 0.0 {
+        format!("{} / {}", mmss(elapsed), mmss(duration))
+    } else {
+        mmss(elapsed)
+    };
+    painter.text(font, "TIME", inner_left, time_y, LABEL_SCALE, MUTED);
+    painter.text(
+        font,
+        &clock,
+        inner_left + label_w,
+        time_y,
+        VALUE_SCALE,
+        TEXT,
+    );
+    painter.rect(inner_left, bar_y, inner_w, BAR_H, TRACK);
+    if duration > 0.0 {
+        let frac = (elapsed / duration).clamp(0.0, 1.0);
+        painter.rect(inner_left, bar_y, inner_w * frac, BAR_H, ACCENT);
+    }
+    painter.rect(inner_left, divider_y, inner_w, 1.0, BORDER);
+
     for i in 0..rows {
         let index = hud.scroll + i;
-        let y = list_top + i as f32 * ROW_H;
+        let row_y = list_top + i as f32 * ROW_H;
         if index >= count {
             continue;
         }
         let selected = hud.browsing && index == hud.selected;
         if selected {
-            painter.rect(left, y - 1.0, PANEL_W, ROW_H, ROW_SELECTED);
-            painter.rect(left, y - 1.0, 2.0, ROW_H, ACCENT);
+            painter.rect(left, row_y - 1.0, PANEL_W, ROW_H, ROW_SELECTED);
+            painter.rect(left, row_y - 1.0, 2.0, ROW_H, ACCENT);
         } else if index == current {
-            painter.rect(left, y - 1.0, PANEL_W, ROW_H, ROW_CURRENT);
+            painter.rect(left, row_y - 1.0, PANEL_W, ROW_H, ROW_CURRENT);
         }
         let name = player.track_name(index).unwrap_or("").to_uppercase();
-        let mark = if index == current { '>' } else { ' ' };
-        let line = format!("{mark} {:>3} {}", index + 1, truncate(&name, NAME_CHARS));
+        let prefix = if index == current { ">" } else { " " };
+        let number = format!("{prefix} {:>3}  ", index + 1);
+        let number_w = crate::chrome::ui_text_width(font, &number, ROW_SCALE);
+        let line = format!(
+            "{number}{}",
+            fit(font, &name, ROW_SCALE, inner_w - number_w)
+        );
         let color = if index == current {
             ACCENT
         } else if selected {
@@ -225,19 +312,9 @@ pub(crate) fn update(
         } else {
             MUTED
         };
-        painter.text(font, &line, left + PAD, y, row_scale, color);
+        painter.text(font, &line, inner_left, row_y, ROW_SCALE, color);
     }
-    // now-playing line under the title
-    painter.text(
-        font,
-        &truncate(&now, NAME_CHARS + 4),
-        left + PAD + 44.0,
-        top + PAD,
-        small_scale,
-        TEXT,
-    );
 
-    // scrollbar
     let max_scroll = count.saturating_sub(rows);
     if count > rows {
         let track_x = left + PANEL_W - 3.0;
@@ -264,14 +341,7 @@ pub(crate) fn update(
         settings.master_volume,
         if player.enabled { "PLAYING" } else { "PAUSED" }
     );
-    painter.text(
-        font,
-        &footer,
-        left + PAD,
-        list_top + list_h + 3.0,
-        small_scale,
-        MUTED,
-    );
+    painter.text(font, &footer, inner_left, footer_y, FOOTER_SCALE, MUTED);
 
     let mut fonts = HashMap::new();
     fonts.insert(FONT.to_owned(), font);

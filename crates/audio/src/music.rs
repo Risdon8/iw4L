@@ -108,6 +108,7 @@ pub struct MusicPlayer {
     current: Option<Entity>,
     current_started: bool,
     current_elapsed: f32,
+    current_duration: f32,
     applied_volume: f32,
     request: Option<MusicRequest>,
     rng: u64,
@@ -129,6 +130,7 @@ impl Default for MusicPlayer {
             current: None,
             current_started: false,
             current_elapsed: 0.0,
+            current_duration: 0.0,
             applied_volume: DEFAULT_VOLUME,
             request: None,
             rng: 0x2545_f491_4f6c_dd1d,
@@ -165,6 +167,35 @@ impl MusicPlayer {
         } else {
             None
         }
+    }
+
+    /// Seconds the current track has been playing.
+    pub fn elapsed_secs(&self) -> f32 {
+        self.current_elapsed
+    }
+
+    /// Length of the current track in seconds (0 until one starts).
+    pub fn duration_secs(&self) -> f32 {
+        self.current_duration
+    }
+
+    /// Name of the track that plays next, if there is one.
+    pub fn next_name(&self) -> Option<String> {
+        let count = self.paths.len();
+        if count == 0 {
+            return None;
+        }
+        if self.shuffle {
+            return Some("(shuffle)".to_owned());
+        }
+        let next = if self.index + 1 < count {
+            self.index + 1
+        } else if self.repeat == Repeat::All {
+            0
+        } else {
+            return None;
+        };
+        self.names.get(next).cloned()
     }
 
     /// Queue an action for [`drive_music`] on the next frame.
@@ -370,6 +401,7 @@ fn start(
         diag::warn!(Audio, "{}", player.status);
         return;
     };
+    player.current_duration = pcm.duration_secs();
     let handle = assets.add(pcm);
     let entity = commands
         .spawn((
