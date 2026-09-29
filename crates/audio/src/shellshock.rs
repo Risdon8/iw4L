@@ -1,5 +1,5 @@
 use asset_core::AssetNamespace;
-use bevy::{audio::Volume, prelude::*};
+use bevy::prelude::*;
 use frame::{AppScreen, LifeEnded, MatchTornDown};
 use hud_iw4::shellshock_remaining_ms;
 use net::{FrameClock, LocalPresentClient, PresentedSnapshot};
@@ -147,7 +147,7 @@ fn ensure_loop(
     let entity = crate::backend::spawn_loop(
         commands,
         handle,
-        Volume::Linear(1.0),
+        1.0,
         epoch,
         crate::backend::AudioScope::Match,
     );

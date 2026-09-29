@@ -494,7 +494,7 @@ fn start_map_ambient_prepared(
             let entity = crate::backend::spawn_loop(
                 commands,
                 handle,
-                Volume::Linear(0.55),
+                0.55,
                 epoch,
                 AudioScope::Match,
             );
@@ -673,7 +673,7 @@ pub fn update_map_emitter_gain(
                     &mut commands,
                     entity,
                     handle,
-                    Volume::Linear(gain),
+                    gain,
                     epoch.0,
                 );
             } else {

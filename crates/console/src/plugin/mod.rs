@@ -34,7 +34,7 @@ pub use dispatch_state::{ConsoleCommandQueue, ConsoleDispatch, WaitMovePose};
 use dispatch_state::{WAIT_WORLD_TIMEOUT_SECS, WaitKind, parse_wait_args};
 pub use state::{ConsoleFont, ConsoleSettings, ConsoleState};
 
-const EMBEDDED_FONT: &[u8] = include_bytes!("../../assets/FreeMono.otf");
+pub(crate) const EMBEDDED_FONT: &[u8] = include_bytes!("../../assets/FreeMono.otf");
 const PROMPT: &str = "> ";
 const FONT_SIZE: f32 = 15.0;
 const COLOR_BODY: Color = Color::srgb(0.82, 0.92, 0.82);
@@ -93,10 +93,16 @@ impl Plugin for ConsolePlugin {
             .init_resource::<crate::weapon_dispatch::WeaponArgCompletions>()
             .init_resource::<crate::user_settings::PendingMenuBinding>()
             .init_resource::<crate::user_settings::UserSettingsPersistence>()
+            .init_resource::<crate::music_hud::MusicHud>()
             .add_message::<ConsoleCommand>()
             .add_systems(
                 Startup,
-                (setup_console, crate::user_settings::load_user_settings).chain(),
+                (
+                    setup_console,
+                    crate::music_hud::setup,
+                    crate::user_settings::load_user_settings,
+                )
+                    .chain(),
             )
             .add_systems(PreUpdate, feed_console_keyboard.before(InputSystems))
             .add_systems(
@@ -179,10 +185,10 @@ impl Plugin for ConsolePlugin {
                         )
                             .chain(),
                         crate::user_settings::sync_binding_view,
-                        crate::user_settings::apply_master_volume,
                         crate::user_settings::sync_player_name,
                         crate::user_settings::save_user_settings,
                         update_console_ui,
+                        crate::music_hud::update_music_hud,
                     )
                         .chain(),
                 )

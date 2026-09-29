@@ -44,7 +44,7 @@ pub enum MusicRequest {
 
 /// Marker on the entity holding the current track.
 #[derive(Component)]
-struct MusicTrack;
+pub(crate) struct MusicTrack;
 
 #[derive(Resource)]
 pub struct MusicPlayer {

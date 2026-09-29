@@ -27,6 +27,7 @@ pub mod input;
 mod layout;
 mod movement;
 mod music;
+mod music_hud;
 pub mod plugin;
 pub mod registry;
 mod startup;

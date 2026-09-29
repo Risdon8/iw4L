@@ -27,6 +27,37 @@ far below game effects — then scaled by `music volume` (default `1.0`).
 Implementation: `crates/audio/src/music.rs`, command in
 `crates/console/src/music.rs`.
 
+### Game sound vs music
+
+Game sound is a separate gain from music, so you can drop the effects and keep
+the music:
+
+```
+sound            print the game-sound volume
+sound <0-1>      set it (same setting the options menu's volume slider writes)
+music volume <0-1>
+```
+
+`audio::backend` applies the game gain to **every** voice it starts (the old
+code only reached positional and ambient sounds, so the slider barely did
+anything) and rescales live loops when it changes. Music is deliberately
+excluded — the two are independent.
+
+### On-screen player
+
+A small panel in the top-right of the HUD. `F8` hides/shows it; `music ui
+on|off` does the same from the console.
+
+| key | action |
+|---|---|
+| `[` / `]` | previous / next track |
+| `\` | play / pause |
+| `-` / `=` | music volume down / up |
+| `;` / `'` | game sound volume down / up |
+| `F8` | hide / show the panel |
+
+Implementation: `crates/console/src/music_hud.rs`.
+
 ## Getting the Skate 3 music out of the disc
 
 The disc's `data/audio/music/` holds three EA **EAAC / SNR+SNS** banks:
