@@ -45,18 +45,26 @@ excluded — the two are independent.
 
 ### On-screen player
 
-A small panel in the top-right of the HUD. `F8` hides/shows it; `music ui
-on|off` does the same from the console.
+A panel in the top-right of the HUD, styled after the game menus (Bebas Neue,
+Skate-orange accents, translucent bordered panel with a text shadow). It shows
+the current track, a scrollable track list with the playing track marked, a
+scrollbar and both volumes. `F8` hides/shows it; `music ui on|off` does the
+same from the console.
 
 | key | action |
 |---|---|
+| `TAB` | open / close the track list (the game stops reading input while it is open) |
+| `Up` / `Down`, `PgUp` / `PgDn`, `Home` / `End` | move the selection |
+| `ENTER` | play the selected track |
+| `ESC` | leave the list |
 | `[` / `]` | previous / next track |
 | `\` | play / pause |
 | `-` / `=` | music volume down / up |
 | `;` / `'` | game sound volume down / up |
 | `F8` | hide / show the panel |
 
-Implementation: `crates/console/src/music_hud.rs`.
+Implementation: `crates/console/src/music_hud.rs`. The font is Bebas Neue
+(SIL OFL); the license sits beside it in `crates/console/assets/`.
 
 ## Getting the Skate 3 music out of the disc
 

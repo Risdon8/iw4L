@@ -256,10 +256,11 @@ fn dispatch_menu_commands(
 
 fn isolate_gameplay_input(
     console: Res<ConsoleState>,
+    hud: Res<crate::music_hud::MusicHud>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut mouse: MessageReader<MouseMotion>,
 ) {
-    if !console.open {
+    if !(console.open || hud.browsing()) {
         return;
     }
     keys.reset_all();
