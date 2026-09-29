@@ -362,6 +362,22 @@ fn prepare_postfx_gpu(
     if gpu.depth_sampler.is_none() {
         gpu.depth_sampler = Some(device.create_sampler(&depth_sampler.descriptor()));
     }
+    // Pre-create the pipelines the current plan does not use yet (the ADS
+    // depth-of-field/glow pass, say). Otherwise the first frame that needs one
+    // renders without post-fx while it compiles — a one-frame colour flash.
+    for film in &extracted.films {
+        if gpu
+            .prepared
+            .iter()
+            .chain(gpu.inactive.iter())
+            .any(|prepared| prepared.film.name == film.name)
+        {
+            continue;
+        }
+        if let Ok(prepared) = create_postfx_gpu(film.clone(), sampler, &device, &cache) {
+            gpu.inactive.push(prepared);
+        }
+    }
 }
 fn create_postfx_gpu(
     film: ExtractedFilm,
