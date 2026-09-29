@@ -67,6 +67,7 @@ pub(crate) struct Runtime {
     revert_id: Option<usize>,
     sequence_active: bool,
     sequence_score: f32,
+    session_score: f32,
     trick_name: String,
     stance: [bool; 4],
     clean: bool,
@@ -103,6 +104,7 @@ impl Runtime {
             revert_id: None,
             sequence_active: false,
             sequence_score: 0.,
+            session_score: 0.,
             trick_name: String::new(),
             stance: [false; 4],
             clean: false,
@@ -553,6 +555,9 @@ impl Runtime {
             self.sequence_score =
                 self.session
                     .publish_sequence(&self.data.session_rules(), 1., bailout, true);
+            // The native line only accrues once the multiplier is up, so keep
+            // our own running total for the HUD.
+            self.session_score += self.sequence_score.max(0.0);
             self.sequence_active = false;
             // 82775328 -> 82774E88 closes only for ScoreModule reset/bail
             // output 14630 (82DA4010/82DA4238), not a banked landing.
@@ -613,7 +618,7 @@ impl Runtime {
         (self.session.combo.timer.points / capacity).clamp(0.0, 1.0)
     }
     pub fn total_score(&self) -> f32 {
-        self.session.holder.snapshot.completed_lines + self.session.holder.snapshot.line
+        self.session_score
     }
     pub fn bailed(&self) -> bool {
         self.close_tricks

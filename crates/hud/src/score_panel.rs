@@ -1,6 +1,5 @@
-//! In-game score / trick panel for skate mode, drawn on the HUD's own font
-//! pipeline (the game's `fonts/hudsmallfont` + the `white` chrome image), the
-//! same way as the music panel.
+//! In-game score / trick readout for skate mode, drawn on the HUD's own font
+//! pipeline (the game's `fonts/hudsmallfont`), the same way as the music panel.
 //!
 //! Data comes from [`frame::SkateMode`], which `render_anim` fills from the
 //! Skate host's scoring publication.
@@ -21,23 +20,19 @@ const FONT: &str = "fonts/hudsmallfont";
 const ALIGN_CENTER: i32 = 2; // hud_iw4::ALIGN_CENTER
 const ALIGN_TOP: i32 = 1; // hud_iw4::ALIGN_VIEWABLE
 
-const PANEL_W: f32 = 190.0;
-const PANEL_MARGIN: f32 = 10.0;
-const PAD: f32 = 8.0;
-const LINE_H: f32 = 15.0;
+const MARGIN: f32 = 12.0;
+const LINE_H: f32 = 16.0;
 const BAR_H: f32 = 3.0;
+const BAR_W: f32 = 150.0;
 
-const BIG_SCALE: f32 = 0.42;
+const BIG_SCALE: f32 = 0.46;
 const VALUE_SCALE: f32 = 0.26;
 const LABEL_SCALE: f32 = 0.22;
 
-const BG: [f32; 4] = [0.025, 0.035, 0.05, 0.70];
-const BORDER: [f32; 4] = [0.96, 0.62, 0.14, 0.80];
 const ACCENT: [f32; 4] = [0.96, 0.62, 0.14, 1.0];
-const TEXT: [f32; 4] = [0.93, 0.94, 0.96, 1.0];
-const MUTED: [f32; 4] = [0.55, 0.58, 0.62, 1.0];
-const FAIL: [f32; 4] = [0.95, 0.30, 0.24, 1.0];
-const TRACK: [f32; 4] = [1.0, 1.0, 1.0, 0.14];
+const TEXT: [f32; 4] = [0.95, 0.96, 0.97, 1.0];
+const MUTED: [f32; 4] = [0.68, 0.71, 0.75, 1.0];
+const FAIL: [f32; 4] = [0.98, 0.34, 0.28, 1.0];
 
 fn grouped(value: f32) -> String {
     let digits = (value.max(0.0).round() as i64).to_string();
@@ -170,36 +165,31 @@ pub(crate) fn update(
         *bail_until = now + 1.4;
     }
     let bailed = now < *bail_until;
-
     let active = mode.trick_active && mode.score_sequence > 0.0;
-    let rows = if active || bailed { 4.0 } else { 2.0 };
-    let panel_h = PAD * 2.0 + LINE_H * rows + BAR_H + 4.0;
-    let top = PANEL_MARGIN;
 
     let mut painter = Painter {
         surface: &surface,
         cmds: Vec::new(),
     };
-    painter.rect(-PANEL_W * 0.5, top, PANEL_W, panel_h, BG);
-    painter.rect(-PANEL_W * 0.5, top, PANEL_W, 1.2, BORDER);
-    painter.rect(-PANEL_W * 0.5, top + panel_h - 1.2, PANEL_W, 1.2, BORDER);
-    painter.rect(-PANEL_W * 0.5, top, 1.2, panel_h, BORDER);
-    painter.rect(PANEL_W * 0.5 - 1.2, top, 1.2, panel_h, BORDER);
+    let mut y = MARGIN;
 
-    let mut y = top + PAD;
-    painter.text(font, "SCORE", 0.0, y, LABEL_SCALE, MUTED);
-    y += LINE_H;
     painter.text(font, &grouped(mode.score_total), 0.0, y, BIG_SCALE, TEXT);
     y += LINE_H;
 
     if active || bailed {
-        let combo = if bailed {
-            "BAILED".to_owned()
+        let (combo, color) = if bailed {
+            ("BAILED".to_owned(), FAIL)
         } else {
-            format!("x{:.1}   {}", mode.score_multiplier, grouped(mode.score_sequence))
+            (
+                format!(
+                    "x{:.1}   {}",
+                    mode.score_multiplier,
+                    grouped(mode.score_sequence)
+                ),
+                ACCENT,
+            )
         };
-        let combo_color = if bailed { FAIL } else { ACCENT };
-        painter.text(font, &combo, 0.0, y, VALUE_SCALE, combo_color);
+        painter.text(font, &combo, 0.0, y, VALUE_SCALE, color);
         y += LINE_H;
         let trick = if mode.trick.is_empty() {
             "-".to_owned()
@@ -207,24 +197,10 @@ pub(crate) fn update(
             mode.trick.to_uppercase()
         };
         painter.text(font, &trick, 0.0, y, LABEL_SCALE, MUTED);
-        y += LINE_H;
-
-        painter.rect(
-            -PANEL_W * 0.5 + PAD,
-            y,
-            PANEL_W - PAD * 2.0,
-            BAR_H,
-            TRACK,
-        );
+        y += LINE_H - 4.0;
         if active {
             let frac = mode.score_combo_fraction.clamp(0.0, 1.0);
-            painter.rect(
-                -PANEL_W * 0.5 + PAD,
-                y,
-                (PANEL_W - PAD * 2.0) * frac,
-                BAR_H,
-                ACCENT,
-            );
+            painter.rect(-BAR_W * 0.5, y, BAR_W * frac, BAR_H, ACCENT);
         }
     }
 
