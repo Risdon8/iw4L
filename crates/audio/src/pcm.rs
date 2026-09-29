@@ -95,8 +95,13 @@ impl PcmAudio {
         self.sample_rate
     }
 
-    pub fn with_live_pan(&self) -> Self {
-        Self {
+    /// Length of the decoded audio in seconds.
+    pub(crate) fn duration_secs(&self) -> f32 {
+        let frames = self.samples.len() as f32 / self.channels.max(1) as f32;
+        frames / self.sample_rate.max(1) as f32
+    }
+
+    pub fn with_live_pan(&self) -> Self {        Self {
             samples: Arc::clone(&self.samples),
             channels: self.channels,
             sample_rate: self.sample_rate,
