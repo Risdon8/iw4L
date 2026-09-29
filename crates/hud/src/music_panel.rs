@@ -90,11 +90,10 @@ impl Painter<'_> {
             return;
         }
         let nscale = hud_iw4::normalized_text_scale(font.pixel_height, text_scale);
-        let w = crate::chrome::ui_text_width(font, text, text_scale);
-        let h = hud_iw4::ui_text_height(text_scale);
+        // The draw-text command uses cmd.w/cmd.h as the glyph x/y scale.
         let r = self
             .surface
-            .apply_rect(x, y, w, h, ALIGN_RIGHT, ALIGN_TOP);
+            .apply_rect(x, y, nscale, nscale, ALIGN_RIGHT, ALIGN_TOP);
         self.cmds.push(Draw2dCmd {
             material_namespace: crate::images::HUD_CHROME_NAMESPACE,
             x: r.x,
@@ -112,7 +111,7 @@ impl Painter<'_> {
                 scale: nscale,
                 text: text.to_owned(),
                 loc_key: String::new(),
-                style: 0,
+                style: crate::draw2d::TEXT_STYLE_HUDELEM,
                 fx: None,
                 glow: None,
             },
