@@ -10,6 +10,10 @@ use crate::bullet_collision::{MASK_PLAYER_SOLID, PLAYER_MAXS, PLAYER_MINS};
 
 pub const G_CLONE_PLAYER_MAX_VELOCITY: f32 = 80.0;
 
+/// Corpses are cleaned up after this long, so a death does not leave a body
+/// lying at the respawn point (which reads as "a body stuck on the board").
+pub(crate) const CORPSE_LIFETIME_MS: i32 = 12_000;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlayerCorpseSlot {
     pub occupied: bool,
@@ -34,6 +38,9 @@ pub struct PlayerCorpseSlot {
     pub falling: bool,
 
     pub ground_entity_num: i32,
+
+    /// Level time the corpse was created, for the cleanup lifetime.
+    pub spawn_ms: i32,
 }
 
 impl Default for PlayerCorpseSlot {
@@ -55,6 +62,7 @@ impl Default for PlayerCorpseSlot {
             tr_base: [0.0; 3],
             falling: false,
             ground_entity_num: i32::from(trace_iw4::ENTITYNUM_NONE),
+            spawn_ms: 0,
         }
     }
 }
@@ -176,6 +184,7 @@ pub(crate) fn occupy_player_clone(
             tr_delta: clamp_clone_tr_delta(ps.velocity),
             tr_base: ps.origin,
             falling: true,
+            spawn_ms: time_ms,
             ..PlayerCorpseSlot::default()
         },
     );
@@ -243,6 +252,10 @@ pub(crate) fn phase_run_corpse_move(world: &mut FrameWorld, time_ms: i32) {
     for i in 0..n {
         let slot = world.corpses().slots[i];
         if !slot.occupied {
+            continue;
+        }
+        if time_ms.saturating_sub(slot.spawn_ms) >= CORPSE_LIFETIME_MS {
+            world.corpses_mut().slots[i] = PlayerCorpseSlot::default();
             continue;
         }
         let ragdoll = is_ragdoll_tr_type(slot.tr_type);
