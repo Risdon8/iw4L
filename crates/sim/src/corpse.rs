@@ -12,7 +12,7 @@ pub const G_CLONE_PLAYER_MAX_VELOCITY: f32 = 80.0;
 
 /// Corpses are cleaned up after this long, so a death does not leave a body
 /// lying at the respawn point (which reads as "a body stuck on the board").
-pub(crate) const CORPSE_LIFETIME_MS: i32 = 12_000;
+pub(crate) const CORPSE_LIFETIME_MS: i32 = 6_000;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlayerCorpseSlot {
