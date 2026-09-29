@@ -4,7 +4,6 @@ use asset_audio::{SoundCatalog, load_mp_sound_bank};
 use asset_transport::GamesRoot;
 use assets::{NamespaceSoundIwd, NamespaceTrees};
 use bevy::{
-    audio::Volume,
     prelude::*,
     tasks::{AsyncComputeTaskPool, Task, TaskPool, futures_lite::future},
 };
@@ -306,7 +305,7 @@ fn play_ui_music_messages(
     let entity = crate::backend::spawn_loop(
         &mut commands,
         handle,
-        Volume::Linear(0.55),
+        0.55,
         0,
         crate::backend::AudioScope::Menu,
     );

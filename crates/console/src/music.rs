@@ -8,16 +8,25 @@ use audio::{MusicPlayer, MusicRequest, Repeat};
 
 use crate::{ConsoleCommand, ConsoleLine, ConsoleRegistry, ConsoleSettings, ConsoleState};
 
-const USAGE: &str = "music | music on|off|toggle|next|prev|list | music volume <0-1> | music shuffle [on|off] | music repeat <off|all|one> | music track <n> | music reload — local music/ folder (mod)";
+const USAGE: &str = "music | music on|off|toggle|next|prev|list | music volume <0-1> | music shuffle [on|off] | music repeat <off|all|one> | music track <n> | music ui [on|off] | music reload — local music/ folder (mod)";
 
 pub(crate) fn register_music_commands(registry: &mut ConsoleRegistry) {
     if registry.resolve("music").is_none() {
         registry.register(crate::CommandSpec::new("music").usage(USAGE).arg(
             crate::StaticCompleter::new([
                 "on", "off", "toggle", "next", "prev", "list", "volume", "shuffle", "repeat",
-                "track", "reload",
+                "track", "ui", "reload",
             ]),
         ));
+    }
+    if registry.resolve("sound").is_none() {
+        registry.register(
+            crate::CommandSpec::new("sound")
+                .usage("sound [0-1] — game sound volume (mod)")
+                .arg(crate::StaticCompleter::new([
+                    "0", "0.25", "0.5", "0.75", "1",
+                ])),
+        );
     }
 }
 
@@ -27,6 +36,8 @@ pub(crate) fn route_music_commands(
     settings: Res<ConsoleSettings>,
     mut line: ResMut<ConsoleLine>,
     mut player: ResMut<MusicPlayer>,
+    mut game: ResMut<frame::GameSettings>,
+    mut hud: ResMut<crate::music_hud::MusicHud>,
 ) {
     let capacity = settings.log_capacity;
     let echo = |msg: String, console: &mut ConsoleState, line: &mut ConsoleLine| {
@@ -36,6 +47,23 @@ pub(crate) fn route_music_commands(
     };
 
     for cmd in events.read() {
+        if cmd.name == "sound" {
+            match cmd.args.first() {
+                Some(value) => match value.parse::<f32>() {
+                    Ok(value) if (0.0..=1.0).contains(&value) => {
+                        game.master_volume = value;
+                        echo(format!("sound: volume {value:.2}"), &mut console, &mut line);
+                    }
+                    _ => echo("sound: volume <0-1>".to_owned(), &mut console, &mut line),
+                },
+                None => echo(
+                    format!("sound: volume {:.2}", game.master_volume),
+                    &mut console,
+                    &mut line,
+                ),
+            }
+            continue;
+        }
         if cmd.name != "music" {
             continue;
         }
@@ -77,6 +105,24 @@ pub(crate) fn route_music_commands(
                 player.request(MusicRequest::Reload);
                 echo("music: rescanning folder".to_owned(), &mut console, &mut line);
             }
+            "ui" => match args.get(1).map(String::as_str) {
+                Some("on") => {
+                    hud.visible = true;
+                    echo("music: HUD shown".to_owned(), &mut console, &mut line);
+                }
+                Some("off") => {
+                    hud.visible = false;
+                    echo("music: HUD hidden".to_owned(), &mut console, &mut line);
+                }
+                _ => echo(
+                    format!(
+                        "music: HUD {} (music ui on|off)",
+                        if hud.visible { "shown" } else { "hidden" }
+                    ),
+                    &mut console,
+                    &mut line,
+                ),
+            },
             "track" => match args.get(1).and_then(|n| n.parse::<usize>().ok()) {
                 Some(n) if n >= 1 && n <= player.track_count() => {
                     player.request(MusicRequest::Track(n - 1));

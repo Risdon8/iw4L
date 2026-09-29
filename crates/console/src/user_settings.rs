@@ -1,7 +1,6 @@
 use std::{fs, path::PathBuf};
 
 use bevy::{
-    audio::{AudioSink, AudioSinkPlayback, GlobalVolume, Volume},
     input::{
         ButtonInput,
         keyboard::KeyCode,
@@ -23,9 +22,6 @@ pub(crate) struct UserSettingsPersistence {
     path: Option<PathBuf>,
     last_payload: Option<String>,
 }
-
-#[derive(Resource)]
-pub(crate) struct AppliedMasterVolume(f32);
 
 pub(crate) fn load_user_settings(
     identity: Res<ui::LaunchIdentity>,
@@ -141,45 +137,6 @@ pub(crate) fn sync_binding_view(
         dvars.set(&format!("ui_bind_{command}"), view.chord(id as u32));
     }
     view.revision = view.revision.wrapping_add(1);
-}
-
-pub(crate) fn apply_master_volume(
-    settings: Res<frame::GameSettings>,
-    mut global: ResMut<GlobalVolume>,
-    mut sinks: Query<(Entity, &mut AudioSink, &bevy::audio::PlaybackSettings)>,
-    mut muted_volumes: Local<std::collections::HashMap<Entity, f32>>,
-    applied: Option<ResMut<AppliedMasterVolume>>,
-    mut commands: Commands,
-) {
-    if !settings.is_changed() {
-        return;
-    }
-    let previous = applied.as_ref().map_or(1.0, |value| value.0);
-    let next = settings.master_volume;
-    global.volume = Volume::Linear(next);
-    muted_volumes.retain(|entity, _| sinks.contains(*entity));
-    for (entity, mut sink, playback) in &mut sinks {
-        let base = if previous > f32::EPSILON {
-            sink.volume().to_linear() / previous
-        } else {
-            muted_volumes
-                .get(&entity)
-                .copied()
-                .unwrap_or(playback.volume.to_linear())
-        };
-        if next == 0.0 {
-            muted_volumes.insert(entity, base);
-        }
-        sink.set_volume(Volume::Linear(base * next));
-    }
-    if next > 0.0 {
-        muted_volumes.clear();
-    }
-    if let Some(mut applied) = applied {
-        applied.0 = next;
-    } else {
-        commands.insert_resource(AppliedMasterVolume(next));
-    }
 }
 
 pub(crate) fn sync_player_name(

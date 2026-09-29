@@ -1325,7 +1325,7 @@ fn submit_prepared_oneshot(
             let entity = crate::backend::spawn_oneshot(
                 commands,
                 handle,
-                Volume::Linear((volume * atten).max(0.0)),
+                (volume * atten).max(0.0),
                 pitch,
                 epoch,
                 class.scope(),
@@ -1367,7 +1367,7 @@ fn submit_prepared_oneshot(
             let entity = crate::backend::spawn_oneshot(
                 commands,
                 handle,
-                Volume::Linear(volume.max(0.0)),
+                volume.max(0.0),
                 pitch,
                 epoch,
                 class.scope(),
